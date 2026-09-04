@@ -119,8 +119,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match cli.command {
         Commands::Audit(args) => {
-            info!(target_url = %args.url, "Initiating audit crawl (scaffold)");
-            println!("Auditing {} (max {} pages, depth {})...", args.url, args.max_pages, args.max_depth);
+            let normalized_url = seo_lens::core::url::normalize_url(&args.url)?;
+            info!(target_url = %normalized_url, "Initiating audit crawl (scaffold)");
+            println!("Auditing {} (max {} pages, depth {})...", normalized_url, args.max_pages, args.max_depth);
         }
         Commands::Mcp(args) => {
             info!(transport = %args.transport, "Starting MCP server (scaffold)");
