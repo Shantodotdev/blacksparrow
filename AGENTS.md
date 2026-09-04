@@ -41,6 +41,7 @@ The repository is structured as a **2-Member Cargo Workspace**:
 
 ## Do Not Do Without Explicit User Approval
 
+- Do not run `git commit` automatically unless the user explicitly requested a commit in their prompt.
 - Do not run destructive Git commands (`git reset --hard`, `git push --force`, `git clean -f`).
 - Do not bundle Chromium into the binary (use decoupled CDP via `chromiumoxide`).
 - Do not write implementation code before writing failing tests and test fixtures.
@@ -48,9 +49,10 @@ The repository is structured as a **2-Member Cargo Workspace**:
 
 ### Verification Protocol
 
-- **Minor / Trivial Tasks**: Run `cargo check` and `cargo clippy`.
-- **Phase Work & Major Features**: Run `cargo test` and execute the manual verification gate defined in `docs/PRODUCTION_SPEC.md`.
-- **Super Simple Edits** (e.g. typos, comments): No test verification required.
+- **Mandatory Formatting**: After making any code changes and before handing over to the user, **always run `cargo fmt --all`**.
+- **Minor / Trivial Tasks**: Run `cargo fmt --all`, `cargo check`, and `cargo clippy`.
+- **Phase Work & Major Features**: Run `cargo fmt --all`, `cargo test`, and execute the manual verification gate defined in `docs/PRODUCTION_SPEC.md`.
+- **Super Simple Edits** (e.g. typos, comments): Run `cargo fmt --all`.
 
 ---
 
