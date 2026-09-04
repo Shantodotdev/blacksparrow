@@ -1,0 +1,12 @@
+User-agent: *
+Disallow: /admin/
+Disallow: /private/
+Crawl-delay: 2
+
+User-agent: GPTBot
+Disallow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+Sitemap: https://example.com/sitemap.xml
