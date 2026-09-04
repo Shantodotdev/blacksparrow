@@ -1,2 +1,26 @@
+# Rust build artifacts
+target/
+**/*.rs.bk
+*.pdb
+
+# Node / UI
+node_modules/
+dist/
+ui/dist/
+
+# SQLite & Crawl session exports
+*.db
+*.db-wal
+*.db-shm
+reports/
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Local inspirations and blueprints
 inspiration/
 ARCHITECTURE_BLUEPRINT.md
