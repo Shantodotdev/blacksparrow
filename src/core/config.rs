@@ -67,10 +67,36 @@ impl CrawlConfig {
             ));
         }
         if self.user_agent.trim().is_empty() {
-            return Err(SeoError::Config(
-                "User-Agent cannot be empty".to_string(),
-            ));
+            return Err(SeoError::Config("User-Agent cannot be empty".to_string()));
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_crawl_config_defaults_and_validation() {
+        let config = CrawlConfig::new("https://example.com/").unwrap();
+        assert_eq!(config.start_url, "https://example.com/");
+        assert_eq!(config.max_pages, 500);
+        assert_eq!(config.max_depth, 5);
+        assert_eq!(config.concurrency, 10);
+        assert_eq!(config.user_agent, DEFAULT_USER_AGENT);
+        assert!(config.respect_robots);
+        assert!(config.validate().is_ok());
+
+        let mut invalid_config = config.clone();
+        invalid_config.concurrency = 0;
+        assert!(matches!(
+            invalid_config.validate(),
+            Err(SeoError::Config(_))
+        ));
+
+        let mut empty_ua = config.clone();
+        empty_ua.user_agent = "   ".to_string();
+        assert!(matches!(empty_ua.validate(), Err(SeoError::Config(_))));
     }
 }

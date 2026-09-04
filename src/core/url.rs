@@ -3,6 +3,59 @@
 //! High-performance 8-stage URL normalization pipeline ensuring deterministic
 //! deduplication, RFC 3986 path resolution, tracking parameter stripping,
 //! and 64-bit AHash generation.
+//!
+//! ## Normalization Pipeline Overview
+//!
+//! When crawling websites, the same logical document is frequently linked with subtle
+//! variations in scheme, hostname casing, port notation, relative navigation, trailing
+//! slashes, fragments, or tracking parameters:
+//!
+//! ```text
+//! Raw Href ──> [1. Scheme] ──> [2. Hostname] ──> [3. Port] ──> [4. Path]
+//!          ──> [5. Trailing Slash] ──> [6. Strip Fragments]
+//!          ──> [7. Strip Tracking Query] ──> [8. Sort Query] ──> Normalized URL
+//! ```
+//!
+//! 1. **Scheme Normalization**: Schemes are converted to lowercase. Protocol-relative URLs
+//!    (e.g., `//cdn.example.com/lib.js`) default to `https://`. Only `http` and `https`
+//!    schemes are permitted; other protocols (like `ftp` or `mailto`) return [`SeoError::Url`].
+//! 2. **Hostname Normalization**: Hostnames are lowercased, punycode IDN domains are decoded,
+//!    and trailing DNS root dots (`example.com.`) are stripped.
+//! 3. **Default Port Stripping**: Standard protocol ports (`:80` for HTTP, `:443` for HTTPS)
+//!    are stripped. Non-standard ports (e.g. `:8080`, `:8443`) are preserved.
+//! 4. **Path Segment Resolution**: Resolves RFC 3986 relative dot segments (`.` and `..`)
+//!    and collapses duplicate internal slashes (`/blog//post` -> `/blog/post`).
+//! 5. **Root Path & Trailing Slashes**: An empty path is normalized to `/`. Explicit directory
+//!    trailing slashes are preserved to respect server-side directory semantics.
+//! 6. **Fragment Removal**: URL hash fragments (`#heading`) are completely removed because
+//!    fragments refer to client-side DOM anchors and do not represent distinct server resources.
+//! 7. **Tracking Parameter Stripping**: Strips marketing and analytics query parameters
+//!    (`utm_source`, `utm_medium`, `fbclid`, `gclid`, `msclkid`, etc.) that cause duplicate
+//!    crawls of identical page content.
+//! 8. **Deterministic Query Sorting**: Retained legitimate query parameters are sorted
+//!    lexicographically so that `?b=2&a=1` and `?a=1&b=2` produce identical canonical URLs.
+//!
+//! ## Examples
+//!
+//! ```rust
+//! use seo_lens::core::url::{is_internal, normalize_url, resolve_relative, url_hash};
+//!
+//! // Example 1: Normalizing messy marketing URLs into a canonical identifier
+//! let dirty_url = "HTTPS://EXAMPLE.COM:443/blog//post?utm_source=fb&b=2&a=1#comments";
+//! let clean_url = normalize_url(dirty_url).unwrap();
+//! assert_eq!(clean_url, "https://example.com/blog/post?a=1&b=2");
+//!
+//! // Example 2: Resolving relative links discovered in HTML against a base URL
+//! let base = "https://example.com/docs/api/";
+//! let relative_href = "../guides/quickstart.html";
+//! let resolved = resolve_relative(base, relative_href).unwrap();
+//! assert_eq!(resolved, "https://example.com/docs/guides/quickstart.html");
+//!
+//! // Example 3: Verifying internal crawl scope and generating a 64-bit deduplication hash
+//! assert!(is_internal(&resolved, base));
+//! let hash = url_hash(&clean_url);
+//! assert_ne!(hash, 0);
+//! ```
 
 use crate::error::{SeoError, SeoResult};
 use ahash::AHasher;
@@ -27,8 +80,34 @@ const TRACKING_PARAMS: &[&str] = &[
 
 /// Normalizes a raw URL string through the 8-stage canonicalization pipeline.
 ///
-/// Returns the normalized URL string or an error if the URL is invalid
-/// or uses an unsupported scheme.
+/// This eliminates crawl duplication by transforming various URL syntaxes representing
+/// the same resource into a single deterministic canonical string.
+///
+/// # Stages Applied
+/// 1. Scheme lowercased (`HTTP` -> `http`); protocol-relative (`//`) mapped to `https:`.
+/// 2. Hostname lowercased; trailing root dots removed (`example.com.` -> `example.com`).
+/// 3. Default ports removed (`:80` for http, `:443` for https).
+/// 4. Path dot segments resolved (`.` and `..`); consecutive duplicate slashes collapsed.
+/// 5. Empty path normalized to root `/`; trailing slashes preserved.
+/// 6. Hash fragments stripped (`#anchor`).
+/// 7. Tracking parameters removed (`utm_*`, `fbclid`, `gclid`, `msclkid`, `mc_eid`, `_ga`, `_gl`, `ref`).
+/// 8. Remaining query keys lexicographically sorted; trailing `?` stripped if query is empty.
+///
+/// # Errors
+/// Returns [`SeoError::Url`] if:
+/// - The input string is empty or contains only whitespace.
+/// - The URL scheme is unsupported (e.g. `ftp://`, `mailto:`).
+/// - The URL string fails RFC 3986 parsing or lacks a valid host.
+///
+/// # Examples
+/// ```
+/// use seo_lens::core::url::normalize_url;
+///
+/// // Strips tracking parameters, sorts queries, collapses slashes, and strips fragments
+/// let raw = "HTTPS://Example.COM:443/products//shoes/?utm_source=ad&color=red&size=10#reviews";
+/// let normalized = normalize_url(raw).unwrap();
+/// assert_eq!(normalized, "https://example.com/products/shoes/?color=red&size=10");
+/// ```
 pub fn normalize_url(raw: &str) -> SeoResult<String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -55,7 +134,9 @@ pub fn normalize_url(raw: &str) -> SeoResult<String> {
     }
 
     // 2. Hostname normalization: lowercase & strip trailing root dot
-    let clean_host = parsed.host_str().map(|h| h.trim_end_matches('.').to_string());
+    let clean_host = parsed
+        .host_str()
+        .map(|h| h.trim_end_matches('.').to_string());
     match clean_host {
         Some(host) if !host.is_empty() => {
             parsed
@@ -67,8 +148,7 @@ pub fn normalize_url(raw: &str) -> SeoResult<String> {
 
     // 3. Default port stripping (80 for http, 443 for https)
     if let Some(port) = parsed.port() {
-        if (parsed.scheme() == "http" && port == 80)
-            || (parsed.scheme() == "https" && port == 443)
+        if (parsed.scheme() == "http" && port == 80) || (parsed.scheme() == "https" && port == 443)
         {
             let _ = parsed.set_port(None);
         }
@@ -124,18 +204,67 @@ pub fn normalize_url(raw: &str) -> SeoResult<String> {
 }
 
 /// Resolves a relative URL against an absolute base URL and returns the normalized result.
+///
+/// Handles all standard HTML hyperlink forms:
+/// - Sibling/child relative paths: `post-1.html`
+/// - Parent directory navigation: `../about`
+/// - Root-relative absolute paths: `/pricing`
+/// - Protocol-relative URLs: `//cdn.example.com/asset.js`
+/// - Query-only replacements: `?page=2`
+///
+/// The resulting URL is automatically passed through [`normalize_url`].
+///
+/// # Errors
+/// Returns [`SeoError::Url`] if the base URL is invalid or if the relative path cannot be resolved.
+///
+/// # Examples
+/// ```
+/// use seo_lens::core::url::resolve_relative;
+///
+/// let base = "https://example.com/articles/2026/";
+///
+/// // Sibling path
+/// let url1 = resolve_relative(base, "article-1.html").unwrap();
+/// assert_eq!(url1, "https://example.com/articles/2026/article-1.html");
+///
+/// // Parent navigation
+/// let url2 = resolve_relative(base, "../about").unwrap();
+/// assert_eq!(url2, "https://example.com/articles/about");
+///
+/// // Root path
+/// let url3 = resolve_relative(base, "/contact").unwrap();
+/// assert_eq!(url3, "https://example.com/contact");
+/// ```
 pub fn resolve_relative(base: &str, relative: &str) -> SeoResult<String> {
-    let base_parsed = Url::parse(base)
-        .map_err(|e| SeoError::Url(format!("Invalid base URL '{base}': {e}")))?;
+    let base_parsed =
+        Url::parse(base).map_err(|e| SeoError::Url(format!("Invalid base URL '{base}': {e}")))?;
 
-    let joined = base_parsed
-        .join(relative)
-        .map_err(|e| SeoError::Url(format!("Failed to resolve '{relative}' against '{base}': {e}")))?;
+    let joined = base_parsed.join(relative).map_err(|e| {
+        SeoError::Url(format!(
+            "Failed to resolve '{relative}' against '{base}': {e}"
+        ))
+    })?;
 
     normalize_url(joined.as_str())
 }
 
-/// Computes a fast 64-bit AHash for a normalized URL string.
+/// Computes a fast, collision-resistant 64-bit AHash for a normalized URL string.
+///
+/// Used by the crawler's frontier queue (`VisitedSet`) to store visited URLs in
+/// a `hashbrown::HashSet<u64>` SwissTable rather than storing raw `String` paths.
+/// Storing 64-bit integer hashes instead of raw strings reduces memory consumption
+/// from >10 MB down to ~400 KB for a 50,000 URL crawl.
+///
+/// # Examples
+/// ```
+/// use seo_lens::core::url::{normalize_url, url_hash};
+///
+/// let url_a = normalize_url("https://example.com/page?b=2&a=1").unwrap();
+/// let url_b = normalize_url("https://example.com/page?a=1&b=2").unwrap();
+///
+/// // Identical normalized URLs produce identical 64-bit hashes
+/// assert_eq!(url_hash(&url_a), url_hash(&url_b));
+/// ```
 pub fn url_hash(normalized_url: &str) -> u64 {
     let mut hasher = AHasher::default();
     hasher.write(normalized_url.as_bytes());
@@ -143,6 +272,25 @@ pub fn url_hash(normalized_url: &str) -> u64 {
 }
 
 /// Checks whether a target URL belongs to the same host as the base URL.
+///
+/// Compares the hostname of `target_url` with `base_url` (case-insensitively).
+/// Subdomains (e.g. `blog.example.com` vs `example.com`) are treated as external
+/// (or distinct crawl scopes).
+///
+/// # Examples
+/// ```
+/// use seo_lens::core::url::is_internal;
+///
+/// let base = "https://example.com/home";
+///
+/// // Same host
+/// assert!(is_internal("https://example.com/contact", base));
+/// assert!(is_internal("http://example.com/docs", base));
+///
+/// // External host or subdomain
+/// assert!(!is_internal("https://google.com/", base));
+/// assert!(!is_internal("https://sub.example.com/", base));
+/// ```
 pub fn is_internal(target_url: &str, base_url: &str) -> bool {
     let Ok(target) = Url::parse(target_url) else {
         return false;

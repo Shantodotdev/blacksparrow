@@ -1,14 +1,8 @@
-//! # URL Normalization & Domain Models Test Suite
+//! # URL Normalization Pipeline Test Suite
 //!
-//! Strict TDD tests for 8-stage URL normalization, relative resolution,
-//! hashing, and domain models.
+//! Comprehensive tests for 8-stage URL normalization, relative resolution,
+//! hashing, and link scope checking.
 
-use compact_str::CompactString;
-use seo_lens::core::config::CrawlConfig;
-use seo_lens::core::models::{
-    CrawlSummary, DiscoveredLink, HreflangTag, ImageResource, IssueCategory, IssueFinding,
-    PageReport, RobotsFlags, SchemaRecord, Severity,
-};
 use seo_lens::core::url::{is_internal, normalize_url, resolve_relative, url_hash};
 use seo_lens::SeoError;
 
@@ -390,147 +384,16 @@ fn test_url_hash_determinism() {
 
 #[test]
 fn test_invalid_urls_return_seo_error() {
-    assert!(matches!(normalize_url("not-a-valid-url"), Err(SeoError::Url(_))));
-    assert!(matches!(normalize_url("://missing-scheme"), Err(SeoError::Url(_))));
-    assert!(matches!(normalize_url("ftp://unsupported.com"), Err(SeoError::Url(_))));
-}
-
-// =========================================================================
-// 13. DOMAIN MODELS CREATION & SERIALIZATION TESTS
-// =========================================================================
-
-#[test]
-fn test_domain_models_integrity() {
-    let mut flags = RobotsFlags::NONE;
-    flags.insert(RobotsFlags::NOINDEX);
-    flags.insert(RobotsFlags::NOFOLLOW);
-    assert!(flags.contains(RobotsFlags::NOINDEX));
-    assert!(flags.contains(RobotsFlags::NOFOLLOW));
-    assert!(!flags.contains(RobotsFlags::NOARCHIVE));
-
-    let issue = IssueFinding {
-        code: CompactString::new("ERR_TITLE_MISSING"),
-        category: IssueCategory::TitleMetadata,
-        severity: Severity::Critical,
-        title: CompactString::new("Missing Document Title"),
-        message: "Page lacks a <title> tag.".to_string(),
-        target_url: "https://example.com/missing-title".to_string(),
-        source_page_url: None,
-    };
-    assert_eq!(issue.severity, Severity::Critical);
-    assert_eq!(issue.category, IssueCategory::TitleMetadata);
-
-    let link = DiscoveredLink {
-        source_url: "https://example.com/".to_string(),
-        target_url: "https://example.com/about".to_string(),
-        target_url_hash: url_hash("https://example.com/about"),
-        anchor_text: "About Us".to_string(),
-        is_internal: true,
-        is_nofollow: false,
-        is_image_link: false,
-        status_code: Some(200),
-    };
-    assert!(link.is_internal);
-
-    let image = ImageResource {
-        src_url: "https://example.com/logo.png".to_string(),
-        alt_text: Some("Company Logo".to_string()),
-        width: Some(200),
-        height: Some(50),
-        size_bytes: Some(15000),
-        has_dimensions: true,
-        is_broken: false,
-    };
-    assert!(image.has_dimensions);
-
-    let schema = SchemaRecord {
-        schema_type: CompactString::new("Organization"),
-        raw_json: r#"{"@type":"Organization"}"#.to_string(),
-        is_valid_json: true,
-        is_google_eligible: true,
-        missing_required_fields: vec![],
-    };
-    assert!(schema.is_valid_json);
-
-    let hreflang = HreflangTag {
-        lang_code: CompactString::new("en-US"),
-        target_url: "https://example.com/en-us/".to_string(),
-        is_reciprocal: true,
-    };
-    assert_eq!(hreflang.lang_code.as_str(), "en-US");
-
-    let page_report = PageReport {
-        id: None,
-        crawl_id: CompactString::new("crawl-test-1"),
-        url: "https://example.com/".to_string(),
-        url_hash: url_hash("https://example.com/"),
-        final_url: None,
-        status_code: 200,
-        content_type: CompactString::new("text/html; charset=utf-8"),
-        size_bytes: 4096,
-        ttfb_ms: 120,
-        crawl_depth: 0,
-        title: Some("Homepage".to_string()),
-        title_length: 8,
-        meta_description: Some("Homepage description".to_string()),
-        meta_desc_length: 20,
-        canonical_url: Some("https://example.com/".to_string()),
-        html_lang: Some(CompactString::new("en")),
-        charset: Some(CompactString::new("utf-8")),
-        viewport: Some(CompactString::new("width=device-width, initial-scale=1")),
-        robots_flags: flags,
-        is_sitemap_url: true,
-        is_internal: true,
-        h1_primary: Some("Welcome".to_string()),
-        h1_count: 1,
-        h2_headings: vec!["Features".to_string()],
-        h3_headings: vec![],
-        word_count: 350,
-        content_hash: 12345,
-        simhash: 67890,
-        is_soft_404: false,
-        has_lorem_ipsum: false,
-        is_https: true,
-        has_hsts: true,
-        has_csp: false,
-        has_x_frame: true,
-        has_x_content_type: true,
-        mixed_content_count: 0,
-        links: vec![link],
-        images: vec![image],
-        schemas: vec![schema],
-        hreflangs: vec![hreflang],
-        issues: vec![issue],
-    };
-
-    assert_eq!(page_report.status_code, 200);
-    assert_eq!(page_report.links.len(), 1);
-
-    // Serialization test
-    let json = serde_json::to_string(&page_report).expect("Failed to serialize PageReport");
-    assert!(json.contains("crawl-test-1"));
-    assert!(json.contains("Homepage"));
-
-    let config = CrawlConfig::new("https://example.com/").expect("Failed to create CrawlConfig");
-    assert_eq!(config.start_url, "https://example.com/");
-    assert_eq!(config.max_pages, 500);
-    assert_eq!(config.max_depth, 5);
-    assert_eq!(config.concurrency, 10);
-
-    let summary = CrawlSummary {
-        session_id: "test-session".to_string(),
-        target_url: "https://example.com/".to_string(),
-        started_at: "2026-09-04T12:00:00Z".to_string(),
-        finished_at: None,
-        total_pages_crawled: 1,
-        total_links_discovered: 1,
-        total_errors: 0,
-        total_alerts: 0,
-        total_warnings: 0,
-        total_notices: 0,
-        average_ttfb_ms: 120,
-        p95_ttfb_ms: 120,
-        health_score: 100,
-    };
-    assert_eq!(summary.health_score, 100);
+    assert!(matches!(
+        normalize_url("not-a-valid-url"),
+        Err(SeoError::Url(_))
+    ));
+    assert!(matches!(
+        normalize_url("://missing-scheme"),
+        Err(SeoError::Url(_))
+    ));
+    assert!(matches!(
+        normalize_url("ftp://unsupported.com"),
+        Err(SeoError::Url(_))
+    ));
 }

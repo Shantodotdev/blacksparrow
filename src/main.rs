@@ -121,11 +121,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Audit(args) => {
             let normalized_url = seo_lens::core::url::normalize_url(&args.url)?;
             info!(target_url = %normalized_url, "Initiating audit crawl (scaffold)");
-            println!("Auditing {} (max {} pages, depth {})...", normalized_url, args.max_pages, args.max_depth);
+            println!(
+                "Auditing {} (max {} pages, depth {})...",
+                normalized_url, args.max_pages, args.max_depth
+            );
         }
         Commands::Mcp(args) => {
             info!(transport = %args.transport, "Starting MCP server (scaffold)");
-            println!("Starting SEO Lens MCP server on transport: {}", args.transport);
+            println!(
+                "Starting SEO Lens MCP server on transport: {}",
+                args.transport
+            );
         }
         Commands::Report(args) => {
             info!(session_id = %args.session, "Inspecting report session (scaffold)");

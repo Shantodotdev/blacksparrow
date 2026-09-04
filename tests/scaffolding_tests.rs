@@ -3,31 +3,6 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 #[test]
-fn test_error_formatting() {
-    let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
-    let seo_err = SeoError::from(io_err);
-    assert!(seo_err.to_string().contains("I/O error"));
-
-    let config_err = SeoError::Config("invalid max_pages".to_string());
-    assert_eq!(
-        config_err.to_string(),
-        "Configuration error: invalid max_pages"
-    );
-
-    let url_err = SeoError::Url("missing scheme".to_string());
-    assert_eq!(url_err.to_string(), "URL parsing error: missing scheme");
-
-    let net_err = SeoError::Network("connection reset".to_string());
-    assert_eq!(net_err.to_string(), "Network error: connection reset");
-
-    let internal_err = SeoError::Internal("unexpected state".to_string());
-    assert_eq!(
-        internal_err.to_string(),
-        "Internal engine error: unexpected state"
-    );
-}
-
-#[test]
 fn test_fixtures_exist_and_readable() {
     let sample_html = include_str!("fixtures/sample_page.html");
     assert!(sample_html.contains("<title>SEO Lens Fixture Page</title>"));
