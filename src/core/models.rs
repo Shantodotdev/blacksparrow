@@ -2,189 +2,356 @@
 //!
 //! Core data models representing pages, discovered links, images, schema records,
 //! SEO issues, severity tiers, and crawl summary statistics.
+//!
+//! ## Memory Optimization Architecture
+//!
+//! When conducting technical SEO audits of enterprise websites containing 50,000+ pages,
+//! in-memory representation can quickly overwhelm system RAM. SEO Lens optimizes memory
+//! layout across all core models:
+//!
+//! 1. **Compact String Inlining**: Short strings $\le 24$ bytes (such as MIME types, tag names,
+//!    language codes, and issue IDs) use [`compact_str::CompactString`], which inlines the text
+//!    directly on the stack rather than allocating on the heap.
+//! 2. **Bitfield Directives**: Robots indexing instructions (`noindex`, `nofollow`, `nosnippet`,
+//!    `noimageindex`, `noarchive`) are packed into a single 1-byte [`RobotsFlags`] bitmask.
+//! 3. **Compact Primitives**: Network status codes, TTFB latencies, dimensions, and depth levels
+//!    are stored in tightly-sized integers (`u16`, `u32`) instead of generic 64-bit numbers.
+//! 4. **Integer URL Hashes**: Discovered links store a 64-bit target URL hash (`target_url_hash`)
+//!    enabling rapid frontier deduplication in SwissTables without cloning full strings.
 
 use compact_str::CompactString;
 use serde::{Deserialize, Serialize};
 
 /// Severity classification for technical SEO findings.
+///
+/// Ranked in descending order of urgency:
+/// `Critical` (1) > `Alert` (2) > `Warning` (3) > `Notice` (4).
+///
+/// # Examples
+///
+/// ```rust
+/// use seo_lens::core::models::Severity;
+///
+/// // Severities can be compared by urgency (lower value = higher urgency)
+/// assert!(Severity::Critical < Severity::Alert);
+/// assert!(Severity::Alert < Severity::Warning);
+/// assert!(Severity::Warning < Severity::Notice);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Severity {
+    /// Severe errors that completely block indexing, break protocols, or crash pages (e.g. 5xx errors, circular redirects).
     Critical = 1,
+    /// High-priority defects that directly harm search rankings or prevent page discovery (e.g. accidental noindex, canonical mismatch).
     Alert = 2,
+    /// Moderate optimization issues or suboptimal implementations (e.g. missing meta description, long title, missing image alt).
     Warning = 3,
+    /// Informational observations or minor best-practice recommendations (e.g. protocol consistency, casing differences).
     Notice = 4,
 }
 
-/// Functional categories mapping to the 120-check technical SEO catalog.
+/// Functional categories mapping to the 120-check technical SEO audit catalog.
+///
+/// Organizes audit findings into logical audit domains for reporting and filtering.
+///
+/// # Examples
+///
+/// ```rust
+/// use seo_lens::core::models::IssueCategory;
+///
+/// let category = IssueCategory::Indexability;
+/// assert_eq!(format!("{category:?}"), "Indexability");
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum IssueCategory {
+    /// HTTP status codes, transport protocols, connection latency, and timeouts.
     HttpTransport,
+    /// Document titles, meta descriptions, viewports, charsets, and OpenGraph/Twitter tags.
     TitleMetadata,
+    /// Heading tags (`<h1>`-`<h6>`), hierarchy consistency, and duplicate H1 detection.
     Headings,
+    /// Robots directives (`robots.txt`, `<meta name="robots">`, X-Robots-Tag), and indexability.
     Indexability,
+    /// Canonical tag implementation, self-canonicalization, and cross-domain references.
     Canonicalization,
+    /// Internal/external link discovery, broken links (404s), redirect chains, and anchor text.
     Links,
+    /// HTTPS enforcement, Mixed Content, HSTS, and Content-Security-Policy headers.
     Security,
+    /// Mobile viewport configuration and responsiveness signals.
     MobileUx,
+    /// Internationalization hreflang tags, reciprocal validity, and language codes.
     Internationalization,
+    /// Schema.org JSON-LD structured data and Google Rich Results validation.
     StructuredData,
+    /// LLM/AI crawler access (GPTBot, PerplexityBot, ClaudeBot, Google-Extended) and geo-targeting.
     GeoAiSearch,
+    /// Site graph topology, internal PageRank distributions, and crawl depth hierarchy.
     SiteGraph,
+    /// Client-side JavaScript DOM rendering diffs (CSR vs SSR content differences).
     JsDiff,
 }
 
 bitflags::bitflags! {
-    /// Memory-efficient bitfield for robots and indexing directives.
+    /// Memory-efficient 1-byte bitfield for robots and indexing directives.
+    ///
+    /// Web crawlers evaluate robots directives across both `<meta name="robots">` tags
+    /// and HTTP `X-Robots-Tag` headers. Packing these boolean flags into a single `u8`
+    /// uses 87.5% less memory than storing 6 separate boolean fields.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use seo_lens::core::models::RobotsFlags;
+    ///
+    /// let mut flags = RobotsFlags::NONE;
+    /// flags.insert(RobotsFlags::NOINDEX);
+    /// flags.insert(RobotsFlags::NOFOLLOW);
+    ///
+    /// assert!(flags.contains(RobotsFlags::NOINDEX));
+    /// assert!(flags.contains(RobotsFlags::NOFOLLOW));
+    /// assert!(!flags.contains(RobotsFlags::NOARCHIVE));
+    ///
+    /// // Bitwise combinations
+    /// let combined = RobotsFlags::NOINDEX | RobotsFlags::NOSNIPPET;
+    /// assert!(combined.contains(RobotsFlags::NOINDEX));
+    /// assert!(combined.contains(RobotsFlags::NOSNIPPET));
+    /// ```
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
     pub struct RobotsFlags: u8 {
+        /// No restrictive directives present; page is fully indexable and followable.
         const NONE         = 0b0000_0000;
+        /// Instructs search engines not to index or display this page in SERPs.
         const NOINDEX      = 0b0000_0001;
+        /// Instructs search engines not to follow outbound links on this page.
         const NOFOLLOW     = 0b0000_0010;
+        /// Prevents search engines from displaying text snippets or video previews in search results.
         const NOSNIPPET    = 0b0000_0100;
+        /// Prevents search engines from indexing images hosted on this page.
         const NOIMAGEINDEX = 0b0000_1000;
+        /// Prevents search engines from offering cached links for this page.
         const NOARCHIVE    = 0b0001_0000;
     }
 }
 
 /// Represents the complete audit report for a single crawled URL.
+///
+/// Contains all HTTP transport telemetry, metadata, heading hierarchy,
+/// editorial content metrics, security headers, and associated child collections.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PageReport {
-    /// Unique incremental identifier (primary key in SQLite)
+    /// Unique incremental identifier (primary key in SQLite).
     pub id: Option<i64>,
-    /// Associated crawl session identifier
+    /// Associated crawl session identifier.
     pub crawl_id: CompactString,
 
     // --- Network & Transport ---
+    /// Normalized request URL.
     pub url: String,
+    /// 64-bit deterministic hash of the normalized request URL.
     pub url_hash: u64,
+    /// Final destination URL after following HTTP redirects, if different.
     pub final_url: Option<String>,
+    /// HTTP response status code (e.g. 200, 301, 404, 500).
     pub status_code: u16,
+    /// Content-Type header value (e.g. "text/html; charset=utf-8").
     pub content_type: CompactString,
+    /// Total response body size in bytes.
     pub size_bytes: u32,
+    /// Time to first byte (TTFB) in milliseconds.
     pub ttfb_ms: u32,
+    /// Crawl depth level from the root seed URL (0 = seed).
     pub crawl_depth: u16,
 
     // --- Metadata ---
+    /// Document title extracted from `<title>`.
     pub title: Option<String>,
+    /// Character length of the document title.
     pub title_length: u16,
+    /// Meta description content extracted from `<meta name="description">`.
     pub meta_description: Option<String>,
+    /// Character length of the meta description.
     pub meta_desc_length: u16,
+    /// Canonical URL declared via `<link rel="canonical">`.
     pub canonical_url: Option<String>,
+    /// Document language declared in `<html lang="...">`.
     pub html_lang: Option<CompactString>,
+    /// Character encoding declared via `<meta charset="...">`.
     pub charset: Option<CompactString>,
+    /// Viewport configuration declared via `<meta name="viewport">`.
     pub viewport: Option<CompactString>,
 
     // --- Directives ---
+    /// Combined robots directives parsed into a 1-byte bitfield.
     pub robots_flags: RobotsFlags,
+    /// Whether this URL was discovered in the site's XML sitemap.
     pub is_sitemap_url: bool,
+    /// Whether this URL belongs to the internal crawl target domain.
     pub is_internal: bool,
 
     // --- Headings ---
+    /// First `<h1>` heading text found in the document.
     pub h1_primary: Option<String>,
+    /// Total count of `<h1>` tags on the page.
     pub h1_count: u16,
+    /// Ordered list of all `<h2>` heading texts.
     pub h2_headings: Vec<String>,
+    /// Ordered list of all `<h3>` heading texts.
     pub h3_headings: Vec<String>,
 
     // --- Content & Quality ---
+    /// Word count of editorial body text (excluding navigation, header, footer).
     pub word_count: u32,
+    /// 64-bit deterministic hash of editorial text for exact duplicate detection.
     pub content_hash: u64,
+    /// 64-bit locality-sensitive SimHash fingerprint for near-duplicate detection.
     pub simhash: u64,
+    /// Whether the page returns a 200 OK status while presenting 404 error content.
     pub is_soft_404: bool,
+    /// Whether placeholder "Lorem ipsum" dummy text was detected.
     pub has_lorem_ipsum: bool,
 
     // --- Security ---
+    /// Whether the URL is delivered over HTTPS.
     pub is_https: bool,
+    /// Whether the Strict-Transport-Security (HSTS) header is present.
     pub has_hsts: bool,
+    /// Whether the Content-Security-Policy (CSP) header is present.
     pub has_csp: bool,
+    /// Whether the X-Frame-Options clickjacking protection header is present.
     pub has_x_frame: bool,
+    /// Whether the X-Content-Type-Options: nosniff header is present.
     pub has_x_content_type: bool,
+    /// Count of insecure HTTP resources requested by an HTTPS page.
     pub mixed_content_count: u16,
 
     // --- Child Collections (stored relationally) ---
+    /// Hyperlinks discovered on this page.
     pub links: Vec<DiscoveredLink>,
+    /// Image assets embedded in this page.
     pub images: Vec<ImageResource>,
+    /// Structured data records parsed from this page.
     pub schemas: Vec<SchemaRecord>,
+    /// Alternate language hreflang links declared on this page.
     pub hreflangs: Vec<HreflangTag>,
+    /// Audit issues identified on this page by the rules engine.
     pub issues: Vec<IssueFinding>,
 }
 
 /// A hyperlink discovered in an HTML document.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiscoveredLink {
+    /// URL of the page where the link was found.
     pub source_url: String,
+    /// Fully resolved absolute destination URL.
     pub target_url: String,
+    /// 64-bit deterministic hash of the target URL for fast frontier lookup.
     pub target_url_hash: u64,
+    /// Anchor text or child image alt text associated with the hyperlink.
     pub anchor_text: String,
+    /// Whether the link points to the same hostname as the source.
     pub is_internal: bool,
+    /// Whether the link includes a `rel="nofollow"` directive.
     pub is_nofollow: bool,
+    /// Whether the link wraps an image instead of textual anchor text.
     pub is_image_link: bool,
+    /// HTTP status code of the target URL, once fetched.
     pub status_code: Option<u16>,
 }
 
 /// An image asset referenced on a page.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImageResource {
+    /// Resolved absolute image source URL.
     pub src_url: String,
+    /// Alternative text extracted from the `alt` attribute.
     pub alt_text: Option<String>,
+    /// Explicit width in pixels, if declared in attributes.
     pub width: Option<u32>,
+    /// Explicit height in pixels, if declared in attributes.
     pub height: Option<u32>,
+    /// Response payload size in bytes, once fetched.
     pub size_bytes: Option<u32>,
+    /// Whether both width and height attributes are explicitly defined.
     pub has_dimensions: bool,
+    /// Whether the image URL returned a 4xx/5xx HTTP error.
     pub is_broken: bool,
 }
 
 /// JSON-LD or Microdata structured data block.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SchemaRecord {
+    /// Extracted schema `@type` (e.g. "Article", "Product", "Organization").
     pub schema_type: CompactString,
+    /// Raw JSON string of the structured data block.
     pub raw_json: String,
+    /// Whether the block is syntactically valid JSON.
     pub is_valid_json: bool,
+    /// Whether the schema type is eligible for Google Rich Results.
     pub is_google_eligible: bool,
+    /// Mandatory schema fields missing for rich snippet qualification.
     pub missing_required_fields: Vec<CompactString>,
 }
 
 /// Hreflang alternate language tag.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HreflangTag {
+    /// Language or region code (e.g. "en", "es-ES", "x-default").
     pub lang_code: CompactString,
+    /// Target alternate URL for this language.
     pub target_url: String,
+    /// Whether the target page reciprocally links back with matching hreflang.
     pub is_reciprocal: bool,
 }
 
 /// A specific technical SEO defect identified by the rules engine.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IssueFinding {
-    /// Unique issue identifier code (e.g. "ERR_TITLE_MISSING")
+    /// Unique issue identifier code (e.g. "ERR_TITLE_MISSING", "WARN_H1_MULTIPLE").
     pub code: CompactString,
+    /// Functional audit category for grouping.
     pub category: IssueCategory,
+    /// Severity classification tier.
     pub severity: Severity,
-    /// Human-readable headline
+    /// Human-readable headline summarizing the issue.
     pub title: CompactString,
-    /// Context-specific detail explaining where and why it failed
+    /// Context-specific detail explaining where and why the rule triggered.
     pub message: String,
+    /// URL where the issue was identified.
     pub target_url: String,
-    /// Source page that linked to this target (useful for 404s/broken links)
+    /// Source page that linked to this target (for broken link tracking).
     pub source_page_url: Option<String>,
 }
 
 /// Summary metrics for an entire crawl session.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CrawlSummary {
+    /// Unique crawl session identifier.
     pub session_id: String,
+    /// Seed root URL of the crawl.
     pub target_url: String,
+    /// ISO 8601 timestamp when the crawl started.
     pub started_at: String,
+    /// ISO 8601 timestamp when the crawl completed, if finished.
     pub finished_at: Option<String>,
+    /// Total number of unique URLs successfully crawled.
     pub total_pages_crawled: u32,
+    /// Total number of unique hyperlinks discovered.
     pub total_links_discovered: u32,
+    /// Total number of Critical severity defects found.
     pub total_errors: u32,
+    /// Total number of Alert severity defects found.
     pub total_alerts: u32,
+    /// Total number of Warning severity defects found.
     pub total_warnings: u32,
+    /// Total number of Notice severity observations found.
     pub total_notices: u32,
+    /// Mean time to first byte across all successful page fetches.
     pub average_ttfb_ms: u32,
+    /// 95th percentile TTFB latency across all requests.
     pub p95_ttfb_ms: u32,
-    /// 0-100 score calculated by weighted severity
+    /// Overall website technical health score from 0 to 100.
     pub health_score: u8,
 }
 

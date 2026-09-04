@@ -1,6 +1,29 @@
 //! # SEO Lens CLI Entry Point
 //!
 //! Command-line interface for the `seolens` binary.
+//!
+//! ## Subcommands
+//!
+//! - `audit`: Executes a full or partial website crawl and audits pages against technical SEO rules.
+//! - `mcp`: Launches the native Model Context Protocol (MCP) server over `stdio` or HTTP/SSE.
+//! - `report`: Inspects, filters, and re-exports historical crawl sessions from SQLite.
+//! - `list`: Displays a summary table of past audit sessions stored locally.
+//!
+//! ## Usage Examples
+//!
+//! ```bash
+//! # Run a standard audit crawl with 20 concurrent tasks
+//! seolens audit https://example.com -p 500 -d 5 -c 20
+//!
+//! # Run with Headless Chrome JavaScript rendering enabled
+//! seolens audit https://example.com --render-js
+//!
+//! # Run MCP server for Cursor or Claude Desktop integration
+//! seolens mcp --transport stdio
+//!
+//! # Export audit results to Markdown and JSON reports
+//! seolens report --session 20260904_183012_abc -f md,json -o ./reports
+//! ```
 
 use clap::{Args, Parser, Subcommand};
 use std::path::PathBuf;
@@ -29,7 +52,7 @@ pub enum Commands {
 
 #[derive(Args, Debug)]
 pub struct AuditArgs {
-    /// Root URL to crawl (e.g. https://example.com)
+    /// Root URL to crawl (e.g. `https://example.com`)
     pub url: String,
 
     /// Maximum pages to crawl (0 = unlimited)
@@ -52,7 +75,7 @@ pub struct AuditArgs {
     #[arg(long, default_value_t = false)]
     pub render_js: bool,
 
-    /// Remote Chrome WebSocket URL (e.g. ws://127.0.0.1:9222)
+    /// Remote Chrome WebSocket URL (e.g. `ws://127.0.0.1:9222`)
     #[arg(long, default_value = "auto")]
     pub chrome_ws: String,
 
