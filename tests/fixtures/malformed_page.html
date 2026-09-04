@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Malformed &amp; Unclosed Tags Page</title>
+    <meta name="description" content="A test page with intentionally malformed HTML structures.">
+    <meta name="robots" content="noindex, nofollow, nosnippet">
+    <link rel="canonical" href="https://example.com/canonical-target/">
+    <link rel="alternate" hreflang="es" href="https://example.com/es/canonical-target/">
+    <meta property="og:title" content="OpenGraph Malformed Title">
+    <meta property="og:image" content="https://example.com/og.jpg">
+    <meta name="twitter:card" content="summary_large_image">
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "Article",
+        "headline": "Testing Malformed Parsing",
+        "author": {
+            "@type": "Person",
+            "name": "Jane Doe"
+        }
+    }
+    </script>
+</head>
+<body>
+    <header>
+        <nav>
+            <a href="/nav-link">Navigation Link (Should be ignored in editorial content)</a>
+        </nav>
+    </header>
+
+    <h1>Primary H1 Headline</h1>
+    <h1>Secondary Duplicate H1</h1>
+
+    <p>This is standard editorial body text with multiple words for word count verification.</p>
+    <h2>Section Subheading</h2>
+    <p>Another paragraph under section subheading explaining more details about the topic.</p>
+    <h3>Subsection Subheading</h3>
+
+    <a href="/relative/page">Internal Relative Link</a>
+    <a href="https://external.com/outbound" rel="nofollow">External Nofollow Link</a>
+    <a href="/image-link"><img src="/banner.png" alt="Banner Image" width="800" height="400"></a>
+    <img src="/missing-alt.png">
+
+    <footer>
+        <p>Copyright 2026 Example Corp. All rights reserved.</p>
+    </footer>
+    <script>
+        console.log("Ignored inline javascript text");
+    </script>
+</body>
+</html>
