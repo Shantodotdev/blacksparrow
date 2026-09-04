@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 
-/// SEO Lens - Enterprise-grade website crawler & technical SEO audit engine
+/// SEO Lens - High-performance website crawler & technical SEO audit engine
 #[derive(Parser, Debug)]
 #[command(name = "seolens", author, version, about, long_about = None)]
 pub struct Cli {

@@ -4,7 +4,7 @@ Project-wide instructions for AI coding agents working in SEO Lens.
 
 ## Repository Overview
 
-`SEO Lens` is an enterprise-grade, local-first website crawler, technical SEO audit engine, and AI-native auditor written in Rust. Its primary CLI executable is `seolens`.
+`SEO Lens` is a high-performance, local-first website crawler, technical SEO audit engine, and AI-native auditor written in Rust. Its primary CLI executable is `seolens`.
 
 The repository is structured as a **2-Member Cargo Workspace**:
 
@@ -35,12 +35,12 @@ The repository is structured as a **2-Member Cargo Workspace**:
 - **Minimal, Targeted Changes**: Make focused edits. Preserve existing comments, docstrings, and unrelated code.
 - **Empirical Measurement**: Do not make up unverified performance claims or benchmark figures. Profile and measure memory and speed empirically.
 - **Preserve Long-Term Assets**: Never delete, truncate, or overwrite files in `docs/` or `inspiration/`.
+- **Dependency Management**: Agents are authorized to modify and add dependencies in `Cargo.toml` or `package.json` as needed for feature and phase implementations.
 
 ---
 
 ## Do Not Do Without Explicit User Approval
 
-- Do not modify dependencies in `Cargo.toml` or `package.json`.
 - Do not run destructive Git commands (`git reset --hard`, `git push --force`, `git clean -f`).
 - Do not bundle Chromium into the binary (use decoupled CDP via `chromiumoxide`).
 - Do not write implementation code before writing failing tests and test fixtures.

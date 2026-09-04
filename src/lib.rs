@@ -1,6 +1,6 @@
 //! # SEO Lens
 //!
-//! Enterprise-grade, local-first website crawler, technical SEO audit engine,
+//! High-performance, local-first website crawler, technical SEO audit engine,
 //! and AI-native auditor written in Rust.
 
 pub mod error;

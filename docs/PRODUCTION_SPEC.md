@@ -8,7 +8,7 @@
 
 ## 1. System Overview & Production Goals
 
-`SEO Lens` is an enterprise-grade, local-first website crawler, technical SEO audit engine, and AI-native auditor written in Rust. It is built to run reliably on client websites, local developer machines, production Linux servers, Docker containers, and autonomous AI agent environments.
+`SEO Lens` is a high-performance, local-first website crawler, technical SEO audit engine, and AI-native auditor written in Rust. It is built to run reliably on client websites, local developer machines, production Linux servers, Docker containers, and autonomous AI agent environments.
 
 ### Core Production Requirements
 
