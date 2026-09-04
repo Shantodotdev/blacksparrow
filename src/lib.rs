@@ -15,6 +15,10 @@
 //!   - [`core::models`]: Core domain entities ([`core::models::PageReport`], [`core::models::RobotsFlags`],
 //!     [`core::models::DiscoveredLink`], [`core::models::SchemaRecord`]).
 //!   - [`core::config`]: Crawl execution parameters ([`core::config::CrawlConfig`]), politeness rates, and depth controls.
+//! - [`crawler`]:
+//!   - [`crawler::client`]: Asynchronous HTTP client wrapper with redirect tracking and TTFB timing.
+//!   - [`crawler::aimd`]: Additive-Increase/Multiplicative-Decrease congestion controller.
+//!   - [`crawler::waf`]: Anti-bot challenge fingerprint detection (Cloudflare, Akamai, DataDome).
 //! - [`parser`]:
 //!   - [`parser::streaming`]: Zero-copy streaming HTML parser powered by Cloudflare's `lol_html`.
 //!   - [`parser::content`]: Word count extraction, 64-bit content hashing, and locality-sensitive 64-bit SimHash.
@@ -59,6 +63,7 @@
 //! ```
 
 pub mod core;
+pub mod crawler;
 pub mod error;
 pub mod parser;
 

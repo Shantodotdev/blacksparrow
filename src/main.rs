@@ -143,11 +143,72 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match cli.command {
         Commands::Audit(args) => {
             let normalized_url = seo_lens::core::url::normalize_url(&args.url)?;
-            info!(target_url = %normalized_url, "Initiating audit crawl (scaffold)");
+            info!(target_url = %normalized_url, "Initiating live audit fetch");
+            println!("🔍 Fetching & Auditing {}...", normalized_url);
+
+            let client = seo_lens::crawler::client::HttpClient::new(
+                seo_lens::crawler::client::FetchOptions {
+                    user_agent: args.user_agent,
+                    timeout: std::time::Duration::from_secs(30),
+                    max_redirects: 10,
+                    ..Default::default()
+                },
+            )?;
+
+            let fetch_res = client.fetch(&normalized_url).await?;
+            println!("\n=== HTTP TRANSPORT TELEMETRY ===");
+            println!("• Status Code   : {}", fetch_res.status_code);
+            println!("• Final URL     : {}", fetch_res.final_url);
+            println!("• TTFB Latency  : {} ms", fetch_res.ttfb_ms);
+            println!("• Payload Size  : {} bytes", fetch_res.size_bytes);
+            println!("• Content-Type  : {}", fetch_res.content_type);
+            if !fetch_res.redirect_chain.is_empty() {
+                println!(
+                    "• Redirect Chain: {}",
+                    fetch_res.redirect_chain.join(" -> ")
+                );
+            }
+            if let Some(waf) = fetch_res.waf_detected {
+                println!("⚠️  WAF Challenge Detected: {}", waf);
+            }
+
+            // Stream-parse HTML
+            let parsed = seo_lens::parser::parse_html(&fetch_res.body, &fetch_res.final_url)?;
+            println!("\n=== EXTRACTED SEO METADATA ===");
             println!(
-                "Auditing {} (max {} pages, depth {})...",
-                normalized_url, args.max_pages, args.max_depth
+                "• Document Title: {}",
+                parsed.title.as_deref().unwrap_or("[MISSING]")
             );
+            println!(
+                "• Meta Desc     : {}",
+                parsed.meta_description.as_deref().unwrap_or("[MISSING]")
+            );
+            println!(
+                "• Canonical URL : {}",
+                parsed.canonical_url.as_deref().unwrap_or("[MISSING]")
+            );
+            println!(
+                "• Primary H1    : {}",
+                parsed.h1_primary.as_deref().unwrap_or("[MISSING]")
+            );
+            println!("• Total H1 Count: {}", parsed.h1_count);
+            println!("• H2 Headings   : {}", parsed.h2_headings.len());
+            println!("• H3 Headings   : {}", parsed.h3_headings.len());
+            println!("• Word Count    : {} words", parsed.word_count);
+            println!("• SimHash       : {:016x}", parsed.simhash);
+            println!("• Content Hash  : {:016x}", parsed.content_hash);
+            println!("• Robots Direct : {:?}", parsed.robots_flags);
+            println!(
+                "• Internal Links: {}",
+                parsed.links.iter().filter(|l| l.is_internal).count()
+            );
+            println!(
+                "• Outbound Links: {}",
+                parsed.links.iter().filter(|l| !l.is_internal).count()
+            );
+            println!("• Images Found  : {}", parsed.images.len());
+            println!("• Schemas (JSON): {}", parsed.schemas.len());
+            println!("\n✨ Live audit check completed successfully!");
         }
         Commands::Mcp(args) => {
             info!(transport = %args.transport, "Starting MCP server (scaffold)");
