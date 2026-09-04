@@ -2,8 +2,64 @@
 //!
 //! High-performance, local-first website crawler, technical SEO audit engine,
 //! and AI-native auditor written in Rust.
+//!
+//! ## Repository Architecture
+//!
+//! SEO Lens is designed as an embeddable engine library (`seo_lens`) and a headless CLI (`seolens`).
+//!
+//! ### Core Engine Modules
+//!
+//! - [`core`]:
+//!   - [`core::url`]: 8-stage URL normalization pipeline, RFC 3986 path resolution, tracking
+//!     parameter stripping, and 64-bit SwissTable deduplication.
+//!   - [`core::models`]: Core domain entities ([`core::models::PageReport`], [`core::models::RobotsFlags`],
+//!     [`core::models::DiscoveredLink`], [`core::models::SchemaRecord`]).
+//!   - [`core::config`]: Crawl execution parameters ([`core::config::CrawlConfig`]), politeness rates, and depth controls.
+//! - [`parser`]:
+//!   - [`parser::streaming`]: Zero-copy streaming HTML parser powered by Cloudflare's `lol_html`.
+//!   - [`parser::content`]: Word count extraction, 64-bit content hashing, and locality-sensitive 64-bit SimHash.
+//!   - [`parser::metadata`]: RFC 9309 robots directive decoding, HTML entities, and canonicalization.
+//!   - [`parser::schema`]: JSON-LD structured data parser and Google Rich Results eligibility heuristics.
+//! - [`error`]: Zero-panic error handling taxonomy ([`SeoError`], [`SeoResult`]).
+//!
+//! ## Quickstart Example
+//!
+//! ```rust
+//! use seo_lens::core::url::normalize_url;
+//! use seo_lens::parser::parse_html;
+//! use seo_lens::core::models::RobotsFlags;
+//!
+//! // 1. Normalize a messy incoming URL
+//! let raw_url = "HTTPS://EXAMPLE.COM/blog//article?utm_source=twitter&b=2&a=1#section";
+//! let clean_url = normalize_url(raw_url).unwrap();
+//! assert_eq!(clean_url, "https://example.com/blog/article?a=1&b=2");
+//!
+//! // 2. Stream-parse an HTML document
+//! let sample_html = r#"
+//!     <!DOCTYPE html>
+//!     <html>
+//!     <head>
+//!         <title>Understanding Rust Async Crawlers</title>
+//!         <meta name="description" content="A guide to high-throughput crawlers.">
+//!         <meta name="robots" content="noindex, nofollow">
+//!         <link rel="canonical" href="https://example.com/blog/article">
+//!     </head>
+//!     <body>
+//!         <h1>Rust Crawlers</h1>
+//!         <p>Stream tokens without loading large DOM trees into memory.</p>
+//!         <a href="/docs/api">API Reference</a>
+//!     </body>
+//!     </html>
+//! "#;
+//!
+//! let page = parse_html(sample_html, &clean_url).unwrap();
+//! assert_eq!(page.title.as_deref(), Some("Understanding Rust Async Crawlers"));
+//! assert!(page.robots_flags.contains(RobotsFlags::NOINDEX));
+//! assert_eq!(page.links[0].target_url, "https://example.com/docs/api");
+//! ```
 
 pub mod core;
 pub mod error;
+pub mod parser;
 
 pub use error::{SeoError, SeoResult};
