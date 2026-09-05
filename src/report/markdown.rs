@@ -122,22 +122,29 @@ pub fn export_markdown_report(result: &CrawlResult, output_dir: &Path) -> SeoRes
             ));
             md.push_str(&format!("**Affected Pages**: {}  \n", findings.len()));
             md.push_str(&format!("**Description**: {}  \n", rule_def.description));
-            md.push_str(&format!("**Remediation**: `{}`  \n\n", rule_def.fix_advice));
+            md.push_str(&format!("**Remediation**: {}  \n\n", rule_def.fix_advice));
 
-            md.push_str("<details><summary>View Affected URLs</summary>\n\n");
-            for finding in findings.iter().take(20) {
+            md.push_str("| # | Affected URL | Finding Context |\n");
+            md.push_str("| :-: | :--- | :--- |\n");
+
+            for (idx, finding) in findings.iter().take(20).enumerate() {
+                let clean_msg = format_table_cell_message(&finding.message);
                 md.push_str(&format!(
-                    "- `{}`: {}\n",
-                    finding.target_url, finding.message
+                    "| {} | [`{}`]({}) | {} |\n",
+                    idx + 1,
+                    finding.target_url,
+                    finding.target_url,
+                    clean_msg
                 ));
             }
             if findings.len() > 20 {
                 md.push_str(&format!(
-                    "- *...and {} additional pages*\n",
+                    "\n*...and {} additional affected pages (see complete JSON export for full URL manifest).*\n\n",
                     findings.len() - 20
                 ));
+            } else {
+                md.push('\n');
             }
-            md.push_str("\n</details>\n\n");
         }
     }
 
@@ -159,8 +166,9 @@ pub fn export_markdown_report(result: &CrawlResult, output_dir: &Path) -> SeoRes
 
     for (rank, (page, pr)) in ranked_pages.iter().take(15).enumerate() {
         md.push_str(&format!(
-            "| {} | `{}` | {:.6} | {} | {} |\n",
+            "| {} | [`{}`]({}) | {:.6} | {} | {} |\n",
             rank + 1,
+            page.url,
             page.url,
             pr,
             result.graph.in_degree(&page.url),
@@ -173,4 +181,44 @@ pub fn export_markdown_report(result: &CrawlResult, output_dir: &Path) -> SeoRes
         .map_err(|e| SeoError::Internal(format!("Failed to write markdown report: {}", e)))?;
 
     Ok(output_path)
+}
+
+/// Formats a finding message safely for Markdown tables:
+/// 1. Converts quoted URLs `"https?://..."` into clickable Markdown links `[`url`](url)`
+/// 2. Escapes raw `<tag>` strings into backticked code spans if not already backticked
+/// 3. Escapes `|` as `\|` to preserve Markdown table cell boundaries
+fn format_table_cell_message(raw_message: &str) -> String {
+    let mut result = String::new();
+    let mut remaining = raw_message;
+
+    // Linkify referenced URLs inside quotes: "http://..." -> [`http://...`](http://...)
+    while let Some(start_quote) = remaining.find("\"http") {
+        result.push_str(&remaining[..start_quote]);
+        let after_quote = &remaining[start_quote + 1..];
+        if let Some(end_quote) = after_quote.find('"') {
+            let url = &after_quote[..end_quote];
+            result.push_str(&format!("[`{}`]({})", url, url));
+            remaining = &after_quote[end_quote + 1..];
+        } else {
+            result.push('"');
+            remaining = after_quote;
+        }
+    }
+    result.push_str(remaining);
+
+    // Escape pipe characters for table safety
+    result = result.replace('|', "\\|");
+
+    // Escape unbackticked <h1>, <h2>, <h3>, <title>, <head>, <meta> to prevent markdownlint MD033 and huge text
+    for tag in &[
+        "<h1>", "</h1>", "<h2>", "</h2>", "<h3>", "</h3>", "<title>", "</title>", "<head>",
+        "</head>", "<meta>", "<img>",
+    ] {
+        let backticked = format!("`{}`", tag);
+        if result.contains(tag) && !result.contains(&backticked) {
+            result = result.replace(tag, &backticked);
+        }
+    }
+
+    result
 }

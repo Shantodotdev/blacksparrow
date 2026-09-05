@@ -19,7 +19,7 @@ pub fn check_headings(page: &ParsedPage, url: &str, issues: &mut Vec<IssueFindin
             issues.push(rule.to_finding(
                 url,
                 Some(&format!(
-                    "Page defines {} <h1> tags. Modern SEO recommends a single primary <h1>.",
+                    "Page defines {} `<h1>` tags. Modern SEO recommends a single primary `<h1>`.",
                     page.h1_count
                 )),
             ));
@@ -32,14 +32,14 @@ pub fn check_headings(page: &ParsedPage, url: &str, issues: &mut Vec<IssueFindin
                 let rule = get_rule(RuleId::WarnH1Empty);
                 issues.push(rule.to_finding(
                     url,
-                    Some("Primary <h1> tag is empty or contains only whitespace."),
+                    Some("Primary `<h1>` tag is empty or contains only whitespace."),
                 ));
             } else if trimmed.chars().count() > 70 {
                 let rule = get_rule(RuleId::WarnH1TooLong);
                 issues.push(rule.to_finding(
                     url,
                     Some(&format!(
-                        "Primary <h1> is {} characters long (recommended: under 70 characters).",
+                        "Primary `<h1>` is {} characters long (recommended: under 70 characters).",
                         trimmed.chars().count()
                     )),
                 ));
@@ -52,7 +52,7 @@ pub fn check_headings(page: &ParsedPage, url: &str, issues: &mut Vec<IssueFindin
         let rule = get_rule(RuleId::WarnHeadingHierarchySkipped);
         issues.push(rule.to_finding(
             url,
-            Some("Document hierarchy skips from <h1> directly to <h3> with zero <h2> headings."),
+            Some("Document hierarchy skips from `<h1>` directly to `<h3>` with zero `<h2>` headings."),
         ));
     }
 }
