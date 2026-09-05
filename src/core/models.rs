@@ -160,6 +160,23 @@ pub enum RuleId {
     // --- Category 10: Content Quality & AI Search ---
     WarnContentThin,
     WarnLoremIpsumDetected,
+
+    // --- Category 11: Internationalization & Hreflang (Graph) ---
+    ErrHreflangNotReciprocal,
+    ErrHreflangToNonCanonical,
+    ErrHreflangToBrokenOrRedirect,
+
+    // --- Category 12: Site-Wide Graph & Architecture (Post-Crawl) ---
+    AlertGraphOrphanPage,
+    ErrGraphRedirectLoop,
+    WarnGraphRedirectChain,
+    ErrGraphCanonicalLoop,
+    WarnGraphExactDuplicateContent,
+    WarnGraphNearDuplicateContent,
+    WarnGraphDuplicateTitles,
+    WarnGraphDuplicateMetaDescs,
+    WarnGraphDeadEndPage,
+    WarnGraphHighCrawlDepth,
 }
 
 impl RuleId {
@@ -219,6 +236,21 @@ impl RuleId {
 
             Self::WarnContentThin => "WARN_CONTENT_THIN",
             Self::WarnLoremIpsumDetected => "WARN_LOREM_IPSUM_DETECTED",
+
+            Self::ErrHreflangNotReciprocal => "ERR_HREFLANG_NOT_RECIPROCAL",
+            Self::ErrHreflangToNonCanonical => "ERR_HREFLANG_TO_NON_CANONICAL",
+            Self::ErrHreflangToBrokenOrRedirect => "ERR_HREFLANG_TO_BROKEN_OR_REDIRECT",
+
+            Self::AlertGraphOrphanPage => "ALERT_GRAPH_ORPHAN_PAGE",
+            Self::ErrGraphRedirectLoop => "ERR_GRAPH_REDIRECT_LOOP",
+            Self::WarnGraphRedirectChain => "WARN_GRAPH_REDIRECT_CHAIN",
+            Self::ErrGraphCanonicalLoop => "ERR_GRAPH_CANONICAL_LOOP",
+            Self::WarnGraphExactDuplicateContent => "WARN_GRAPH_EXACT_DUPLICATE_CONTENT",
+            Self::WarnGraphNearDuplicateContent => "WARN_GRAPH_NEAR_DUPLICATE_CONTENT",
+            Self::WarnGraphDuplicateTitles => "WARN_GRAPH_DUPLICATE_TITLES",
+            Self::WarnGraphDuplicateMetaDescs => "WARN_GRAPH_DUPLICATE_META_DESCS",
+            Self::WarnGraphDeadEndPage => "WARN_GRAPH_DEAD_END_PAGE",
+            Self::WarnGraphHighCrawlDepth => "WARN_GRAPH_HIGH_CRAWL_DEPTH",
         }
     }
 }

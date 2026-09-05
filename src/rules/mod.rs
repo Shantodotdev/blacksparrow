@@ -18,6 +18,8 @@
 //! ```
 
 pub mod catalog;
+pub mod graph;
 pub mod page;
 
+pub use graph::evaluate_graph_rules as evaluate_graph;
 pub use page::evaluate_page_rules as evaluate_page;
