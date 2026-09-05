@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <!-- Issue: Missing viewport meta tag -->
+    <!-- Issue: Missing meta charset -->
+
+    <!-- Issue: Whitespace-padded title -->
+    <title>   Broken SEO Test Page with Critical Audit Issues   </title>
+
+    <!-- Issue: Missing meta description entirely -->
+
+    <!-- Issue: Accidental noindex and nofollow blocking search indexing -->
+    <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+
+    <!-- Issue: Relative canonical URL instead of absolute URL (RFC 3986 violation) -->
+    <link rel="canonical" href="/relative-path/canonical-page">
+
+    <!-- Issue: Malformed JSON-LD with missing quotes and broken syntax -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "Article",
+        headline: "Unquoted Key Headline",
+        "author": {
+            name: "Broken Author"
+        }
+    }
+    </script>
+</head>
+<body>
+    <!-- Issue: First H1 headline -->
+    <h1>Primary Main Headline</h1>
+
+    <!-- Issue: Multiple H1 tags on single page -->
+    <h1>Duplicate Secondary H1 Tag</h1>
+
+    <!-- Issue: Empty H1 tag -->
+    <h1></h1>
+
+    <p>Short paragraph with limited text.</p>
+
+    <!-- Issue: Heading hierarchy skipped (H1 jumps directly to H4 without H2 or H3) -->
+    <h4>Skipped Level Heading Four</h4>
+    <p>Some text under an out-of-order heading.</p>
+
+    <!-- Issue: Broken and generic hyperlink anchor texts -->
+    <a href="javascript:void(0);">Broken JavaScript Link</a>
+    <a href="#">Dead Hash Bookmark</a>
+    <a href="/some-target">click here</a>
+    <a href="/another-target">read more</a>
+    <a href="/empty-anchor"></a>
+
+    <!-- Issue: Images missing alt attributes and missing dimensions (causes CLS) -->
+    <img src="/assets/banner-unoptimized.png">
+    <img src="/assets/icon.png" alt="">
+
+    <!-- Issue: Embedded data URI image wasting HTML payload -->
+    <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" alt="Tiny Pixel">
+
+    <!-- Issue: Insecure form action submitting over HTTP -->
+    <form action="http://insecure-api.example.com/submit" method="POST">
+        <input type="text" name="username">
+        <button type="submit">Submit</button>
+    </form>
+
+    <!-- Issue: Insecure mixed content iframe on HTTPS page -->
+    <iframe src="http://insecure-cdn.example.com/widget" width="300" height="200"></iframe>
+
+    <!-- Issue: Thin editorial content with placeholder Lorem Ipsum dummy text -->
+    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+</body>
+</html>

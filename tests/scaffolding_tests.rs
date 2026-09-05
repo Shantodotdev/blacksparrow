@@ -15,6 +15,41 @@ fn test_fixtures_exist_and_readable() {
 
     let sitemap_xml = include_str!("fixtures/sitemap.xml");
     assert!(sitemap_xml.contains("<loc>https://example.com/</loc>"));
+
+    let good_html = include_str!("fixtures/good_page.html");
+    assert!(good_html.contains("Technical SEO Best Practices"));
+
+    let broken_html = include_str!("fixtures/broken_seo_page.html");
+    assert!(broken_html.contains("Broken SEO Test Page"));
+
+    let product_html = include_str!("fixtures/ecommerce_product_page.html");
+    assert!(product_html.contains("Rust Performance Engineering Handbook"));
+
+    let intl_html = include_str!("fixtures/international_hreflang_page.html");
+    assert!(intl_html.contains("hreflang=\"fr-FR\""));
+}
+
+#[test]
+fn test_all_fixtures_parse_cleanly() {
+    use seo_lens::parser::parse_html;
+
+    let fixtures = [
+        include_str!("fixtures/sample_page.html"),
+        include_str!("fixtures/malformed_page.html"),
+        include_str!("fixtures/good_page.html"),
+        include_str!("fixtures/broken_seo_page.html"),
+        include_str!("fixtures/ecommerce_product_page.html"),
+        include_str!("fixtures/international_hreflang_page.html"),
+    ];
+
+    for fixture in fixtures {
+        let result = parse_html(fixture, "https://example.com/test");
+        assert!(
+            result.is_ok(),
+            "Fixture failed to stream-parse: {:?}",
+            result.err()
+        );
+    }
 }
 
 #[tokio::test]
