@@ -68,6 +68,8 @@ pub struct CrawlConfig {
     pub headers: Vec<(String, String)>,
     /// If true, do not persist results to SQLite; auto-cleanup on finish.
     pub ephemeral: bool,
+    /// Disable dynamic AIMD rate throttling (useful for high-speed local/staging site crawls).
+    pub no_aimd: bool,
 }
 
 impl CrawlConfig {
@@ -110,6 +112,7 @@ impl CrawlConfig {
             proxy: None,
             headers: Vec::new(),
             ephemeral: false,
+            no_aimd: false,
         })
     }
 

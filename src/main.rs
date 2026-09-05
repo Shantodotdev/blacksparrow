@@ -102,6 +102,10 @@ pub struct AuditArgs {
     /// Do not persist results to SQLite; auto-cleanup on finish
     #[arg(long, default_value_t = false)]
     pub ephemeral: bool,
+
+    /// Disable dynamic AIMD rate throttling (useful for high-speed local site crawls)
+    #[arg(long, default_value_t = false)]
+    pub no_aimd: bool,
 }
 
 #[derive(Args, Debug)]

@@ -36,6 +36,9 @@ url = "2.5"
 ahash = "0.8"
 lol_html = "3.0"
 reqwest = { version = "0.12", features = ["gzip", "brotli", "deflate"] }
+hashbrown = "0.15"
+quick-xml = "0.37"
+flate2 = "1.0"
 
 [dev-dependencies]
 wiremock = "0.6"
