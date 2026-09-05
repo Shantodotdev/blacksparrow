@@ -135,10 +135,10 @@ pub struct ReportArgs {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize logging subscriber
+    // Initialize logging subscriber (quiet by default unless RUST_LOG is explicitly provided)
     tracing_subscriber::fmt()
         .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn")),
         )
         .init();
 
@@ -146,153 +146,80 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match cli.command {
         Commands::Audit(args) => {
-            let normalized_url = seo_lens::core::url::normalize_url(&args.url)?;
-            info!(target_url = %normalized_url, "Initiating live audit fetch");
-            println!("🔍 Fetching & Auditing {}...", normalized_url);
+            let mut config = seo_lens::core::config::CrawlConfig::new(&args.url)?;
+            config.max_pages = args.max_pages;
+            config.max_depth = args.max_depth;
+            config.concurrency = args.concurrency;
+            config.delay_ms = args.delay;
+            config.user_agent = args.user_agent;
+            config.respect_robots = !args.no_robots;
+            config.no_aimd = args.no_aimd;
+            config.ephemeral = args.ephemeral;
 
-            let client = seo_lens::crawler::client::HttpClient::new(
-                seo_lens::crawler::client::FetchOptions {
-                    user_agent: args.user_agent,
-                    timeout: std::time::Duration::from_secs(30),
-                    max_redirects: 10,
-                    ..Default::default()
-                },
-            )?;
-
-            let fetch_res = client.fetch(&normalized_url).await?;
-            println!("\n=== HTTP TRANSPORT TELEMETRY ===");
-            println!("• Status Code   : {}", fetch_res.status_code);
-            println!("• Final URL     : {}", fetch_res.final_url);
-            println!("• TTFB Latency  : {} ms", fetch_res.ttfb_ms);
-            println!("• Payload Size  : {} bytes", fetch_res.size_bytes);
-            println!("• Content-Type  : {}", fetch_res.content_type);
-            if !fetch_res.redirect_chain.is_empty() {
-                println!(
-                    "• Redirect Chain: {}",
-                    fetch_res.redirect_chain.join(" -> ")
-                );
-            }
-            if let Some(waf) = fetch_res.waf_detected {
-                println!("⚠️  WAF Challenge Detected: {}", waf);
-            }
-
-            // Stream-parse HTML
-            let parsed = seo_lens::parser::parse_html(&fetch_res.body, &fetch_res.final_url)?;
-            println!("\n=== EXTRACTED SEO METADATA ===");
-            println!(
-                "• Document Title: {}",
-                parsed.title.as_deref().unwrap_or("[MISSING]")
-            );
-            println!(
-                "• Meta Desc     : {}",
-                parsed.meta_description.as_deref().unwrap_or("[MISSING]")
-            );
-            println!(
-                "• Canonical URL : {}",
-                parsed.canonical_url.as_deref().unwrap_or("[MISSING]")
-            );
-            println!(
-                "• Primary H1    : {}",
-                parsed.h1_primary.as_deref().unwrap_or("[MISSING]")
-            );
-            println!("• Total H1 Count: {}", parsed.h1_count);
-            println!("• H2 Headings   : {}", parsed.h2_headings.len());
-            println!("• H3 Headings   : {}", parsed.h3_headings.len());
-            println!("• Word Count    : {} words", parsed.word_count);
-            println!("• SimHash       : {:016x}", parsed.simhash);
-            println!("• Content Hash  : {:016x}", parsed.content_hash);
-            println!("• Robots Direct : {:?}", parsed.robots_flags);
-            println!(
-                "• Internal Links: {}",
-                parsed.links.iter().filter(|l| l.is_internal).count()
-            );
-            println!(
-                "• Outbound Links: {}",
-                parsed.links.iter().filter(|l| !l.is_internal).count()
-            );
-            println!("• Images Found  : {}", parsed.images.len());
-            println!("• Schemas (JSON): {}", parsed.schemas.len());
-
-            // Build SiteGraph topology and compute internal link equity
-            let mut graph = seo_lens::graph::SiteGraph::new();
-            graph.add_node(&fetch_res.final_url, fetch_res.status_code, 0, false);
-            for link in &parsed.links {
-                if link.is_internal {
-                    graph.add_edge(
-                        &fetch_res.final_url,
-                        &link.target_url,
-                        seo_lens::graph::LinkEdgeType::InternalHyperlink,
-                        link.is_nofollow,
-                        &link.anchor_text,
-                    );
-                }
-            }
-            let pr_scores = seo_lens::graph::compute_pagerank(&graph, 0.85, 100, 1e-6);
-            let page_pr = pr_scores
-                .get(&seo_lens::core::url::url_hash(&fetch_res.final_url))
-                .copied()
-                .unwrap_or(1.0);
-
-            println!("\n=== SITE TOPOLOGY & GRAPH METRICS ===");
-            println!("• Graph Nodes   : {}", graph.node_count());
-            println!("• Graph Edges   : {}", graph.edge_count());
-            println!(
-                "• Internal In   : {}",
-                graph.in_degree(&fetch_res.final_url)
-            );
-            println!(
-                "• Internal Out  : {}",
-                graph.out_degree(&fetch_res.final_url)
-            );
-            println!("• PageRank Score: {:.6} (Internal Equity)", page_pr);
-
-            // Evaluate in-flight Technical SEO rules
-            let issues = seo_lens::rules::evaluate_page(&parsed, &fetch_res);
-            println!(
-                "\n=== TECHNICAL SEO AUDIT FINDINGS ({} issues) ===",
-                issues.len()
+            seo_lens::report::print_audit_banner(
+                &config.start_url,
+                config.max_pages,
+                config.concurrency,
+                !config.no_aimd,
             );
 
-            let mut critical_count = 0;
-            let mut alert_count = 0;
-            let mut warning_count = 0;
-            let mut notice_count = 0;
+            let pb = seo_lens::report::create_crawl_progress_bar(config.max_pages);
+            let pb_clone = pb.clone();
 
-            if issues.is_empty() {
-                println!("  ✅ Zero technical SEO defects detected! All document checks passed.");
-            } else {
-                for issue in &issues {
-                    let (badge, color_code) = match issue.severity {
-                        seo_lens::core::models::Severity::Critical => {
-                            critical_count += 1;
-                            ("CRITICAL", "\x1b[1;31m") // Red
-                        }
-                        seo_lens::core::models::Severity::Alert => {
-                            alert_count += 1;
-                            ("ALERT   ", "\x1b[1;33m") // Yellow
-                        }
-                        seo_lens::core::models::Severity::Warning => {
-                            warning_count += 1;
-                            ("WARNING ", "\x1b[1;34m") // Blue
-                        }
-                        seo_lens::core::models::Severity::Notice => {
-                            notice_count += 1;
-                            ("NOTICE  ", "\x1b[1;32m") // Green
-                        }
-                    };
-                    println!(
-                        "  {}[{badge}]\x1b[0m {}: {} - {}",
-                        color_code, issue.code, issue.title, issue.message
-                    );
+            let progress_cb: seo_lens::crawler::ProgressCallback =
+                std::sync::Arc::new(move |update| {
+                    seo_lens::report::update_crawl_progress(&pb_clone, &update);
+                });
+
+            let crawl_result = seo_lens::crawler::run_crawl(&config, Some(progress_cb)).await?;
+            seo_lens::report::finish_crawl_progress(&pb);
+
+            // Handle file exports
+            let formats: Vec<&str> = args.format.split(',').map(|s| s.trim()).collect();
+            let mut exported_artifacts = Vec::new();
+
+            if formats.contains(&"md") || formats.contains(&"all") {
+                if let Ok(path) =
+                    seo_lens::report::export_markdown_report(&crawl_result, &args.output_dir)
+                {
+                    exported_artifacts.push(("Markdown", path));
                 }
             }
 
-            println!(
-                "\nAudit Summary: {} Critical | {} Alert | {} Warnings | {} Notices",
-                critical_count, alert_count, warning_count, notice_count
-            );
+            if formats.contains(&"json") || formats.contains(&"all") {
+                if let Ok(path) =
+                    seo_lens::report::export_json_report(&crawl_result, &args.output_dir)
+                {
+                    exported_artifacts.push(("JSON", path));
+                }
+            }
+
+            // Always display executive terminal scorecard if requested
+            if formats.contains(&"terminal") || formats.contains(&"all") || formats.is_empty() {
+                let ref_paths: Vec<(&str, &std::path::Path)> = exported_artifacts
+                    .iter()
+                    .map(|(fmt, p)| (*fmt, p.as_path()))
+                    .collect();
+                seo_lens::report::print_executive_scorecard(&crawl_result, &ref_paths);
+            }
 
             // Check CI/CD failure threshold
+            let critical_count = crawl_result
+                .issues
+                .iter()
+                .filter(|i| i.severity == seo_lens::core::models::Severity::Critical)
+                .count();
+            let alert_count = crawl_result
+                .issues
+                .iter()
+                .filter(|i| i.severity == seo_lens::core::models::Severity::Alert)
+                .count();
+            let warning_count = crawl_result
+                .issues
+                .iter()
+                .filter(|i| i.severity == seo_lens::core::models::Severity::Warning)
+                .count();
+
             let should_fail = match args.fail_on.to_lowercase().as_str() {
                 "critical" => critical_count > 0,
                 "alert" => critical_count > 0 || alert_count > 0,
@@ -302,14 +229,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             if should_fail {
                 eprintln!(
-                    "\n❌ Audit failed CI/CD threshold policy (--fail-on {})",
+                    "❌ Audit failed CI/CD threshold policy (--fail-on {})",
                     args.fail_on
                 );
                 std::process::exit(1);
             }
-
-            println!("\n✨ Live audit check completed successfully!");
         }
+
         Commands::Mcp(args) => {
             info!(transport = %args.transport, "Starting MCP server (scaffold)");
             println!(
