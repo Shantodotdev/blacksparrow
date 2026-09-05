@@ -213,6 +213,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("• Images Found  : {}", parsed.images.len());
             println!("• Schemas (JSON): {}", parsed.schemas.len());
 
+            // Build SiteGraph topology and compute internal link equity
+            let mut graph = seo_lens::graph::SiteGraph::new();
+            graph.add_node(&fetch_res.final_url, fetch_res.status_code, 0, false);
+            for link in &parsed.links {
+                if link.is_internal {
+                    graph.add_edge(
+                        &fetch_res.final_url,
+                        &link.target_url,
+                        seo_lens::graph::LinkEdgeType::InternalHyperlink,
+                        link.is_nofollow,
+                        &link.anchor_text,
+                    );
+                }
+            }
+            let pr_scores = seo_lens::graph::compute_pagerank(&graph, 0.85, 100, 1e-6);
+            let page_pr = pr_scores
+                .get(&seo_lens::core::url::url_hash(&fetch_res.final_url))
+                .copied()
+                .unwrap_or(1.0);
+
+            println!("\n=== SITE TOPOLOGY & GRAPH METRICS ===");
+            println!("• Graph Nodes   : {}", graph.node_count());
+            println!("• Graph Edges   : {}", graph.edge_count());
+            println!(
+                "• Internal In   : {}",
+                graph.in_degree(&fetch_res.final_url)
+            );
+            println!(
+                "• Internal Out  : {}",
+                graph.out_degree(&fetch_res.final_url)
+            );
+            println!("• PageRank Score: {:.6} (Internal Equity)", page_pr);
+
             // Evaluate in-flight Technical SEO rules
             let issues = seo_lens::rules::evaluate_page(&parsed, &fetch_res);
             println!(
