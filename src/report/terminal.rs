@@ -91,8 +91,18 @@ pub fn update_crawl_progress(pb: &CrawlProgressBar, update: &ProgressUpdate) {
     let tick = pb.tick_count.fetch_add(1, Ordering::Relaxed);
     let frame = SPINNER[tick % SPINNER.len()];
 
-    let bar_and_pct = if pb.max_pages > 0 {
-        let pct = ((update.crawled_pages as f64 / pb.max_pages as f64) * 100.0).min(100.0) as usize;
+    let total_target = if pb.max_pages > 0 {
+        if update.discovered_pages > 0 {
+            update.discovered_pages.min(pb.max_pages as usize)
+        } else {
+            pb.max_pages as usize
+        }
+    } else {
+        update.discovered_pages
+    };
+
+    let bar_and_pct = if total_target > 0 {
+        let pct = ((update.crawled_pages as f64 / total_target as f64) * 100.0).min(100.0) as usize;
         let filled = (pct * 14) / 100;
         let empty = 14 - filled;
         let filled_str = "▰".repeat(filled);
@@ -100,7 +110,7 @@ pub fn update_crawl_progress(pb: &CrawlProgressBar, update: &ProgressUpdate) {
         format!(
             "{ANSI_GREEN}[{filled_str}{ANSI_DIM}{empty_str}{ANSI_GREEN}]{ANSI_RESET} {ANSI_BOLD}{}/{}{ANSI_RESET} ({pct}%)",
             update.crawled_pages,
-            pb.max_pages,
+            total_target,
         )
     } else {
         format!("{ANSI_BOLD}{} pages{ANSI_RESET}", update.crawled_pages)

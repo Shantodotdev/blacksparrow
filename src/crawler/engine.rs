@@ -27,6 +27,7 @@ use tokio::sync::{mpsc, Mutex, Semaphore};
 #[derive(Debug, Clone)]
 pub struct ProgressUpdate {
     pub crawled_pages: usize,
+    pub discovered_pages: usize,
     pub max_pages: u32,
     pub current_url: String,
     pub status_code: u16,
@@ -417,14 +418,18 @@ pub async fn run_crawl(
                     all_issues.push(issue.clone());
                 }
 
-                if config.max_depth == 0 || outcome.depth < config.max_depth {
+                let discovered_count = if config.max_depth == 0 || outcome.depth < config.max_depth {
                     let mut f = frontier.lock().await;
                     for link in outcome.discovered_links {
                         if link.is_internal && !is_static_asset_url(&link.target_url) {
                             let _ = f.push(&link.target_url, outcome.depth + 1, Some(&outcome.report.url));
                         }
                     }
-                }
+                    f.enqueued_count() as usize
+                } else {
+                    let f = frontier.lock().await;
+                    f.enqueued_count() as usize
+                };
 
                 if let Some(ref cb) = progress_cb {
                     let current_delay_ms = {
@@ -434,6 +439,7 @@ pub async fn run_crawl(
 
                     cb(ProgressUpdate {
                         crawled_pages: crawled_pages.len() + 1,
+                        discovered_pages: discovered_count,
                         max_pages: config.max_pages,
                         current_url: outcome.report.url.clone(),
                         status_code: outcome.report.status_code,
