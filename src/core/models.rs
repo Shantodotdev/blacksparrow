@@ -307,7 +307,7 @@ bitflags::bitflags! {
 ///
 /// Contains all HTTP transport telemetry, metadata, heading hierarchy,
 /// editorial content metrics, security headers, and associated child collections.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PageReport {
     /// Unique incremental identifier (primary key in SQLite).
     pub id: Option<i64>,
