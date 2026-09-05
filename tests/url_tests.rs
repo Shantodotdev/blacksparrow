@@ -3,7 +3,9 @@
 //! Comprehensive tests for 8-stage URL normalization, relative resolution,
 //! hashing, and link scope checking.
 
-use seo_lens::core::url::{is_internal, normalize_url, resolve_relative, url_hash};
+use seo_lens::core::url::{
+    is_internal, is_static_asset_url, normalize_url, resolve_relative, url_hash,
+};
 use seo_lens::SeoError;
 
 // =========================================================================
@@ -395,5 +397,46 @@ fn test_invalid_urls_return_seo_error() {
     assert!(matches!(
         normalize_url("ftp://unsupported.com"),
         Err(SeoError::Url(_))
+    ));
+}
+
+// =========================================================================
+// 13. STATIC ASSET EXTENSION DETECTION TESTS
+// =========================================================================
+
+#[test]
+fn test_is_static_asset_url_detects_non_html_files() {
+    // Non-HTML files (should return true)
+    assert!(is_static_asset_url(
+        "https://rust-lang.org/static/keys/rust-security-team-key.gpg.ascii"
+    ));
+    assert!(is_static_asset_url(
+        "https://example.com/downloads/manual.pdf"
+    ));
+    assert!(is_static_asset_url(
+        "https://example.com/files/archive.tar.gz"
+    ));
+    assert!(is_static_asset_url(
+        "https://example.com/assets/logo.PNG?v=123"
+    ));
+    assert!(is_static_asset_url(
+        "https://example.com/bundle.min.js#hash"
+    ));
+    assert!(is_static_asset_url("https://example.com/styles/main.css"));
+    assert!(is_static_asset_url("https://example.com/fonts/inter.woff2"));
+    assert!(is_static_asset_url("https://example.com/data/export.csv"));
+    assert!(is_static_asset_url("https://example.com/image.svg"));
+
+    // HTML / Web page URLs (should return false)
+    assert!(!is_static_asset_url("https://example.com/"));
+    assert!(!is_static_asset_url("https://example.com/about"));
+    assert!(!is_static_asset_url("https://example.com/index.html"));
+    assert!(!is_static_asset_url("https://example.com/page.htm"));
+    assert!(!is_static_asset_url("https://example.com/contact.php"));
+    assert!(!is_static_asset_url(
+        "https://example.com/v1.2/governance/teams/"
+    ));
+    assert!(!is_static_asset_url(
+        "https://example.com/v1.2/governance/teams"
     ));
 }

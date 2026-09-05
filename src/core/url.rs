@@ -311,3 +311,40 @@ fn is_tracking_parameter(key: &str) -> bool {
         .iter()
         .any(|&param| param.eq_ignore_ascii_case(key))
 }
+
+/// Known non-HTML static asset file extensions.
+pub const STATIC_ASSET_EXTENSIONS: &[&str] = &[
+    // Documents & keys
+    "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "rtf", "gpg", "ascii", "sig", "txt",
+    "csv", "tsv", // Archives & binaries
+    "zip", "tar", "gz", "tgz", "7z", "rar", "bz2", "xz", "iso", "bin", "exe", "dmg", "pkg", "deb",
+    "rpm", "apk", // Images & vector
+    "png", "jpg", "jpeg", "gif", "svg", "webp", "avif", "ico", "bmp", "tiff", "tif", "psd",
+    // Audio & Video
+    "mp4", "webm", "mkv", "avi", "mov", "mp3", "wav", "ogg", "m4a", "flac", "aac",
+    // Web fonts & styling/scripts
+    "css", "js", "mjs", "cjs", "json", "xml", "woff", "woff2", "ttf", "eot", "otf", "map",
+];
+
+/// Checks whether a URL targets a non-HTML static asset based on its file extension.
+///
+/// Inspects the URL's path segment (ignoring query parameters and fragments) and returns `true`
+/// if the extension matches known document, media, binary, or font assets.
+pub fn is_static_asset_url(raw_url: &str) -> bool {
+    let Ok(parsed) = Url::parse(raw_url) else {
+        return false;
+    };
+    let path = parsed.path();
+    if let Some(filename) = path.rsplit('/').next() {
+        if filename.contains('.') {
+            if let Some(ext) = filename.rsplit('.').next() {
+                if !ext.is_empty() {
+                    return STATIC_ASSET_EXTENSIONS
+                        .iter()
+                        .any(|&asset_ext| asset_ext.eq_ignore_ascii_case(ext));
+                }
+            }
+        }
+    }
+    false
+}
