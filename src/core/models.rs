@@ -93,6 +93,142 @@ pub enum IssueCategory {
     JsDiff,
 }
 
+/// Strongly typed identifier for technical SEO audit rules.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum RuleId {
+    // --- Category 1: HTTP Status & Transport ---
+    ErrHttp4xxClientError,
+    ErrHttp5xxServerError,
+    InfoHttp301PermanentRedirect,
+    InfoHttp302TemporaryRedirect,
+    InfoHttp307_308Redirect,
+    AlertWafBotChallenge,
+    WarnSlowTtfb,
+
+    // --- Category 2: Titles & Basic Metadata ---
+    ErrTitleMissing,
+    WarnTitleTooShort,
+    WarnTitleTooLong,
+    ErrTitleMultiple,
+    WarnTitleWhitespacePadded,
+    WarnMetaDescMissing,
+    WarnMetaDescTooShort,
+    WarnMetaDescTooLong,
+    ErrMetaDescMultiple,
+
+    // --- Category 3: Headings & Document Structure ---
+    ErrH1Missing,
+    WarnH1Multiple,
+    WarnH1Empty,
+    WarnH1TooLong,
+    WarnHeadingHierarchySkipped,
+
+    // --- Category 4: Indexability & Directives ---
+    AlertIndexingBlockedNoindex,
+    WarnLinkEquityBlockedNofollow,
+    WarnNoarchivePresent,
+    WarnNosnippetPresent,
+
+    // --- Category 5: Canonicalization ---
+    WarnCanonicalMissing,
+    ErrCanonicalRelative,
+    ErrCanonicalMultiple,
+    AlertCanonicalMismatch,
+
+    // --- Category 6: Modern Security & Transport ---
+    ErrSecurityInsecureHttp,
+    ErrSecurityMixedContent,
+    WarnSecurityMissingHsts,
+    WarnSecurityMissingCsp,
+    WarnSecurityMissingXFrameOptions,
+    WarnSecurityMissingXContentType,
+
+    // --- Category 7: Images & Core Web Vitals (CLS) ---
+    WarnImageMissingAlt,
+    WarnImageMissingDimensions,
+    WarnImageDataUri,
+
+    // --- Category 8: Mobile UX & Viewports ---
+    ErrMobileNoViewport,
+    WarnMobileViewportNonScalable,
+
+    // --- Category 9: Structured Data & Schema.org ---
+    ErrSchemaSyntaxError,
+    WarnSchemaMissingRequiredFields,
+
+    // --- Category 10: Content Quality & AI Search ---
+    WarnContentThin,
+    WarnLoremIpsumDetected,
+}
+
+impl RuleId {
+    /// Returns the standardized SCREAMING_SNAKE_CASE string identifier for this rule.
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::ErrHttp4xxClientError => "ERR_HTTP_4XX_CLIENT_ERROR",
+            Self::ErrHttp5xxServerError => "ERR_HTTP_5XX_SERVER_ERROR",
+            Self::InfoHttp301PermanentRedirect => "INFO_HTTP_301_PERMANENT_REDIRECT",
+            Self::InfoHttp302TemporaryRedirect => "INFO_HTTP_302_TEMPORARY_REDIRECT",
+            Self::InfoHttp307_308Redirect => "INFO_HTTP_307_308_REDIRECT",
+            Self::AlertWafBotChallenge => "ALERT_WAF_BOT_CHALLENGE",
+            Self::WarnSlowTtfb => "WARN_SLOW_TTFB",
+
+            Self::ErrTitleMissing => "ERR_TITLE_MISSING",
+            Self::WarnTitleTooShort => "WARN_TITLE_TOO_SHORT",
+            Self::WarnTitleTooLong => "WARN_TITLE_TOO_LONG",
+            Self::ErrTitleMultiple => "ERR_TITLE_MULTIPLE",
+            Self::WarnTitleWhitespacePadded => "WARN_TITLE_WHITESPACE_PADDED",
+            Self::WarnMetaDescMissing => "WARN_META_DESC_MISSING",
+            Self::WarnMetaDescTooShort => "WARN_META_DESC_TOO_SHORT",
+            Self::WarnMetaDescTooLong => "WARN_META_DESC_TOO_LONG",
+            Self::ErrMetaDescMultiple => "ERR_META_DESC_MULTIPLE",
+
+            Self::ErrH1Missing => "ERR_H1_MISSING",
+            Self::WarnH1Multiple => "WARN_H1_MULTIPLE",
+            Self::WarnH1Empty => "WARN_H1_EMPTY",
+            Self::WarnH1TooLong => "WARN_H1_TOO_LONG",
+            Self::WarnHeadingHierarchySkipped => "WARN_HEADING_HIERARCHY_SKIPPED",
+
+            Self::AlertIndexingBlockedNoindex => "ALERT_INDEXING_BLOCKED_NOINDEX",
+            Self::WarnLinkEquityBlockedNofollow => "WARN_LINK_EQUITY_BLOCKED_NOFOLLOW",
+            Self::WarnNoarchivePresent => "WARN_NOARCHIVE_PRESENT",
+            Self::WarnNosnippetPresent => "WARN_NOSNIPPET_PRESENT",
+
+            Self::WarnCanonicalMissing => "WARN_CANONICAL_MISSING",
+            Self::ErrCanonicalRelative => "ERR_CANONICAL_RELATIVE",
+            Self::ErrCanonicalMultiple => "ERR_CANONICAL_MULTIPLE",
+            Self::AlertCanonicalMismatch => "ALERT_CANONICAL_MISMATCH",
+
+            Self::ErrSecurityInsecureHttp => "ERR_SECURITY_INSECURE_HTTP",
+            Self::ErrSecurityMixedContent => "ERR_SECURITY_MIXED_CONTENT",
+            Self::WarnSecurityMissingHsts => "WARN_SECURITY_MISSING_HSTS",
+            Self::WarnSecurityMissingCsp => "WARN_SECURITY_MISSING_CSP",
+            Self::WarnSecurityMissingXFrameOptions => "WARN_SECURITY_MISSING_X_FRAME_OPTIONS",
+            Self::WarnSecurityMissingXContentType => "WARN_SECURITY_MISSING_X_CONTENT_TYPE",
+
+            Self::WarnImageMissingAlt => "WARN_IMAGE_MISSING_ALT",
+            Self::WarnImageMissingDimensions => "WARN_IMAGE_MISSING_DIMENSIONS",
+            Self::WarnImageDataUri => "WARN_IMAGE_DATA_URI",
+
+            Self::ErrMobileNoViewport => "ERR_MOBILE_NO_VIEWPORT",
+            Self::WarnMobileViewportNonScalable => "WARN_MOBILE_VIEWPORT_NON_SCALABLE",
+
+            Self::ErrSchemaSyntaxError => "ERR_SCHEMA_SYNTAX_ERROR",
+            Self::WarnSchemaMissingRequiredFields => "WARN_SCHEMA_MISSING_REQUIRED_FIELDS",
+
+            Self::WarnContentThin => "WARN_CONTENT_THIN",
+            Self::WarnLoremIpsumDetected => "WARN_LOREM_IPSUM_DETECTED",
+        }
+    }
+}
+
+impl std::fmt::Display for RuleId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
 bitflags::bitflags! {
     /// Memory-efficient 1-byte bitfield for robots and indexing directives.
     ///
@@ -308,8 +444,8 @@ pub struct HreflangTag {
 /// A specific technical SEO defect identified by the rules engine.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IssueFinding {
-    /// Unique issue identifier code (e.g. "ERR_TITLE_MISSING", "WARN_H1_MULTIPLE").
-    pub code: CompactString,
+    /// Strongly-typed issue identifier.
+    pub code: RuleId,
     /// Functional audit category for grouping.
     pub category: IssueCategory,
     /// Severity classification tier.
@@ -370,7 +506,7 @@ mod tests {
         assert!(!flags.contains(RobotsFlags::NOARCHIVE));
 
         let issue = IssueFinding {
-            code: CompactString::new("ERR_TITLE_MISSING"),
+            code: RuleId::ErrTitleMissing,
             category: IssueCategory::TitleMetadata,
             severity: Severity::Critical,
             title: CompactString::new("Missing Document Title"),
@@ -378,6 +514,8 @@ mod tests {
             target_url: "https://example.com/missing-title".to_string(),
             source_page_url: None,
         };
+        assert_eq!(issue.code, RuleId::ErrTitleMissing);
+        assert_eq!(issue.code.as_str(), "ERR_TITLE_MISSING");
         assert_eq!(issue.severity, Severity::Critical);
         assert_eq!(issue.category, IssueCategory::TitleMetadata);
 
