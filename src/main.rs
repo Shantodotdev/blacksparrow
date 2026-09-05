@@ -42,6 +42,8 @@ pub struct Cli {
 pub enum Commands {
     /// Run a full or partial website crawl and audit
     Audit(AuditArgs),
+    /// Inspect a single webpage: metadata, Open Graph, Twitter cards, JSON-LD, headings, and audit issues
+    Inspect(InspectArgs),
     /// Start the native Model Context Protocol server (stdio for Cursor/Claude)
     Mcp(McpArgs),
     /// Re-export or inspect an existing audit from the SQLite database
@@ -106,6 +108,20 @@ pub struct AuditArgs {
     /// Disable dynamic AIMD rate throttling (useful for high-speed local site crawls)
     #[arg(long, default_value_t = false)]
     pub no_aimd: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct InspectArgs {
+    /// URL of the page to inspect (e.g. `https://example.com/blog/my-post`)
+    pub url: String,
+
+    /// Custom User-Agent string
+    #[arg(short = 'u', long, default_value = "SEOLens/1.0")]
+    pub user_agent: String,
+
+    /// Request timeout in seconds
+    #[arg(long, default_value_t = 15)]
+    pub timeout: u64,
 }
 
 #[derive(Args, Debug)]
@@ -233,6 +249,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     args.fail_on
                 );
                 std::process::exit(1);
+            }
+        }
+
+        Commands::Inspect(args) => {
+            let timeout = std::time::Duration::from_secs(args.timeout);
+            match seo_lens::crawler::inspect_url(&args.url, &args.user_agent, timeout).await {
+                Ok((page, fetch, issues)) => {
+                    seo_lens::report::print_page_inspection(&page, &fetch, &issues);
+                }
+                Err(err) => {
+                    eprintln!("❌ Failed to inspect URL '{}': {}", args.url, err);
+                    std::process::exit(2);
+                }
             }
         }
 

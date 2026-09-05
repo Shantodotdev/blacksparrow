@@ -6,11 +6,13 @@
 //! - [`json`]: Complete structured JSON export for automated pipelines and data warehouses.
 //! - [`score`]: Normalized 0–100 technical SEO Health Score calculation.
 
+pub mod inspector;
 pub mod json;
 pub mod markdown;
 pub mod score;
 pub mod terminal;
 
+pub use inspector::{format_page_inspection, print_page_inspection};
 pub use json::export_json_report;
 pub use markdown::export_markdown_report;
 pub use score::calculate_health_score;
