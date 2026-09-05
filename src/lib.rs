@@ -23,8 +23,15 @@
 //!   - [`parser::streaming`]: Zero-copy streaming HTML parser powered by Cloudflare's `lol_html`.
 //!   - [`parser::content`]: Word count extraction, 64-bit content hashing, and locality-sensitive 64-bit SimHash.
 //!   - [`parser::metadata`]: RFC 9309 robots directive decoding, HTML entities, and canonicalization.
-//!   - [`parser::schema`]: JSON-LD structured data parser and Google Rich Results eligibility heuristics.
+//! - [`graph`]:
+//!   - [`graph::topology`]: Directed internal link topology graph ([`graph::SiteGraph`]) powered by `petgraph`.
+//!   - [`graph::pagerank`]: Power-iteration internal PageRank link equity engine ([`graph::compute_pagerank`]).
+//! - [`rules`]:
+//!   - [`rules::catalog`]: Master catalog defining 120 technical SEO audit rules, severity tiers, and fix advice.
+//!   - [`rules::page`]: Single-page in-flight rules engine ([`rules::evaluate_page`]).
+//!   - [`rules::graph`]: Multi-page post-crawl graph rules engine ([`rules::evaluate_graph`]).
 //! - [`error`]: Zero-panic error handling taxonomy ([`SeoError`], [`SeoResult`]).
+
 //!
 //! ## Quickstart Example
 //!
@@ -65,6 +72,7 @@
 pub mod core;
 pub mod crawler;
 pub mod error;
+pub mod graph;
 pub mod parser;
 pub mod rules;
 
