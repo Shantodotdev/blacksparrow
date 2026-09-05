@@ -667,10 +667,12 @@ fn test_mobile_ux_and_viewport_rules() {
         None,
     );
 
-    let mut page = ParsedPage::default();
+    let mut page = ParsedPage {
+        viewport: None,
+        ..Default::default()
+    };
 
     // 1. Missing viewport
-    page.viewport = None;
     let issues = evaluate_page(&page, &fetch);
     assert!(issues
         .iter()
@@ -789,10 +791,12 @@ fn test_structured_data_and_schema_rules() {
 
 #[test]
 fn test_content_quality_and_geo_rules() {
-    let mut page = ParsedPage::default();
+    let mut page = ParsedPage {
+        word_count: 199,
+        ..Default::default()
+    };
 
     // 1. Thin Content Boundary: 199 words vs 200 words on 200 OK
-    page.word_count = 199;
     let fetch_200 = make_mock_fetch_result(
         "https://example.com/page",
         "https://example.com/page",

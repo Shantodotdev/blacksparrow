@@ -11,6 +11,7 @@ use seo_lens::graph::{compute_pagerank, LinkEdgeType, SiteGraph};
 use seo_lens::rules::graph::evaluate_graph_rules;
 
 /// Helper to create a minimal dummy PageReport for graph tests.
+#[allow(clippy::too_many_arguments)]
 fn mock_page(
     url: &str,
     status_code: u16,

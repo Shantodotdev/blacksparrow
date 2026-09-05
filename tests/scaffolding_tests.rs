@@ -69,7 +69,7 @@ async fn test_wiremock_harness_integration() -> SeoResult<()> {
         .await;
 
     // Use reqwest to verify mock server connection
-    let response = reqwest::get(format!("{}/test-page", &mock_server.uri()))
+    let response = reqwest::get(format!("{}/test-page", mock_server.uri()))
         .await
         .map_err(|e| SeoError::Network(e.to_string()))?;
 
