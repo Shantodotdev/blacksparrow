@@ -74,6 +74,7 @@ pub mod crawler;
 pub mod error;
 pub mod graph;
 pub mod parser;
+pub mod report;
 pub mod rules;
 
 pub use error::{SeoError, SeoResult};

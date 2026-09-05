@@ -1,0 +1,176 @@
+//! # Markdown Report Exporter
+//!
+//! Generates clean GitHub-Flavored Markdown audit reports formatted for executive review
+//! and direct ingestion by LLMs and AI coding assistants.
+
+use crate::core::models::Severity;
+use crate::crawler::engine::CrawlResult;
+use crate::error::{SeoError, SeoResult};
+use crate::rules::catalog::get_rule;
+use hashbrown::HashMap;
+use std::fs;
+use std::path::{Path, PathBuf};
+
+/// Exports a complete audit report as a GitHub-Flavored Markdown document.
+pub fn export_markdown_report(result: &CrawlResult, output_dir: &Path) -> SeoResult<PathBuf> {
+    fs::create_dir_all(output_dir)
+        .map_err(|e| SeoError::Internal(format!("Failed to create output directory: {}", e)))?;
+
+    let host = url::Url::parse(&result.target_url)
+        .map(|u| u.host_str().unwrap_or("site").replace('.', "_"))
+        .unwrap_or_else(|_| "site_audit".to_string());
+
+    let filename = format!("{}_audit.md", host);
+    let output_path = output_dir.join(filename);
+
+    let mut md = String::new();
+
+    // 1. Header & Executive Summary
+    md.push_str("# SEO LENS AUDIT REPORT\n\n");
+    md.push_str(&format!("**Target Website**: `{}`  \n", result.target_url));
+    md.push_str(&format!(
+        "**Overall Health Score**: **{}/100**  \n",
+        result.health_score
+    ));
+    md.push_str(&format!("**Pages Crawled**: {}  \n", result.pages.len()));
+    md.push_str(&format!(
+        "**Total Internal Links**: {}  \n",
+        result.graph.edge_count()
+    ));
+    md.push_str(&format!(
+        "**Crawl Duration**: {:.2}s  \n\n",
+        result.duration.as_secs_f64()
+    ));
+
+    // 2. HTTP Status Breakdown
+    let mut status_counts: HashMap<u16, usize> = HashMap::new();
+    for page in &result.pages {
+        *status_counts.entry(page.status_code).or_default() += 1;
+    }
+
+    md.push_str("## 1. HTTP Status Code Breakdown\n\n");
+    md.push_str("| Status Code | Description | Count | Percentage |\n");
+    md.push_str("| :--- | :--- | :--- | :--- |\n");
+
+    let mut sorted_statuses: Vec<_> = status_counts.into_iter().collect();
+    sorted_statuses.sort_by_key(|k| k.0);
+
+    for (status, count) in sorted_statuses {
+        let pct = if !result.pages.is_empty() {
+            (count as f64 / result.pages.len() as f64) * 100.0
+        } else {
+            0.0
+        };
+        let desc = match status {
+            200 => "OK",
+            301 => "Moved Permanently",
+            302 => "Found (Temporary Redirect)",
+            403 => "Forbidden",
+            404 => "Not Found",
+            500 => "Internal Server Error",
+            503 => "Service Unavailable",
+            _ => "Other",
+        };
+        md.push_str(&format!(
+            "| **{}** | {} | {} | {:.1}% |\n",
+            status, desc, count, pct
+        ));
+    }
+    md.push('\n');
+
+    // 3. Technical SEO Issues Breakdown
+    md.push_str("## 2. Technical SEO Issues Breakdown\n\n");
+
+    if result.issues.is_empty() {
+        md.push_str(
+            "✅ **Zero technical SEO defects detected! All document and graph checks passed.**\n\n",
+        );
+    } else {
+        // Group issues by RuleId
+        let mut issue_groups: HashMap<
+            crate::core::models::RuleId,
+            Vec<&crate::core::models::IssueFinding>,
+        > = HashMap::new();
+        for issue in &result.issues {
+            issue_groups.entry(issue.code).or_default().push(issue);
+        }
+
+        let mut sorted_groups: Vec<_> = issue_groups.into_iter().collect();
+        sorted_groups.sort_by_key(|(_, list)| {
+            match list.first().map(|i| i.severity).unwrap_or(Severity::Notice) {
+                Severity::Critical => 0,
+                Severity::Alert => 1,
+                Severity::Warning => 2,
+                Severity::Notice => 3,
+            }
+        });
+
+        for (rule_id, findings) in sorted_groups {
+            let rule_def = get_rule(rule_id);
+            let badge = match rule_def.severity {
+                Severity::Critical => "🚨 CRITICAL",
+                Severity::Alert => "⚠️ ALERT",
+                Severity::Warning => "⚡ WARNING",
+                Severity::Notice => "ℹ️ NOTICE",
+            };
+
+            md.push_str(&format!(
+                "### {} [{}]: {}\n\n",
+                badge,
+                rule_id.as_str(),
+                rule_def.title
+            ));
+            md.push_str(&format!("**Affected Pages**: {}  \n", findings.len()));
+            md.push_str(&format!("**Description**: {}  \n", rule_def.description));
+            md.push_str(&format!("**Remediation**: `{}`  \n\n", rule_def.fix_advice));
+
+            md.push_str("<details><summary>View Affected URLs</summary>\n\n");
+            for finding in findings.iter().take(20) {
+                md.push_str(&format!(
+                    "- `{}`: {}\n",
+                    finding.target_url, finding.message
+                ));
+            }
+            if findings.len() > 20 {
+                md.push_str(&format!(
+                    "- *...and {} additional pages*\n",
+                    findings.len() - 20
+                ));
+            }
+            md.push_str("\n</details>\n\n");
+        }
+    }
+
+    // 4. Internal Link Equity (Top PageRank Hubs)
+    md.push_str("## 3. Internal Link Equity (Top PageRank Pages)\n\n");
+    md.push_str("| Rank | URL | PageRank Equity | Inlinks | Outlinks |\n");
+    md.push_str("| :--- | :--- | :--- | :--- | :--- |\n");
+
+    let mut ranked_pages: Vec<_> = result
+        .pages
+        .iter()
+        .map(|p| {
+            let pr = result.pagerank.get(&p.url_hash).copied().unwrap_or(0.0);
+            (p, pr)
+        })
+        .collect();
+
+    ranked_pages.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    for (rank, (page, pr)) in ranked_pages.iter().take(15).enumerate() {
+        md.push_str(&format!(
+            "| {} | `{}` | {:.6} | {} | {} |\n",
+            rank + 1,
+            page.url,
+            pr,
+            result.graph.in_degree(&page.url),
+            result.graph.out_degree(&page.url)
+        ));
+    }
+    md.push('\n');
+
+    fs::write(&output_path, md)
+        .map_err(|e| SeoError::Internal(format!("Failed to write markdown report: {}", e)))?;
+
+    Ok(output_path)
+}

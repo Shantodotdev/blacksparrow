@@ -14,6 +14,7 @@
 
 pub mod aimd;
 pub mod client;
+pub mod engine;
 pub mod frontier;
 pub mod robots;
 pub mod sitemap;
@@ -21,6 +22,7 @@ pub mod waf;
 
 pub use aimd::AimdController;
 pub use client::{FetchOptions, FetchResult, HttpClient};
+pub use engine::{run_crawl, CrawlResult, ProgressCallback, ProgressUpdate};
 pub use frontier::{CrawlQueueOrder, Frontier, FrontierEntry};
 pub use robots::RobotsTxt;
 pub use sitemap::{parse_sitemap, SitemapDocument, SitemapEntry, SitemapIndexEntry};
