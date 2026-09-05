@@ -110,6 +110,8 @@ pub struct ParsedPage {
     pub meta_description: Option<String>,
     /// Canonical URL extracted from `<link rel="canonical" href="...">`.
     pub canonical_url: Option<String>,
+    /// Whether the declared `<link rel="canonical">` was a relative path.
+    pub is_canonical_relative: bool,
     /// Primary language code extracted from `<html lang="...">` (e.g. "en", "es-ES").
     pub html_lang: Option<CompactString>,
     /// Character set extracted from `<meta charset="...">` or `<meta http-equiv="Content-Type">`.

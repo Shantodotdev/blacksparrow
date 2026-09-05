@@ -114,6 +114,7 @@ pub fn parse_html(html: &str, base_url: &str) -> SeoResult<ParsedPage> {
     let title_buf = Rc::new(RefCell::new(String::new()));
     let meta_desc = Rc::new(RefCell::new(None::<String>));
     let canonical = Rc::new(RefCell::new(None::<String>));
+    let is_canonical_relative = Rc::new(RefCell::new(false));
     let html_lang = Rc::new(RefCell::new(None::<CompactString>));
     let charset = Rc::new(RefCell::new(None::<CompactString>));
     let viewport = Rc::new(RefCell::new(None::<CompactString>));
@@ -233,6 +234,7 @@ pub fn parse_html(html: &str, base_url: &str) -> SeoResult<ParsedPage> {
     // 4. Link tags (Canonical & Hreflang)
     {
         let canon_ref = Rc::clone(&canonical);
+        let is_canon_rel_ref = Rc::clone(&is_canonical_relative);
         let hreflang_ref = Rc::clone(&hreflangs);
         let base = base_url.to_string();
 
@@ -241,7 +243,11 @@ pub fn parse_html(html: &str, base_url: &str) -> SeoResult<ParsedPage> {
                 let lower_rel = rel.to_lowercase();
                 if lower_rel.contains("canonical") {
                     if let Some(href) = el.get_attribute("href") {
-                        if let Ok(resolved) = resolve_relative(&base, &href) {
+                        let trimmed = href.trim();
+                        if !trimmed.starts_with("http://") && !trimmed.starts_with("https://") {
+                            *is_canon_rel_ref.borrow_mut() = true;
+                        }
+                        if let Ok(resolved) = resolve_relative(&base, trimmed) {
                             *canon_ref.borrow_mut() = Some(resolved);
                         }
                     }
@@ -568,6 +574,7 @@ pub fn parse_html(html: &str, base_url: &str) -> SeoResult<ParsedPage> {
 
     let final_meta_desc = meta_desc.take();
     let final_canonical = canonical.take();
+    let final_canonical_relative = *is_canonical_relative.borrow();
     let final_html_lang = html_lang.take();
     let final_charset = charset.take();
     let final_viewport = viewport.take();
@@ -585,6 +592,7 @@ pub fn parse_html(html: &str, base_url: &str) -> SeoResult<ParsedPage> {
         title,
         meta_description: final_meta_desc,
         canonical_url: final_canonical,
+        is_canonical_relative: final_canonical_relative,
         html_lang: final_html_lang,
         charset: final_charset,
         viewport: final_viewport,
