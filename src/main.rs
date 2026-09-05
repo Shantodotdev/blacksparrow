@@ -212,6 +212,69 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
             println!("• Images Found  : {}", parsed.images.len());
             println!("• Schemas (JSON): {}", parsed.schemas.len());
+
+            // Evaluate in-flight Technical SEO rules
+            let issues = seo_lens::rules::evaluate_page(&parsed, &fetch_res);
+            println!(
+                "\n=== TECHNICAL SEO AUDIT FINDINGS ({} issues) ===",
+                issues.len()
+            );
+
+            let mut critical_count = 0;
+            let mut alert_count = 0;
+            let mut warning_count = 0;
+            let mut notice_count = 0;
+
+            if issues.is_empty() {
+                println!("  ✅ Zero technical SEO defects detected! All document checks passed.");
+            } else {
+                for issue in &issues {
+                    let (badge, color_code) = match issue.severity {
+                        seo_lens::core::models::Severity::Critical => {
+                            critical_count += 1;
+                            ("CRITICAL", "\x1b[1;31m") // Red
+                        }
+                        seo_lens::core::models::Severity::Alert => {
+                            alert_count += 1;
+                            ("ALERT   ", "\x1b[1;33m") // Yellow
+                        }
+                        seo_lens::core::models::Severity::Warning => {
+                            warning_count += 1;
+                            ("WARNING ", "\x1b[1;34m") // Blue
+                        }
+                        seo_lens::core::models::Severity::Notice => {
+                            notice_count += 1;
+                            ("NOTICE  ", "\x1b[1;32m") // Green
+                        }
+                    };
+                    println!(
+                        "  {}[{badge}]\x1b[0m {}: {} - {}",
+                        color_code, issue.code, issue.title, issue.message
+                    );
+                }
+            }
+
+            println!(
+                "\nAudit Summary: {} Critical | {} Alert | {} Warnings | {} Notices",
+                critical_count, alert_count, warning_count, notice_count
+            );
+
+            // Check CI/CD failure threshold
+            let should_fail = match args.fail_on.to_lowercase().as_str() {
+                "critical" => critical_count > 0,
+                "alert" => critical_count > 0 || alert_count > 0,
+                "warning" => critical_count > 0 || alert_count > 0 || warning_count > 0,
+                _ => false,
+            };
+
+            if should_fail {
+                eprintln!(
+                    "\n❌ Audit failed CI/CD threshold policy (--fail-on {})",
+                    args.fail_on
+                );
+                std::process::exit(1);
+            }
+
             println!("\n✨ Live audit check completed successfully!");
         }
         Commands::Mcp(args) => {
