@@ -5,7 +5,7 @@
 
 use crate::core::config::CrawlConfig;
 use crate::core::models::{DiscoveredLink, IssueFinding, PageReport, Severity};
-use crate::core::url::{is_static_asset_url, normalize_url, url_hash};
+use crate::core::url::{is_internal, is_static_asset_url, normalize_url, url_hash};
 use crate::crawler::aimd::AimdController;
 use crate::crawler::client::{FetchOptions, FetchResult, HttpClient};
 use crate::crawler::frontier::{CrawlQueueOrder, Frontier, FrontierEntry};
@@ -17,7 +17,8 @@ use crate::parser::{parse_html, ParsedPage};
 use crate::report::score::calculate_health_score;
 use crate::rules::{evaluate_graph, evaluate_page};
 use compact_str::CompactString;
-use hashbrown::HashMap;
+use hashbrown::{HashMap, HashSet};
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -140,25 +141,25 @@ async fn discover_robots_and_sitemaps(
     seed_url: &str,
     respect_robots: bool,
 ) -> (Option<RobotsTxt>, Vec<String>) {
-    if !respect_robots {
-        return (None, Vec::new());
-    }
-
     let Ok(parsed_url) = url::Url::parse(seed_url) else {
         return (None, Vec::new());
     };
 
     let origin = format!("{}://{}", parsed_url.scheme(), parsed_url.authority());
     let robots_url = format!("{}/robots.txt", origin);
-    let mut sitemap_urls = Vec::new();
+    let mut sitemap_feed_seeds = Vec::new();
 
-    let robots = if let Ok(res) = client.fetch(&robots_url).await {
-        if res.status_code == 200 {
-            let parsed_robots = RobotsTxt::parse(&res.body);
-            for sm in parsed_robots.sitemaps() {
-                sitemap_urls.push(sm.to_string());
+    let robots = if respect_robots {
+        if let Ok(res) = client.fetch(&robots_url).await {
+            if res.status_code == 200 {
+                let parsed_robots = RobotsTxt::parse(&res.body);
+                for sm in parsed_robots.sitemaps() {
+                    sitemap_feed_seeds.push(sm.to_string());
+                }
+                Some(parsed_robots)
+            } else {
+                None
             }
-            Some(parsed_robots)
         } else {
             None
         }
@@ -166,37 +167,67 @@ async fn discover_robots_and_sitemaps(
         None
     };
 
-    if sitemap_urls.is_empty() {
-        let fallback_url = format!("{}/sitemap.xml", origin);
-        if let Ok(res) = client.fetch(&fallback_url).await {
+    // If robots.txt declared no sitemaps, probe standard conventions per CRAWLER_SPEC §5.2
+    if sitemap_feed_seeds.is_empty() {
+        sitemap_feed_seeds.push(format!("{}/sitemap.xml", origin));
+        sitemap_feed_seeds.push(format!("{}/sitemap_index.xml", origin));
+        sitemap_feed_seeds.push(format!("{}/wp-sitemap.xml", origin));
+    }
+
+    // Recursively fetch and parse XML sitemaps up to 3 levels deep
+    let mut queue = VecDeque::new();
+    let mut visited_feeds = HashSet::new();
+    let mut discovered_pages = HashSet::new();
+
+    for feed in sitemap_feed_seeds {
+        queue.push_back((feed, 0u8));
+    }
+
+    while let Some((feed_url, depth)) = queue.pop_front() {
+        if depth > 3 || !visited_feeds.insert(feed_url.clone()) {
+            continue;
+        }
+
+        if let Ok(res) = client.fetch(&feed_url).await {
             if res.status_code == 200 {
-                extract_sitemap_urls(res.body.as_bytes(), &mut sitemap_urls);
+                if let Ok(doc) = parse_sitemap(&res.body_bytes) {
+                    match doc {
+                        SitemapDocument::UrlSet(entries) => {
+                            for entry in entries {
+                                let loc = entry.loc.as_str();
+                                if is_internal(loc, &origin)
+                                    && !is_static_asset_url(loc)
+                                    && !loc.ends_with(".xml")
+                                    && !loc.ends_with(".xml.gz")
+                                {
+                                    if let Ok(norm) = normalize_url(loc) {
+                                        discovered_pages.insert(norm);
+                                    } else {
+                                        discovered_pages.insert(loc.to_string());
+                                    }
+                                }
+                            }
+                        }
+                        SitemapDocument::Index(sub_sitemaps) => {
+                            if depth < 3 {
+                                for sub in sub_sitemaps {
+                                    let child_feed = sub.loc.as_str().to_string();
+                                    if is_internal(&child_feed, &origin)
+                                        && !visited_feeds.contains(&child_feed)
+                                    {
+                                        queue.push_back((child_feed, depth + 1));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 
+    let sitemap_urls = discovered_pages.into_iter().collect::<Vec<String>>();
     (robots, sitemap_urls)
-}
-
-fn extract_sitemap_urls(bytes: &[u8], out: &mut Vec<String>) {
-    if let Ok(doc) = parse_sitemap(bytes) {
-        match doc {
-            SitemapDocument::UrlSet(entries) => {
-                for e in entries {
-                    if !is_static_asset_url(e.loc.as_str()) {
-                        out.push(e.loc.to_string());
-                    }
-                }
-            }
-            SitemapDocument::Index(entries) => {
-                for e in entries {
-                    if !is_static_asset_url(e.loc.as_str()) {
-                        out.push(e.loc.to_string());
-                    }
-                }
-            }
-        }
-    }
 }
 
 async fn fetch_and_audit_page(
@@ -267,12 +298,21 @@ async fn fetch_and_audit_page(
 
 fn finalize_crawl(
     normalized_start: String,
-    pages: Vec<PageReport>,
+    mut pages: Vec<PageReport>,
     mut issues: Vec<IssueFinding>,
     sitemap_urls: Vec<String>,
     aimd_delay_ms: u64,
     elapsed: Duration,
 ) -> CrawlResult {
+    {
+        let sitemap_set: HashSet<&str> = sitemap_urls.iter().map(|s| s.as_str()).collect();
+        for page in &mut pages {
+            if sitemap_set.contains(page.url.as_str()) {
+                page.is_sitemap_url = true;
+            }
+        }
+    }
+
     let graph = SiteGraph::from_pages(&pages, &sitemap_urls);
     let pagerank = compute_pagerank(&graph, 0.85, 100, 1e-6);
 

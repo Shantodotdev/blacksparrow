@@ -245,3 +245,165 @@ fn test_aimd_congestion_controller() {
     assert!(controller.current_delay_ms() < distressed_delay * 2);
     assert!(controller.current_concurrency() > 1);
 }
+
+#[tokio::test]
+async fn test_crawl_sitemap_recursion_and_orphan_detection() {
+    use seo_lens::core::config::CrawlConfig;
+    use seo_lens::core::models::RuleId;
+    use seo_lens::crawler::run_crawl;
+
+    let mock_server = MockServer::start().await;
+    let base_uri = mock_server.uri();
+
+    // 1. robots.txt declares sitemap_index.xml
+    let robots_txt = format!(
+        "User-agent: *\nAllow: /\nSitemap: {}/sitemap_index.xml\n",
+        base_uri
+    );
+    Mock::given(method("GET"))
+        .and(path("/robots.txt"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(robots_txt))
+        .mount(&mock_server)
+        .await;
+
+    // 2. sitemap_index.xml declares sub-sitemap: /sitemap-pages.xml
+    let sitemap_index = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <sitemap>
+    <loc>{}/sitemap-pages.xml</loc>
+  </sitemap>
+</sitemapindex>"#,
+        base_uri
+    );
+    Mock::given(method("GET"))
+        .and(path("/sitemap_index.xml"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(sitemap_index)
+                .insert_header("content-type", "application/xml"),
+        )
+        .mount(&mock_server)
+        .await;
+
+    // 3. /sitemap-pages.xml declares home page and an orphan page
+    let sitemap_pages = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>{}/</loc>
+  </url>
+  <url>
+    <loc>{}/orphan-article</loc>
+  </url>
+</urlset>"#,
+        base_uri, base_uri
+    );
+    Mock::given(method("GET"))
+        .and(path("/sitemap-pages.xml"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(sitemap_pages)
+                .insert_header("content-type", "application/xml"),
+        )
+        .mount(&mock_server)
+        .await;
+
+    // 4. Crawled HTML pages: / links to /linked-page, and /linked-page links to /
+    let home_html = format!(
+        r#"<!DOCTYPE html><html><head><title>Home</title></head><body><h1>Home</h1><a href="{}/linked-page">Linked</a></body></html>"#,
+        base_uri
+    );
+    Mock::given(method("GET"))
+        .and(path("/"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(home_html)
+                .insert_header("content-type", "text/html"),
+        )
+        .mount(&mock_server)
+        .await;
+
+    let linked_html = format!(
+        r#"<!DOCTYPE html><html><head><title>Linked</title></head><body><h1>Linked</h1><a href="{}/">Home</a></body></html>"#,
+        base_uri
+    );
+    Mock::given(method("GET"))
+        .and(path("/linked-page"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(linked_html)
+                .insert_header("content-type", "text/html"),
+        )
+        .mount(&mock_server)
+        .await;
+
+    // Notice: /orphan-article is NOT linked from any page on the site!
+    let orphan_html = r#"<!DOCTYPE html><html><head><title>Orphan</title></head><body><h1>Orphan</h1></body></html>"#;
+    Mock::given(method("GET"))
+        .and(path("/orphan-article"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_string(orphan_html)
+                .insert_header("content-type", "text/html"),
+        )
+        .mount(&mock_server)
+        .await;
+
+    let mut config = CrawlConfig::new(&format!("{}/", base_uri)).expect("Valid config");
+    config.max_pages = 50;
+    config.max_depth = 5;
+    config.concurrency = 2;
+    config.delay_ms = 0;
+    config.no_aimd = true;
+    config.respect_robots = true;
+
+    let result = run_crawl(&config, None)
+        .await
+        .expect("Crawl should succeed");
+
+    // Sitemap URLs extracted must contain actual content page URLs, NOT XML sitemap files!
+    for sm_url in &result.sitemap_urls {
+        assert!(
+            !sm_url.ends_with(".xml"),
+            "Sitemap URL list must not contain XML feeds: {}",
+            sm_url
+        );
+    }
+
+    let expected_orphan_url = format!("{}/orphan-article", base_uri);
+    assert!(
+        result.sitemap_urls.contains(&expected_orphan_url),
+        "Declared page /orphan-article must be in sitemap_urls: {:?}",
+        result.sitemap_urls
+    );
+
+    // Orphan page finding must be generated for /orphan-article
+    let orphan_findings: Vec<_> = result
+        .issues
+        .iter()
+        .filter(|i| i.code == RuleId::AlertGraphOrphanPage)
+        .collect();
+
+    assert_eq!(
+        orphan_findings.len(),
+        1,
+        "Expected exactly 1 orphan page finding, got: {:?}",
+        orphan_findings
+    );
+    assert_eq!(orphan_findings[0].target_url, expected_orphan_url);
+
+    // Sitemaps themselves and homepage must NOT have orphan findings
+    for finding in &orphan_findings {
+        assert!(
+            !finding.target_url.ends_with(".xml"),
+            "Sitemap XML file must never be flagged as orphan page: {}",
+            finding.target_url
+        );
+        assert_ne!(
+            finding.target_url,
+            format!("{}/", base_uri),
+            "Homepage must never be flagged as orphan page"
+        );
+    }
+}
