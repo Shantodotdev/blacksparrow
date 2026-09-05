@@ -317,6 +317,68 @@ fn test_rule_orphan_page_detection() {
 }
 
 #[test]
+fn test_sitemap_xml_and_static_assets_never_flagged_as_orphans() {
+    let page_home = mock_page(
+        "https://example.com/",
+        200,
+        0,
+        Some("Home"),
+        Some("Home Desc"),
+        None,
+        1000,
+        2000,
+        vec![mock_link(
+            "https://example.com/",
+            "https://example.com/about",
+            false,
+        )],
+        vec![],
+    );
+    let page_about = mock_page(
+        "https://example.com/about",
+        200,
+        1,
+        Some("About"),
+        Some("About Desc"),
+        None,
+        1000,
+        2000,
+        vec![mock_link(
+            "https://example.com/about",
+            "https://example.com/",
+            false,
+        )],
+        vec![],
+    );
+
+    let pages = vec![page_home, page_about];
+    // Include XML sitemaps and static assets in sitemap_urls
+    let sitemap_urls = vec![
+        "https://example.com/".to_string(),
+        "https://example.com/about".to_string(),
+        "https://example.com/sitemap.xml".to_string(),
+        "https://example.com/sitemap_index.xml".to_string(),
+        "https://example.com/sitemap.xml.gz".to_string(),
+        "https://example.com/robots.txt".to_string(),
+        "https://example.com/image.png".to_string(),
+    ];
+
+    let graph = SiteGraph::from_pages(&pages, &sitemap_urls);
+    let issues = evaluate_graph_rules(&pages, &graph, &sitemap_urls);
+
+    let orphan_issues: Vec<_> = issues
+        .iter()
+        .filter(|i| i.code == RuleId::AlertGraphOrphanPage)
+        .collect();
+
+    assert!(
+        orphan_issues.is_empty(),
+        "Sitemap XML files, static assets, and homepage must never be flagged as orphan pages. Found: {:?}",
+        orphan_issues
+    );
+}
+
+#[test]
 fn test_rule_circular_redirect_loop() {
     // Page A redirects to Page B. Page B redirects back to Page A.
     // Must trigger ERR_GRAPH_REDIRECT_LOOP.

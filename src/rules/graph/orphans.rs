@@ -6,9 +6,19 @@
 //! pages are flagged as orphan pages ([`crate::core::models::RuleId::AlertGraphOrphanPage`]).
 
 use crate::core::models::{IssueFinding, PageReport, RuleId};
+use crate::core::url::is_static_asset_url;
 use crate::graph::SiteGraph;
 use crate::rules::catalog::get_rule;
 use hashbrown::HashSet;
+
+/// Checks whether a URL targets a sitemap feed file or non-HTML resource.
+fn is_non_content_feed_or_asset(url: &str) -> bool {
+    let lower = url.to_ascii_lowercase();
+    lower.ends_with(".xml")
+        || lower.ends_with(".xml.gz")
+        || lower.ends_with("/sitemap")
+        || is_static_asset_url(url)
+}
 
 /// Evaluates orphan page defects across sitemap URLs and crawled pages.
 pub fn evaluate_orphans(
@@ -21,6 +31,15 @@ pub fn evaluate_orphans(
 
     // 1. Evaluate explicit sitemap URLs provided from XML sitemap parsing
     for url in sitemap_urls {
+        if is_non_content_feed_or_asset(url) {
+            continue;
+        }
+
+        // The crawl seed/root page (depth 0) is the entrypoint and cannot be an orphan.
+        if pages.iter().any(|p| p.url == *url && p.crawl_depth == 0) {
+            continue;
+        }
+
         if evaluated_urls.insert(url.as_str()) && graph.in_degree(url) == 0 {
             let rule = get_rule(RuleId::AlertGraphOrphanPage);
             let msg = format!(
@@ -33,6 +52,10 @@ pub fn evaluate_orphans(
 
     // 2. Evaluate any crawled pages marked with is_sitemap_url
     for page in pages {
+        if is_non_content_feed_or_asset(&page.url) || page.crawl_depth == 0 {
+            continue;
+        }
+
         if page.is_sitemap_url
             && evaluated_urls.insert(&page.url)
             && graph.in_degree(&page.url) == 0
