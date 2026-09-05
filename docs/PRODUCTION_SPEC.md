@@ -52,6 +52,7 @@ Every module in `SEO Lens` will be implemented strictly using **Test-Driven Deve
 ## 3. Modular Architecture Topology (2-Member Cargo Workspace)
 
 The project uses a **2-Member Cargo Workspace**. This architecture ensures:
+
 - **Unified Build Cache**: One root `target/` directory and one `Cargo.lock`. Shared dependencies (`tokio`, `reqwest`, `serde`, `rusqlite`) are compiled once, preventing 5–10 GB of duplicate build artifacts.
 - **Zero GUI Bloat in CLI**: Desktop/Tauri dependencies (`tauri`, `webkit2gtk`) only exist in `src-tauri/Cargo.toml`. The CLI binary (`seolens`) remains ultra-lean (~15MB) with zero OS GUI dependencies for CI/CD and Docker.
 - **Frictionless Development**: Phases 0 through 9 are built directly in `src/` and `tests/`. Phase 10 seamlessly connects `src-tauri` to `seo-lens` via `path = ".."`.
@@ -327,6 +328,7 @@ tauri = { version = "2", features = [] }
 **Objective**: Build the cross-platform native desktop application providing a double-clickable GUI for non-technical users, WordPress/Webflow designers, vibe coders, and technical developers.
 
 #### Tasks:
+
 1. `ui/`: Initialize Vite + React 19 + TypeScript + Tailwind CSS application.
 2. Build UI views tailored for all target personas:
    - **Audits Overview & Launch Center**: URL input, preset selectors, AI audit toggle.
@@ -340,6 +342,7 @@ tauri = { version = "2", features = [] }
 5. `src-tauri/src/events.rs`: Bridge real-time Tokio crawler telemetry to frontend via `app.emit("crawl-progress")`.
 
 #### Verification Gate:
+
 - **Automated (TDD)**: Tauri IPC command deserialization tests, live event emission unit tests, and virtualized table performance benchmarks.
 - **Manual**: Run `cargo tauri dev`, launch an audit on a test domain, verify live progress events, test "Copy AI Fix Prompt", and export CSV via the native OS file picker.
 
@@ -350,6 +353,7 @@ tauri = { version = "2", features = [] }
 **Objective**: Polished command-line user interfaces and multi-format export files.
 
 #### Tasks:
+
 1. `report/terminal.rs`: Live ANSI terminal dashboard (`indicatif`) with progress indicators and issue severity tables.
 2. `report/markdown.rs`: Executive summary formatted for human reading and LLM context windows.
 3. `report/json.rs`: Full structured data export.
@@ -357,6 +361,7 @@ tauri = { version = "2", features = [] }
 5. `report/html.rs`: Standalone self-contained single-page offline HTML report.
 
 #### Verification Gate:
+
 - **Automated (TDD)**: CSV/JSON schema validation and markdown formatting tests.
 - **Manual**: Run full CLI audit on a test domain, inspect terminal output, and verify generated CSVs open cleanly in Excel/Google Sheets.
 
@@ -367,6 +372,7 @@ tauri = { version = "2", features = [] }
 **Objective**: Final production readiness, cross-compilation, desktop installers, and containerization.
 
 #### Tasks:
+
 1. Compiler optimization profile validation.
 2. Static compilation verification (`x86_64-unknown-linux-musl`, macOS Apple Silicon/Intel, Windows `.exe`).
 3. Tauri desktop packaging (`cargo tauri build`):
@@ -379,6 +385,7 @@ tauri = { version = "2", features = [] }
 5. Final end-to-end integration test suite across CLI (`audit`), MCP (`stdio`), and Desktop (`Tauri`) modes.
 
 #### Verification Gate:
+
 - **Automated**: Full integration test suite passing on all target platforms in CI.
 - **Manual**: Run headless CLI in Docker, test MCP server with Cursor/Claude Desktop, and launch the compiled native desktop installer (`.dmg`/`.msi`).
 

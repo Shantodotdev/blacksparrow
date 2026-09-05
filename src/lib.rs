@@ -66,5 +66,6 @@ pub mod core;
 pub mod crawler;
 pub mod error;
 pub mod parser;
+pub mod rules;
 
 pub use error::{SeoError, SeoResult};
