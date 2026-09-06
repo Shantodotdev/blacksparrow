@@ -63,6 +63,8 @@ struct PendingLink {
     is_nofollow: bool,
     anchor_text: String,
     is_image_link: bool,
+    is_target_blank: bool,
+    has_opener_or_referrer: bool,
 }
 
 /// Parses an HTML document string against a base URL using `lol_html`.
@@ -113,6 +115,8 @@ struct PendingLink {
 pub fn parse_html(html: &str, base_url: &str) -> SeoResult<ParsedPage> {
     let title_buf = Rc::new(RefCell::new(String::new()));
     let meta_desc = Rc::new(RefCell::new(None::<String>));
+    let meta_keywords = Rc::new(RefCell::new(None::<String>));
+    let dom_element_count = Rc::new(RefCell::new(0u32));
     let canonical = Rc::new(RefCell::new(None::<String>));
     let is_canonical_relative = Rc::new(RefCell::new(false));
     let html_lang = Rc::new(RefCell::new(None::<CompactString>));
@@ -145,6 +149,15 @@ pub fn parse_html(html: &str, base_url: &str) -> SeoResult<ParsedPage> {
 
     let mut settings = Settings::new();
 
+    // 0. Universal DOM element counter
+    {
+        let dom_ref = Rc::clone(&dom_element_count);
+        settings = settings.append_element_content_handler(element!("*", move |_| {
+            *dom_ref.borrow_mut() += 1;
+            Ok(())
+        }));
+    }
+
     // 1. HTML tag
     {
         let lang_ref = Rc::clone(&html_lang);
@@ -168,6 +181,7 @@ pub fn parse_html(html: &str, base_url: &str) -> SeoResult<ParsedPage> {
     // 3. Meta tags
     {
         let desc_ref = Rc::clone(&meta_desc);
+        let keywords_ref = Rc::clone(&meta_keywords);
         let robots_ref = Rc::clone(&robots_flags);
         let viewport_ref = Rc::clone(&viewport);
         let charset_ref = Rc::clone(&charset);
@@ -180,6 +194,11 @@ pub fn parse_html(html: &str, base_url: &str) -> SeoResult<ParsedPage> {
                 if lower_name == "description" {
                     if let Some(content) = el.get_attribute("content") {
                         *desc_ref.borrow_mut() =
+                            Some(clean_whitespace(&decode_html_entities(&content)));
+                    }
+                } else if lower_name == "keywords" {
+                    if let Some(content) = el.get_attribute("content") {
+                        *keywords_ref.borrow_mut() =
                             Some(clean_whitespace(&decode_html_entities(&content)));
                     }
                 } else if lower_name == "robots" {
@@ -387,9 +406,12 @@ pub fn parse_html(html: &str, base_url: &str) -> SeoResult<ParsedPage> {
             }
 
             if let Some(href) = el.get_attribute("href") {
-                let is_nofollow = el
-                    .get_attribute("rel")
-                    .map(|r| r.to_lowercase().contains("nofollow"))
+                let rel = el.get_attribute("rel").unwrap_or_default().to_lowercase();
+                let is_nofollow = rel.contains("nofollow");
+                let has_opener_or_referrer = rel.contains("noopener") || rel.contains("noreferrer");
+                let is_target_blank = el
+                    .get_attribute("target")
+                    .map(|t| t.trim().eq_ignore_ascii_case("_blank"))
                     .unwrap_or(false);
 
                 *cur_link.borrow_mut() = Some(PendingLink {
@@ -397,6 +419,8 @@ pub fn parse_html(html: &str, base_url: &str) -> SeoResult<ParsedPage> {
                     is_nofollow,
                     anchor_text: String::new(),
                     is_image_link: false,
+                    is_target_blank,
+                    has_opener_or_referrer,
                 });
 
                 let cur = Rc::clone(&cur_link);
@@ -573,6 +597,8 @@ pub fn parse_html(html: &str, base_url: &str) -> SeoResult<ParsedPage> {
     let h1_count = all_h1.len() as u16;
 
     let final_meta_desc = meta_desc.take();
+    let final_meta_keywords = meta_keywords.take();
+    let final_dom_count = *dom_element_count.borrow();
     let final_canonical = canonical.take();
     let final_canonical_relative = *is_canonical_relative.borrow();
     let final_html_lang = html_lang.take();
@@ -591,6 +617,7 @@ pub fn parse_html(html: &str, base_url: &str) -> SeoResult<ParsedPage> {
     Ok(ParsedPage {
         title,
         meta_description: final_meta_desc,
+        meta_keywords: final_meta_keywords,
         canonical_url: final_canonical,
         is_canonical_relative: final_canonical_relative,
         html_lang: final_html_lang,
@@ -601,6 +628,7 @@ pub fn parse_html(html: &str, base_url: &str) -> SeoResult<ParsedPage> {
         h1_count,
         h2_headings: final_h2,
         h3_headings: final_h3,
+        dom_element_count: final_dom_count,
         word_count,
         content_hash,
         simhash,
@@ -639,6 +667,8 @@ fn flush_link(pending: PendingLink, base_url: &str, links: &mut Vec<DiscoveredLi
             is_internal: internal,
             is_nofollow: pending.is_nofollow,
             is_image_link: pending.is_image_link,
+            is_target_blank: pending.is_target_blank,
+            has_opener_or_referrer: pending.has_opener_or_referrer,
             status_code: None,
         });
     }

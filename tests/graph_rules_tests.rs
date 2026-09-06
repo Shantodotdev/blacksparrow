@@ -82,6 +82,8 @@ fn mock_link(source: &str, target: &str, is_nofollow: bool) -> DiscoveredLink {
         is_nofollow,
         is_image_link: false,
         status_code: Some(200),
+        is_target_blank: false,
+        has_opener_or_referrer: true,
     }
 }
 

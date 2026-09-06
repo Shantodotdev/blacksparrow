@@ -108,6 +108,8 @@ pub struct ParsedPage {
     pub title: Option<String>,
     /// Meta description content extracted from `<meta name="description" content="...">`.
     pub meta_description: Option<String>,
+    /// Meta keywords extracted from `<meta name="keywords" content="...">`.
+    pub meta_keywords: Option<String>,
     /// Canonical URL extracted from `<link rel="canonical" href="...">`.
     pub canonical_url: Option<String>,
     /// Whether the declared `<link rel="canonical">` was a relative path.
@@ -128,6 +130,8 @@ pub struct ParsedPage {
     pub h2_headings: Vec<String>,
     /// Ordered list of all `<h3>` heading texts found in the document.
     pub h3_headings: Vec<String>,
+    /// Total count of DOM elements encountered in the document.
+    pub dom_element_count: u32,
     /// Total count of words in editorial text (excluding navigation, header, footer, script tags).
     pub word_count: u32,
     /// 64-bit deterministic hash of editorial body text for exact duplicate detection.

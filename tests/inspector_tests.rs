@@ -29,6 +29,7 @@ fn test_format_page_inspection_with_rich_metadata() {
         meta_description: Some(
             "A language empowering everyone to build reliable and efficient software.".to_string(),
         ),
+        meta_keywords: None,
         canonical_url: Some("https://www.rust-lang.org/".to_string()),
         is_canonical_relative: false,
         html_lang: Some(CompactString::new("en")),
@@ -39,6 +40,7 @@ fn test_format_page_inspection_with_rich_metadata() {
         h1_count: 1,
         h2_headings: vec!["Why Rust?".to_string(), "Get Started".to_string()],
         h3_headings: vec!["Performance".to_string(), "Reliability".to_string()],
+        dom_element_count: 50,
         word_count: 1450,
         content_hash: 0x12345678,
         simhash: 0x87654321,
@@ -52,6 +54,8 @@ fn test_format_page_inspection_with_rich_metadata() {
                 is_nofollow: false,
                 is_image_link: false,
                 status_code: Some(200),
+                is_target_blank: false,
+                has_opener_or_referrer: true,
             },
             DiscoveredLink {
                 source_url: "https://www.rust-lang.org/".to_string(),
@@ -62,6 +66,8 @@ fn test_format_page_inspection_with_rich_metadata() {
                 is_nofollow: false,
                 is_image_link: false,
                 status_code: Some(200),
+                is_target_blank: false,
+                has_opener_or_referrer: true,
             },
         ],
         images: vec![
@@ -151,6 +157,7 @@ fn test_format_page_inspection_wraps_long_descriptions() {
     let page = ParsedPage {
         title: Some("GTD Media | Climate Communication, Advocacy & Storytelling".to_string()),
         meta_description: Some(long_desc.to_string()),
+        meta_keywords: None,
         canonical_url: Some("https://gtdnet.online/".to_string()),
         is_canonical_relative: false,
         html_lang: Some(CompactString::new("en")),
@@ -161,6 +168,7 @@ fn test_format_page_inspection_wraps_long_descriptions() {
         h1_count: 1,
         h2_headings: vec![],
         h3_headings: vec![],
+        dom_element_count: 50,
         word_count: 1567,
         content_hash: 1,
         simhash: 2,

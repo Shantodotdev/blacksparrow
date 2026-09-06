@@ -106,6 +106,7 @@ pub enum RuleId {
     AlertWafBotChallenge,
     WarnSlowTtfb,
     AlertFacetedSpiderTrap,
+    ErrHttpSoft404,
 
     // --- Category 2: Titles & Basic Metadata ---
     ErrTitleMissing,
@@ -113,10 +114,12 @@ pub enum RuleId {
     WarnTitleTooLong,
     ErrTitleMultiple,
     WarnTitleWhitespacePadded,
+    WarnTitleSameAsH1,
     WarnMetaDescMissing,
     WarnMetaDescTooShort,
     WarnMetaDescTooLong,
     ErrMetaDescMultiple,
+    WarnMetaKeywordsPresent,
 
     // --- Category 3: Headings & Document Structure ---
     ErrH1Missing,
@@ -124,18 +127,25 @@ pub enum RuleId {
     WarnH1Empty,
     WarnH1TooLong,
     WarnHeadingHierarchySkipped,
+    WarnDuplicateHeadingText,
+    WarnExcessiveDomDepth,
 
     // --- Category 4: Indexability & Directives ---
     AlertIndexingBlockedNoindex,
     WarnLinkEquityBlockedNofollow,
     WarnNoarchivePresent,
     WarnNosnippetPresent,
+    WarnPaginationMissingCanonical,
+    AlertPaginationNoindex,
+    AlertUnrenderedSpaHeuristic,
 
     // --- Category 5: Canonicalization ---
     WarnCanonicalMissing,
     ErrCanonicalRelative,
     ErrCanonicalMultiple,
     AlertCanonicalMismatch,
+    AlertCanonicalCrossDomain,
+    WarnCanonicalToUnverifiedHttp,
 
     // --- Category 6: Modern Security & Transport ---
     ErrSecurityInsecureHttp,
@@ -144,15 +154,26 @@ pub enum RuleId {
     WarnSecurityMissingCsp,
     WarnSecurityMissingXFrameOptions,
     WarnSecurityMissingXContentType,
+    WarnSecurityMissingReferrerPolicy,
+    WarnSecurityTargetBlankNoOpener,
+    WarnSecurityInsecureForm,
 
     // --- Category 7: Images & Core Web Vitals (CLS) ---
     WarnImageMissingAlt,
     WarnImageMissingDimensions,
     WarnImageDataUri,
+    WarnImgAltTooLong,
 
     // --- Category 8: Mobile UX & Viewports ---
     ErrMobileNoViewport,
     WarnMobileViewportNonScalable,
+    WarnPerfLargeHtmlPayload,
+    ErrPerfExcessiveHtmlPayload,
+
+    // --- Category 9: Links & Anchor Quality ---
+    WarnLinksTooManyOnPage,
+    WarnLinkSuspiciousAnchor,
+    WarnLinkEmptyAnchor,
 
     // --- Category 9: Structured Data & Schema.org ---
     ErrSchemaSyntaxError,
@@ -192,32 +213,42 @@ impl RuleId {
             Self::AlertWafBotChallenge => "ALERT_WAF_BOT_CHALLENGE",
             Self::WarnSlowTtfb => "WARN_SLOW_TTFB",
             Self::AlertFacetedSpiderTrap => "ALERT_FACETED_SPIDER_TRAP",
+            Self::ErrHttpSoft404 => "ERR_HTTP_SOFT_404",
 
             Self::ErrTitleMissing => "ERR_TITLE_MISSING",
             Self::WarnTitleTooShort => "WARN_TITLE_TOO_SHORT",
             Self::WarnTitleTooLong => "WARN_TITLE_TOO_LONG",
             Self::ErrTitleMultiple => "ERR_TITLE_MULTIPLE",
             Self::WarnTitleWhitespacePadded => "WARN_TITLE_WHITESPACE_PADDED",
+            Self::WarnTitleSameAsH1 => "WARN_TITLE_SAME_AS_H1",
             Self::WarnMetaDescMissing => "WARN_META_DESC_MISSING",
             Self::WarnMetaDescTooShort => "WARN_META_DESC_TOO_SHORT",
             Self::WarnMetaDescTooLong => "WARN_META_DESC_TOO_LONG",
             Self::ErrMetaDescMultiple => "ERR_META_DESC_MULTIPLE",
+            Self::WarnMetaKeywordsPresent => "WARN_META_KEYWORDS_PRESENT",
 
             Self::ErrH1Missing => "ERR_H1_MISSING",
             Self::WarnH1Multiple => "WARN_H1_MULTIPLE",
             Self::WarnH1Empty => "WARN_H1_EMPTY",
             Self::WarnH1TooLong => "WARN_H1_TOO_LONG",
             Self::WarnHeadingHierarchySkipped => "WARN_HEADING_HIERARCHY_SKIPPED",
+            Self::WarnDuplicateHeadingText => "WARN_DUPLICATE_HEADING_TEXT",
+            Self::WarnExcessiveDomDepth => "WARN_EXCESSIVE_DOM_DEPTH",
 
             Self::AlertIndexingBlockedNoindex => "ALERT_INDEXING_BLOCKED_NOINDEX",
             Self::WarnLinkEquityBlockedNofollow => "WARN_LINK_EQUITY_BLOCKED_NOFOLLOW",
             Self::WarnNoarchivePresent => "WARN_NOARCHIVE_PRESENT",
             Self::WarnNosnippetPresent => "WARN_NOSNIPPET_PRESENT",
+            Self::WarnPaginationMissingCanonical => "WARN_PAGINATION_MISSING_CANONICAL",
+            Self::AlertPaginationNoindex => "ALERT_PAGINATION_NOINDEX",
+            Self::AlertUnrenderedSpaHeuristic => "ALERT_UNRENDERED_SPA_HEURISTIC",
 
             Self::WarnCanonicalMissing => "WARN_CANONICAL_MISSING",
             Self::ErrCanonicalRelative => "ERR_CANONICAL_RELATIVE",
             Self::ErrCanonicalMultiple => "ERR_CANONICAL_MULTIPLE",
             Self::AlertCanonicalMismatch => "ALERT_CANONICAL_MISMATCH",
+            Self::AlertCanonicalCrossDomain => "ALERT_CANONICAL_CROSS_DOMAIN",
+            Self::WarnCanonicalToUnverifiedHttp => "WARN_CANONICAL_TO_UNVERIFIED_HTTP",
 
             Self::ErrSecurityInsecureHttp => "ERR_SECURITY_INSECURE_HTTP",
             Self::ErrSecurityMixedContent => "ERR_SECURITY_MIXED_CONTENT",
@@ -225,13 +256,23 @@ impl RuleId {
             Self::WarnSecurityMissingCsp => "WARN_SECURITY_MISSING_CSP",
             Self::WarnSecurityMissingXFrameOptions => "WARN_SECURITY_MISSING_X_FRAME_OPTIONS",
             Self::WarnSecurityMissingXContentType => "WARN_SECURITY_MISSING_X_CONTENT_TYPE",
+            Self::WarnSecurityMissingReferrerPolicy => "WARN_SECURITY_MISSING_REFERRER_POLICY",
+            Self::WarnSecurityTargetBlankNoOpener => "WARN_SECURITY_TARGET_BLANK_NO_OPENER",
+            Self::WarnSecurityInsecureForm => "WARN_SECURITY_INSECURE_FORM",
 
             Self::WarnImageMissingAlt => "WARN_IMAGE_MISSING_ALT",
             Self::WarnImageMissingDimensions => "WARN_IMAGE_MISSING_DIMENSIONS",
             Self::WarnImageDataUri => "WARN_IMAGE_DATA_URI",
+            Self::WarnImgAltTooLong => "WARN_IMG_ALT_TOO_LONG",
 
             Self::ErrMobileNoViewport => "ERR_MOBILE_NO_VIEWPORT",
             Self::WarnMobileViewportNonScalable => "WARN_MOBILE_VIEWPORT_NON_SCALABLE",
+            Self::WarnPerfLargeHtmlPayload => "WARN_PERF_LARGE_HTML_PAYLOAD",
+            Self::ErrPerfExcessiveHtmlPayload => "ERR_PERF_EXCESSIVE_HTML_PAYLOAD",
+
+            Self::WarnLinksTooManyOnPage => "WARN_LINKS_TOO_MANY_ON_PAGE",
+            Self::WarnLinkSuspiciousAnchor => "WARN_LINK_SUSPICIOUS_ANCHOR",
+            Self::WarnLinkEmptyAnchor => "WARN_LINK_EMPTY_ANCHOR",
 
             Self::ErrSchemaSyntaxError => "ERR_SCHEMA_SYNTAX_ERROR",
             Self::WarnSchemaMissingRequiredFields => "WARN_SCHEMA_MISSING_REQUIRED_FIELDS",
@@ -426,6 +467,10 @@ pub struct DiscoveredLink {
     pub is_nofollow: bool,
     /// Whether the link wraps an image instead of textual anchor text.
     pub is_image_link: bool,
+    /// Whether the link specifies `target="_blank"`.
+    pub is_target_blank: bool,
+    /// Whether the link specifies `rel="noopener"` or `rel="noreferrer"`.
+    pub has_opener_or_referrer: bool,
     /// HTTP status code of the target URL, once fetched.
     pub status_code: Option<u16>,
 }
@@ -561,6 +606,8 @@ mod tests {
             is_internal: true,
             is_nofollow: false,
             is_image_link: false,
+            is_target_blank: false,
+            has_opener_or_referrer: true,
             status_code: Some(200),
         };
         assert!(link.is_internal);
