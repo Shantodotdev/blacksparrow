@@ -678,3 +678,57 @@ pub fn print_schema_outcome(outcome: &SchemaValidationOutcome) {
         println!("  {color}✔ Schema passes all Google Rich Results and schema.org guidelines.{ANSI_RESET}\n");
     }
 }
+
+/// Prints the Cyberpunk / Matrix-style help and home screen for SEO Lens CLI.
+pub fn print_cli_help() {
+    println!(
+        "\n{ANSI_CYAN}{ANSI_BOLD}  ███████╗███████╗ ██████╗     ██╗     ███████╗███╗   ██╗███████╗\n  ██╔════╝██╔════╝██╔═══██╗    ██║     ██╔════╝████╗  ██║██╔════╝\n  ███████╗█████╗  ██║   ██║    ██║     █████╗  ██╔██╗ ██║███████╗\n  ╚════██║██╔══╝  ██║   ██║    ██║     ██╔══╝  ██║╚██╗██║╚════██║\n  ███████║███████╗╚██████╔╝    ███████╗███████╗██║ ╚████║███████║\n  ╚══════╝╚══════╝ ╚═════╝     ╚══════╝╚══════╝╚═╝  ╚═══╝╚══════╝{ANSI_RESET}\n  {ANSI_DIM}v{} │ High-Performance Website Crawler & AI-Native Technical SEO Engine{ANSI_RESET}\n",
+        env!("CARGO_PKG_VERSION")
+    );
+
+    let print_badge = |title: &str| {
+        let pad = title.chars().count() + 4;
+        println!("  {ANSI_BOLD}{ANSI_CYAN}┌{}┐{ANSI_RESET}", "─".repeat(pad));
+        println!("  {ANSI_BOLD}{ANSI_CYAN}│{ANSI_RESET}  {ANSI_BOLD}{ANSI_BRIGHT_WHITE}{title}{ANSI_RESET}  {ANSI_BOLD}{ANSI_CYAN}│{ANSI_RESET}");
+        println!("  {ANSI_BOLD}{ANSI_CYAN}└{}┘{ANSI_RESET}", "─".repeat(pad));
+    };
+
+    print_badge("USAGE");
+    println!("  {ANSI_BOLD}seolens{ANSI_RESET} {ANSI_CYAN}<COMMAND>{ANSI_RESET} {ANSI_YELLOW}[FLAGS]{ANSI_RESET} {ANSI_DIM}[OPTIONS]{ANSI_RESET}\n");
+
+    print_badge("AUDIT & CRAWL COMMANDS");
+    println!("  {ANSI_GREEN}{ANSI_BOLD}audit{ANSI_RESET} {ANSI_CYAN}<URL>{ANSI_RESET}          Run full website crawl with AIMD adaptive congestion control");
+    println!("  {ANSI_GREEN}{ANSI_BOLD}inspect{ANSI_RESET} {ANSI_CYAN}<URL>{ANSI_RESET}        Instant developer X-ray for a single webpage (DOM, tags, headers)");
+    println!("  {ANSI_GREEN}{ANSI_BOLD}check-ai{ANSI_RESET} {ANSI_CYAN}<URL>{ANSI_RESET}       Audit AI search bot readiness (Perplexity, ChatGPT) & /llms.txt");
+    println!("  {ANSI_GREEN}{ANSI_BOLD}schema{ANSI_RESET} {ANSI_CYAN}<TARGET>{ANSI_RESET}      Validate JSON-LD against Google Rich Results rules (file or URL)\n");
+
+    print_badge("DATABASE & REPORTS");
+    println!("  {ANSI_GREEN}{ANSI_BOLD}list{ANSI_RESET}                 List all historical crawl sessions stored in local SQLite DB");
+    println!("  {ANSI_GREEN}{ANSI_BOLD}report{ANSI_RESET} {ANSI_CYAN}<ID>{ANSI_RESET}          Re-export or inspect an existing audit (terminal, md, json)");
+    println!("  {ANSI_GREEN}{ANSI_BOLD}issues{ANSI_RESET} {ANSI_CYAN}<ID>{ANSI_RESET}          Drill down and filter audit findings by severity or category");
+    println!("  {ANSI_GREEN}{ANSI_BOLD}delete{ANSI_RESET} {ANSI_CYAN}<ID>{ANSI_RESET}          Purge a specific crawl session and cascading records");
+    println!("  {ANSI_GREEN}{ANSI_BOLD}clean{ANSI_RESET}                Clean historical crawl sessions older than N days\n");
+
+    print_badge("AI AGENT PROTOCOL");
+    println!("  {ANSI_GREEN}{ANSI_BOLD}mcp{ANSI_RESET}                  Start native Model Context Protocol server (stdio for AI agents)\n");
+
+    print_badge("GLOBAL FLAGS");
+    println!("  {ANSI_YELLOW}-h, --help{ANSI_RESET}           Print this help guide (or use: seolens <cmd> --help)");
+    println!("  {ANSI_YELLOW}-V, --version{ANSI_RESET}        Print version information\n");
+
+    print_badge("QUICKSTART EXAMPLES");
+    println!(
+        "  {ANSI_DIM}# Audit whole website with 500 pages limit & AIMD rate limiting:{ANSI_RESET}"
+    );
+    println!("  seolens audit https://example.com --max-pages 500\n");
+    println!("  {ANSI_DIM}# Fast single-page inspection with JSON output:{ANSI_RESET}");
+    println!("  seolens inspect https://example.com/pricing --format json\n");
+    println!(
+        "  {ANSI_DIM}# Check whether AI bots (Perplexity, ChatGPT) can cite your site:{ANSI_RESET}"
+    );
+    println!("  seolens check-ai https://example.com\n");
+    println!("  {ANSI_DIM}# Filter critical issues from a previous crawl session:{ANSI_RESET}");
+    println!("  seolens issues <SESSION_ID> --severity critical\n");
+    println!("  {ANSI_DIM}# Start MCP server for AI coding agents:{ANSI_RESET}");
+    println!("  seolens mcp\n");
+}

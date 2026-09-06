@@ -3,12 +3,30 @@
 //! Strongly-typed CLI options and subcommands for the `seolens` executable,
 //! parsed via `clap`.
 
+use clap::builder::styling::{AnsiColor, Effects, Styles};
 use clap::{Args, Parser, Subcommand};
 use std::path::PathBuf;
 
+/// Terminal styling for clap CLI outputs to match SEO Lens cyberpunk palette.
+pub fn cli_styles() -> Styles {
+    Styles::styled()
+        .header(AnsiColor::BrightCyan.on_default() | Effects::BOLD)
+        .usage(AnsiColor::BrightCyan.on_default() | Effects::BOLD)
+        .literal(AnsiColor::BrightGreen.on_default() | Effects::BOLD)
+        .placeholder(AnsiColor::BrightCyan.on_default())
+        .valid(AnsiColor::BrightGreen.on_default())
+        .invalid(AnsiColor::BrightRed.on_default())
+}
+
 /// SEO Lens - High-performance website crawler & technical SEO audit engine
 #[derive(Parser, Debug, Clone)]
-#[command(name = "seolens", author, version, about, long_about = None)]
+#[command(
+    name = "seolens",
+    author,
+    version,
+    about = "High-performance website crawler & AI-native technical SEO audit engine",
+    styles = cli_styles()
+)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
@@ -17,19 +35,19 @@ pub struct Cli {
 /// Available CLI subcommands.
 #[derive(Subcommand, Debug, Clone)]
 pub enum Commands {
-    /// Run a full or partial website crawl and audit
+    /// Run full website crawl with AIMD adaptive rate limiting & technical audit
     Audit(AuditArgs),
-    /// Inspect a single webpage: metadata, Open Graph, Twitter cards, JSON-LD, headings, and audit issues
+    /// Instant developer X-ray for a single webpage (DOM, tags, headers)
     Inspect(InspectArgs),
-    /// Start the native Model Context Protocol server (stdio for Cursor/Claude)
+    /// Start native Model Context Protocol server (stdio for Claude/Cursor)
     Mcp(McpArgs),
     /// Re-export or inspect an existing audit from the SQLite database
     Report(ReportArgs),
-    /// List all historical audit sessions stored locally
+    /// List all historical audit sessions stored locally in SQLite
     List(ListArgs),
     /// Drill down and filter audit findings for a session
     Issues(IssuesArgs),
-    /// Check website readiness for AI search engines (ChatGPT Search, Perplexity, Claude) and /llms.txt
+    /// Audit website readiness for AI search engines & /llms.txt
     CheckAi(CheckAiArgs),
     /// Delete a specific crawl session and its associated records
     Delete(DeleteArgs),
