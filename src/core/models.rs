@@ -178,6 +178,13 @@ pub enum RuleId {
     // --- Category 9: Structured Data & Schema.org ---
     ErrSchemaSyntaxError,
     WarnSchemaMissingRequiredFields,
+    ErrProductMissingSchema,
+    WarnProductMissingPriceOffer,
+    WarnProductMissingAvailability,
+    ErrArticleMissingSchema,
+    WarnArticleMissingAuthor,
+    WarnArticleMissingDatePublished,
+    WarnOrgMissingLocalSchema,
 
     // --- Category 10: Content Quality & AI Search ---
     WarnContentThin,
@@ -276,6 +283,13 @@ impl RuleId {
 
             Self::ErrSchemaSyntaxError => "ERR_SCHEMA_SYNTAX_ERROR",
             Self::WarnSchemaMissingRequiredFields => "WARN_SCHEMA_MISSING_REQUIRED_FIELDS",
+            Self::ErrProductMissingSchema => "ERR_PRODUCT_MISSING_SCHEMA",
+            Self::WarnProductMissingPriceOffer => "WARN_PRODUCT_MISSING_PRICE_OFFER",
+            Self::WarnProductMissingAvailability => "WARN_PRODUCT_MISSING_AVAILABILITY",
+            Self::ErrArticleMissingSchema => "ERR_ARTICLE_MISSING_SCHEMA",
+            Self::WarnArticleMissingAuthor => "WARN_ARTICLE_MISSING_AUTHOR",
+            Self::WarnArticleMissingDatePublished => "WARN_ARTICLE_MISSING_DATE_PUBLISHED",
+            Self::WarnOrgMissingLocalSchema => "WARN_ORG_MISSING_LOCAL_SCHEMA",
 
             Self::WarnContentThin => "WARN_CONTENT_THIN",
             Self::WarnLoremIpsumDetected => "WARN_LOREM_IPSUM_DETECTED",
@@ -344,6 +358,68 @@ bitflags::bitflags! {
         /// Prevents search engines from offering cached links for this page.
         const NOARCHIVE    = 0b0001_0000;
     }
+}
+
+/// Page archetype classified by page intent analysis.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum PageArchetype {
+    /// General informational, corporate, or utility page (default baseline).
+    #[default]
+    Standard,
+    /// E-commerce product detail page (PDP) with transactional buying intent.
+    Product,
+    /// Editorial news article, longform blog post, or journalistic content.
+    Article,
+    /// E-commerce category, product listing page (PLP), or catalog index.
+    Category,
+    /// Contact page, support form, office location, or reach-us portal.
+    Contact,
+    /// Root domain landing page or brand homepage.
+    Homepage,
+}
+
+impl PageArchetype {
+    /// Returns the lowercase snake_case string representation.
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Standard => "standard",
+            Self::Product => "product",
+            Self::Article => "article",
+            Self::Category => "category",
+            Self::Contact => "contact",
+            Self::Homepage => "homepage",
+        }
+    }
+
+    /// Returns a human-friendly badge with emoji icon for terminal and UI displays.
+    pub const fn badge(&self) -> &'static str {
+        match self {
+            Self::Standard => "Standard 📄",
+            Self::Product => "Product 🛒",
+            Self::Article => "Article 📰",
+            Self::Category => "Category 📁",
+            Self::Contact => "Contact 📞",
+            Self::Homepage => "Homepage 🏠",
+        }
+    }
+}
+
+impl std::fmt::Display for PageArchetype {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+/// Inferred intent classification of a webpage.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct PageIntent {
+    /// Winning page archetype classification.
+    pub archetype: PageArchetype,
+    /// Classification confidence score (0.0 to 1.0).
+    pub confidence: f32,
+    /// Evidential signal identifiers that triggered the classification.
+    pub signals: Vec<CompactString>,
 }
 
 /// Represents the complete audit report for a single crawled URL.
@@ -436,6 +512,10 @@ pub struct PageReport {
     pub has_x_content_type: bool,
     /// Count of insecure HTTP resources requested by an HTTPS page.
     pub mixed_content_count: u16,
+
+    // --- Page Intent & Classification ---
+    /// Inferred semantic archetype and intent of the page.
+    pub page_intent: PageIntent,
 
     // --- Child Collections (stored relationally) ---
     /// Hyperlinks discovered on this page.
@@ -681,6 +761,7 @@ mod tests {
             schemas: vec![schema],
             hreflangs: vec![hreflang],
             issues: vec![issue],
+            page_intent: Default::default(),
         };
 
         assert_eq!(page_report.status_code, 200);
