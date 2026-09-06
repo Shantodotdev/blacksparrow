@@ -5,8 +5,10 @@
 //! based on detected page intent.
 
 use crate::core::models::{IssueFinding, PageArchetype};
+use crate::error::SeoResult;
 use crate::parser::ParsedPage;
 use crate::rules::catalog::{get_rule, RuleId};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// Checks if a date string conforms to standard ISO 8601 (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS...).
@@ -311,4 +313,135 @@ fn json_has_nested_field(val: &Value, parent: &str, child: &str) -> bool {
             .any(|item| json_has_nested_field(item, parent, child)),
         _ => false,
     }
+}
+
+/// Result of validating a raw schema block against Google Rich Results guidelines.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SchemaValidationOutcome {
+    /// Whether the input string parsed successfully as valid JSON.
+    pub is_valid_json: bool,
+    /// Schema @type extracted from top-level or @graph container.
+    pub detected_type: Option<String>,
+    /// Whether the schema fulfills all required properties for Google Rich Results.
+    pub is_rich_result_eligible: bool,
+    /// Missing required fields that completely block Rich Results eligibility.
+    pub missing_required_fields: Vec<String>,
+    /// Missing recommended fields that enhance SERP appearance.
+    pub missing_recommended_fields: Vec<String>,
+    /// Descriptive error or guidance message.
+    pub error_message: Option<String>,
+}
+
+/// Validates a raw JSON-LD snippet or HTML block against Google Rich Results eligibility rules.
+pub fn validate_raw_schema(
+    raw: &str,
+    expected_type: Option<&str>,
+) -> SeoResult<SchemaValidationOutcome> {
+    let trimmed = raw.trim();
+    let json_text = if let Some(start) = trimmed.find("<script") {
+        if let Some(content_start) = trimmed[start..].find('>') {
+            let rest = &trimmed[start + content_start + 1..];
+            if let Some(end) = rest.find("</script>") {
+                rest[..end].trim()
+            } else {
+                trimmed
+            }
+        } else {
+            trimmed
+        }
+    } else {
+        trimmed
+    };
+
+    let val: Value = match serde_json::from_str(json_text) {
+        Ok(v) => v,
+        Err(e) => {
+            return Ok(SchemaValidationOutcome {
+                is_valid_json: false,
+                detected_type: None,
+                is_rich_result_eligible: false,
+                missing_required_fields: Vec::new(),
+                missing_recommended_fields: Vec::new(),
+                error_message: Some(format!("Invalid JSON syntax: {e}")),
+            });
+        }
+    };
+
+    let detected_type = if let Some(t) = val.get("@type").and_then(|v| v.as_str()) {
+        Some(t.to_string())
+    } else if let Some(Value::Array(graph)) = val.get("@graph") {
+        graph
+            .first()
+            .and_then(|item| item.get("@type"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+    } else {
+        None
+    };
+
+    let target = expected_type
+        .map(|s| s.to_string())
+        .or_else(|| detected_type.clone());
+    let mut missing_required = Vec::new();
+    let mut missing_recommended = Vec::new();
+
+    if let Some(ref t) = target {
+        if t.eq_ignore_ascii_case("product") {
+            if !json_has_field(&val, "name") {
+                missing_required.push("name".to_string());
+            }
+            if !json_has_field(&val, "image") {
+                missing_recommended.push("image".to_string());
+            }
+            if !json_has_field(&val, "offers") {
+                missing_required.push("offers".to_string());
+            }
+            if !json_has_field(&val, "aggregateRating") && !json_has_field(&val, "review") {
+                missing_recommended.push("aggregateRating".to_string());
+            }
+        } else if t.eq_ignore_ascii_case("article")
+            || t.eq_ignore_ascii_case("newsarticle")
+            || t.eq_ignore_ascii_case("blogposting")
+        {
+            if !json_has_field(&val, "headline") {
+                missing_required.push("headline".to_string());
+            }
+            if !json_has_field(&val, "author") {
+                missing_recommended.push("author".to_string());
+            }
+            if !json_has_field(&val, "datePublished") {
+                missing_recommended.push("datePublished".to_string());
+            }
+            if !json_has_field(&val, "image") {
+                missing_recommended.push("image".to_string());
+            }
+        } else if t.eq_ignore_ascii_case("faqpage") {
+            if !json_has_field(&val, "mainEntity") {
+                missing_required.push("mainEntity".to_string());
+            }
+        } else if t.eq_ignore_ascii_case("breadcrumblist")
+            && !json_has_field(&val, "itemListElement")
+        {
+            missing_required.push("itemListElement".to_string());
+        }
+    }
+
+    let is_eligible = detected_type.is_some() && missing_required.is_empty();
+    let err_msg = if !missing_required.is_empty() {
+        Some(format!(
+            "Missing required Google Rich Result property '{}'",
+            missing_required.join("', '")
+        ))
+    } else {
+        None
+    };
+
+    Ok(SchemaValidationOutcome {
+        is_valid_json: true,
+        detected_type,
+        is_rich_result_eligible: is_eligible,
+        missing_required_fields: missing_required,
+        missing_recommended_fields: missing_recommended,
+        error_message: err_msg,
+    })
 }
