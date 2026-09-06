@@ -69,6 +69,7 @@
 //! assert_eq!(page.links[0].target_url, "https://example.com/docs/api");
 //! ```
 
+pub mod cli;
 pub mod core;
 pub mod crawler;
 pub mod error;
