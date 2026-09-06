@@ -407,3 +407,130 @@ async fn test_crawl_sitemap_recursion_and_orphan_detection() {
         );
     }
 }
+
+#[tokio::test]
+async fn test_partial_crawl_run_crawl_skips_uncrawled_sitemap_orphans() {
+    use seo_lens::core::config::CrawlConfig;
+    use seo_lens::core::models::RuleId;
+    use seo_lens::crawler::run_crawl;
+
+    let mock_server = MockServer::start().await;
+    let base_uri = mock_server.uri();
+
+    let robots_txt = format!("User-agent: *\nSitemap: {}/sitemap.xml\n", base_uri);
+    Mock::given(method("GET"))
+        .and(path("/robots.txt"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(robots_txt))
+        .mount(&mock_server)
+        .await;
+
+    // Build a sitemap with 20 URLs
+    let mut sitemap_xml = String::from(r#"<?xml version="1.0" encoding="UTF-8"?>"#);
+    sitemap_xml.push_str(r#"<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">"#);
+    sitemap_xml.push_str(&format!("<url><loc>{}/</loc></url>", base_uri));
+    sitemap_xml.push_str(&format!("<url><loc>{}/page-1</loc></url>", base_uri));
+    for i in 2..20 {
+        sitemap_xml.push_str(&format!(
+            "<url><loc>{}/uncrawled-page-{}</loc></url>",
+            base_uri, i
+        ));
+    }
+    sitemap_xml.push_str("</urlset>");
+
+    Mock::given(method("GET"))
+        .and(path("/sitemap.xml"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/xml")
+                .set_body_string(sitemap_xml),
+        )
+        .mount(&mock_server)
+        .await;
+
+    // Homepage links to page-1
+    Mock::given(method("GET"))
+        .and(path("/"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/html")
+                .set_body_string(format!(
+                    r#"<!DOCTYPE html><html><head><title>Home</title><meta name="viewport" content="width=device-width"></head>
+                    <body><h1>Home</h1><a href="{}/page-1">Page 1</a></body></html>"#,
+                    base_uri
+                )),
+        )
+        .mount(&mock_server)
+        .await;
+
+    // Page 1 links to Page 2
+    Mock::given(method("GET"))
+        .and(path("/page-1"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/html")
+                .set_body_string(format!(
+                    r#"<!DOCTYPE html><html><head><title>Page 1</title><meta name="viewport" content="width=device-width"></head>
+                    <body><h1>Page 1</h1><a href="{}/page-2">Page 2</a></body></html>"#,
+                    base_uri
+                )),
+        )
+        .mount(&mock_server)
+        .await;
+
+    // Page 2
+    Mock::given(method("GET"))
+        .and(path("/page-2"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/html")
+                .set_body_string(
+                    r#"<!DOCTYPE html><html><head><title>Page 2</title><meta name="viewport" content="width=device-width"></head>
+                    <body><h1>Page 2</h1></body></html>"#,
+                ),
+        )
+        .mount(&mock_server)
+        .await;
+
+    // Configure a partial crawl limited to 2 pages
+    let mut config = CrawlConfig::new(&format!("{}/", base_uri)).expect("Valid config");
+    config.max_pages = 2;
+    config.max_depth = 5;
+    config.concurrency = 1;
+    config.delay_ms = 0;
+    config.no_aimd = true;
+    config.respect_robots = true;
+
+    let result = run_crawl(&config, None)
+        .await
+        .expect("Crawl should succeed");
+
+    assert_eq!(result.pages.len(), 2, "Should have crawled exactly 2 pages");
+    assert_eq!(
+        result.sitemap_urls.len(),
+        20,
+        "Should have discovered 20 sitemap URLs"
+    );
+
+    // In this partial crawl, the 18 uncrawled sitemap URLs must NOT be flagged as orphan pages!
+    let orphan_findings: Vec<_> = result
+        .issues
+        .iter()
+        .filter(|i| i.code == RuleId::AlertGraphOrphanPage)
+        .collect();
+
+    assert_eq!(
+        orphan_findings.len(),
+        0,
+        "Partial crawl must not flag uncrawled sitemap URLs as orphans! Found: {:?}",
+        orphan_findings
+    );
+
+    // Ensure no SiteGraph orphan penalties were levied against the site
+    assert!(
+        !result
+            .issues
+            .iter()
+            .any(|i| i.code == RuleId::AlertGraphOrphanPage),
+        "SiteGraph must have 0 orphan findings"
+    );
+}
