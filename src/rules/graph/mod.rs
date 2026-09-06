@@ -19,6 +19,7 @@ pub fn evaluate_graph_rules(
     graph: &SiteGraph,
     sitemap_urls: &[String],
     crawl_exhaustive: bool,
+    pagerank: &hashbrown::HashMap<u64, f64>,
 ) -> Vec<IssueFinding> {
     let mut findings = Vec::new();
 
@@ -31,7 +32,7 @@ pub fn evaluate_graph_rules(
     findings.extend(redirects::evaluate_redirects(graph));
     findings.extend(canonicals::evaluate_canonicals(graph));
     findings.extend(duplicates::evaluate_duplicates(pages));
-    findings.extend(architecture::evaluate_architecture(pages, graph));
+    findings.extend(architecture::evaluate_architecture(pages, graph, pagerank));
     findings.extend(hreflang::evaluate_hreflang(pages));
 
     findings

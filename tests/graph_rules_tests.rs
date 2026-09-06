@@ -4,6 +4,7 @@
 //! cycle and chain detection, content deduplication, and multi-page technical SEO rules.
 
 use compact_str::CompactString;
+use hashbrown::HashMap;
 use seo_lens::core::models::{
     DiscoveredLink, HreflangTag, IssueCategory, IssueFinding, PageReport, RobotsFlags, RuleId,
     Severity,
@@ -304,7 +305,7 @@ fn test_rule_orphan_page_detection() {
     ];
 
     let graph = SiteGraph::from_pages(&pages, &sitemap_urls);
-    let issues = evaluate_graph_rules(&pages, &graph, &sitemap_urls, true);
+    let issues = evaluate_graph_rules(&pages, &graph, &sitemap_urls, true, &HashMap::new());
 
     let orphan_issues: Vec<_> = issues
         .iter()
@@ -369,7 +370,7 @@ fn test_sitemap_xml_and_static_assets_never_flagged_as_orphans() {
     ];
 
     let graph = SiteGraph::from_pages(&pages, &sitemap_urls);
-    let issues = evaluate_graph_rules(&pages, &graph, &sitemap_urls, true);
+    let issues = evaluate_graph_rules(&pages, &graph, &sitemap_urls, true, &HashMap::new());
 
     let orphan_issues: Vec<_> = issues
         .iter()
@@ -417,7 +418,7 @@ fn test_rule_circular_redirect_loop() {
 
     let pages = vec![page_a, page_b];
     let graph = SiteGraph::from_pages(&pages, &[]);
-    let issues = evaluate_graph_rules(&pages, &graph, &[], true);
+    let issues = evaluate_graph_rules(&pages, &graph, &[], true, &HashMap::new());
 
     let loop_issues: Vec<_> = issues
         .iter()
@@ -478,7 +479,7 @@ fn test_rule_multi_hop_redirect_chain() {
 
     let pages = vec![page_a, page_b, page_c];
     let graph = SiteGraph::from_pages(&pages, &[]);
-    let issues = evaluate_graph_rules(&pages, &graph, &[], true);
+    let issues = evaluate_graph_rules(&pages, &graph, &[], true, &HashMap::new());
 
     let chain_issues: Vec<_> = issues
         .iter()
@@ -525,7 +526,7 @@ fn test_rule_canonical_loop() {
 
     let pages = vec![page_a, page_b];
     let graph = SiteGraph::from_pages(&pages, &[]);
-    let issues = evaluate_graph_rules(&pages, &graph, &[], true);
+    let issues = evaluate_graph_rules(&pages, &graph, &[], true, &HashMap::new());
 
     let canon_loop_issues: Vec<_> = issues
         .iter()
@@ -582,7 +583,7 @@ fn test_rule_exact_and_near_duplicate_content() {
 
     let pages = vec![page_1, page_2, page_3];
     let graph = SiteGraph::from_pages(&pages, &[]);
-    let issues = evaluate_graph_rules(&pages, &graph, &[], true);
+    let issues = evaluate_graph_rules(&pages, &graph, &[], true, &HashMap::new());
 
     let exact_dups: Vec<_> = issues
         .iter()
@@ -632,7 +633,7 @@ fn test_rule_duplicate_title_and_meta_desc() {
 
     let pages = vec![page_1, page_2];
     let graph = SiteGraph::from_pages(&pages, &[]);
-    let issues = evaluate_graph_rules(&pages, &graph, &[], true);
+    let issues = evaluate_graph_rules(&pages, &graph, &[], true, &HashMap::new());
 
     let dup_titles: Vec<_> = issues
         .iter()
@@ -689,7 +690,7 @@ fn test_rule_dead_end_page_and_crawl_depth() {
 
     let pages = vec![root, deep];
     let graph = SiteGraph::from_pages(&pages, &[]);
-    let issues = evaluate_graph_rules(&pages, &graph, &[], true);
+    let issues = evaluate_graph_rules(&pages, &graph, &[], true, &HashMap::new());
 
     let dead_end: Vec<_> = issues
         .iter()
@@ -741,7 +742,7 @@ fn test_rule_hreflang_non_reciprocal() {
 
     let pages = vec![page_en, page_es];
     let graph = SiteGraph::from_pages(&pages, &[]);
-    let issues = evaluate_graph_rules(&pages, &graph, &[], true);
+    let issues = evaluate_graph_rules(&pages, &graph, &[], true, &HashMap::new());
 
     let non_reciprocal: Vec<_> = issues
         .iter()
@@ -765,7 +766,7 @@ fn test_zero_panics_on_empty_and_disconnected_graphs() {
     let pr = compute_pagerank(&graph, 0.85, 100, 1e-6);
     assert!(pr.is_empty());
 
-    let issues = evaluate_graph_rules(&empty_pages, &graph, &[], true);
+    let issues = evaluate_graph_rules(&empty_pages, &graph, &[], true, &HashMap::new());
     assert!(issues.is_empty());
 }
 
@@ -860,7 +861,7 @@ fn test_partial_crawl_never_flags_uncrawled_sitemap_urls_as_orphans() {
     let graph = SiteGraph::from_pages(&pages, &sitemap_urls);
 
     // Evaluate with crawl_exhaustive = false (simulating partial crawl)
-    let issues = evaluate_graph_rules(&pages, &graph, &sitemap_urls, false);
+    let issues = evaluate_graph_rules(&pages, &graph, &sitemap_urls, false, &HashMap::new());
 
     let orphan_issues: Vec<_> = issues
         .iter()
@@ -968,7 +969,7 @@ fn test_exhaustive_crawl_flags_all_unlinked_sitemap_urls_as_orphans() {
     let graph = SiteGraph::from_pages(&pages, &sitemap_urls);
 
     // Evaluate with crawl_exhaustive = true (simulating an exhaustive crawl that visited all linked pages)
-    let issues = evaluate_graph_rules(&pages, &graph, &sitemap_urls, true);
+    let issues = evaluate_graph_rules(&pages, &graph, &sitemap_urls, true, &HashMap::new());
 
     let orphan_issues: Vec<_> = issues
         .iter()

@@ -4,7 +4,7 @@
 //! streaming HTML parsing, AIMD politeness throttling, and post-crawl site graph analysis.
 
 use crate::core::config::CrawlConfig;
-use crate::core::models::{DiscoveredLink, IssueFinding, PageReport, Severity};
+use crate::core::models::{DiscoveredLink, IssueFinding, PageReport, RuleId, Severity};
 use crate::core::url::{
     count_content_facets, has_sorting_facets, is_internal, is_static_asset_url, normalize_url,
     url_hash,
@@ -18,6 +18,7 @@ use crate::error::SeoResult;
 use crate::graph::{compute_pagerank, SiteGraph};
 use crate::parser::{parse_html, ParsedPage};
 use crate::report::score::calculate_health_score;
+use crate::rules::catalog::get_rule;
 use crate::rules::{evaluate_graph, evaluate_page};
 use compact_str::CompactString;
 use hashbrown::{HashMap, HashSet};
@@ -143,32 +144,73 @@ async fn discover_robots_and_sitemaps(
     client: &HttpClient,
     seed_url: &str,
     respect_robots: bool,
-) -> (Option<RobotsTxt>, Vec<String>) {
+) -> (Option<RobotsTxt>, Vec<String>, Vec<IssueFinding>) {
     let Ok(parsed_url) = url::Url::parse(seed_url) else {
-        return (None, Vec::new());
+        return (None, Vec::new(), Vec::new());
     };
 
     let origin = format!("{}://{}", parsed_url.scheme(), parsed_url.authority());
     let robots_url = format!("{}/robots.txt", origin);
     let mut sitemap_feed_seeds = Vec::new();
+    let mut site_issues = Vec::new();
 
-    let robots = if respect_robots {
-        if let Ok(res) = client.fetch(&robots_url).await {
-            if res.status_code == 200 {
-                let parsed_robots = RobotsTxt::parse(&res.body);
-                for sm in parsed_robots.sitemaps() {
-                    sitemap_feed_seeds.push(sm.to_string());
-                }
-                Some(parsed_robots)
-            } else {
-                None
+    let fetched_robots = if let Ok(res) = client.fetch(&robots_url).await {
+        if res.status_code == 200 {
+            let parsed_robots = RobotsTxt::parse(&res.body);
+            for sm in parsed_robots.sitemaps() {
+                sitemap_feed_seeds.push(sm.to_string());
             }
+
+            // Inspect for AI search citation bots disallow (Category 11)
+            const AI_SEARCH_BOTS: &[&str] = &[
+                "GPTBot",
+                "ClaudeBot",
+                "PerplexityBot",
+                "CCBot",
+                "OAI-SearchBot",
+            ];
+
+            let mut blocked_ai_bots = Vec::new();
+            for &bot in AI_SEARCH_BOTS {
+                if !parsed_robots.is_allowed(bot, "/") {
+                    blocked_ai_bots.push(bot);
+                }
+            }
+
+            if !blocked_ai_bots.is_empty() {
+                let rule = get_rule(RuleId::AlertAiSearchBotsBlocked);
+                let msg = format!(
+                    "Robots.txt disallows AI search and citation crawlers ({}), preventing discovery in AI search overviews.",
+                    blocked_ai_bots.join(", ")
+                );
+                site_issues.push(rule.to_finding(&robots_url, Some(&msg)));
+            }
+
+            Some(parsed_robots)
         } else {
             None
         }
     } else {
         None
     };
+
+    let robots = if respect_robots { fetched_robots } else { None };
+
+    // Probe /llms.txt (Category 11)
+    let llms_url = format!("{}/llms.txt", origin);
+    let has_llms_txt = match client.fetch(&llms_url).await {
+        Ok(res) => res.status_code == 200,
+        Err(_) => false,
+    };
+
+    if !has_llms_txt {
+        let rule = get_rule(RuleId::WarnLlmsTxtMissing);
+        let msg = format!(
+            "The website does not publish a /llms.txt file at {}.",
+            llms_url
+        );
+        site_issues.push(rule.to_finding(&llms_url, Some(&msg)));
+    }
 
     // If robots.txt declared no sitemaps, probe standard conventions per CRAWLER_SPEC §5.2
     if sitemap_feed_seeds.is_empty() {
@@ -230,7 +272,7 @@ async fn discover_robots_and_sitemaps(
     }
 
     let sitemap_urls = discovered_pages.into_iter().collect::<Vec<String>>();
-    (robots, sitemap_urls)
+    (robots, sitemap_urls, site_issues)
 }
 
 async fn fetch_and_audit_page(
@@ -320,7 +362,7 @@ fn finalize_crawl(
     let graph = SiteGraph::from_pages(&pages, &sitemap_urls);
     let pagerank = compute_pagerank(&graph, 0.85, 100, 1e-6);
 
-    let graph_issues = evaluate_graph(&pages, &graph, &sitemap_urls, crawl_exhaustive);
+    let graph_issues = evaluate_graph(&pages, &graph, &sitemap_urls, crawl_exhaustive, &pagerank);
     issues.extend(graph_issues);
 
     let health_score = calculate_health_score(pages.len(), &issues);
@@ -352,7 +394,7 @@ pub async fn run_crawl(
         ..Default::default()
     })?);
 
-    let (robots_txt, sitemap_urls) =
+    let (robots_txt, sitemap_urls, site_issues) =
         discover_robots_and_sitemaps(&client, &normalized_start, config.respect_robots).await;
 
     let frontier = Arc::new(Mutex::new(Frontier::new(
@@ -383,6 +425,16 @@ pub async fn run_crawl(
     let mut alert_count = 0usize;
     let mut warning_count = 0usize;
     let mut hit_max_pages = false;
+
+    for issue in &site_issues {
+        match issue.severity {
+            Severity::Critical => critical_count += 1,
+            Severity::Alert => alert_count += 1,
+            Severity::Warning => warning_count += 1,
+            Severity::Notice => {}
+        }
+        all_issues.push(issue.clone());
+    }
 
     loop {
         while let Ok(permit) = semaphore.clone().try_acquire_owned() {
