@@ -70,6 +70,10 @@ pub struct CrawlConfig {
     pub ephemeral: bool,
     /// Disable dynamic AIMD rate throttling (useful for high-speed local/staging site crawls).
     pub no_aimd: bool,
+    /// Maximum number of content query parameters before flagging or pruning faceted spider traps (default: 2).
+    pub max_query_params: usize,
+    /// Whether to prune sorting and display facet URLs (e.g. ?sort=, ?order=, ?view=) (default: true).
+    pub ignore_sorting_facets: bool,
 }
 
 impl CrawlConfig {
@@ -82,6 +86,8 @@ impl CrawlConfig {
     /// - `delay_ms`: 0 (dynamic AIMD politeness)
     /// - `user_agent`: "SEOLens/1.0"
     /// - `respect_robots`: true
+    /// - `max_query_params`: 2
+    /// - `ignore_sorting_facets`: true
     ///
     /// # Errors
     ///
@@ -96,6 +102,8 @@ impl CrawlConfig {
     /// assert_eq!(config.start_url, "https://example.com/");
     /// assert_eq!(config.concurrency, 10);
     /// assert!(config.respect_robots);
+    /// assert_eq!(config.max_query_params, 2);
+    /// assert!(config.ignore_sorting_facets);
     /// ```
     pub fn new(start_url: &str) -> SeoResult<Self> {
         let normalized = normalize_url(start_url)?;
@@ -113,6 +121,8 @@ impl CrawlConfig {
             headers: Vec::new(),
             ephemeral: false,
             no_aimd: false,
+            max_query_params: 2,
+            ignore_sorting_facets: true,
         })
     }
 
@@ -161,6 +171,8 @@ mod tests {
         assert_eq!(config.concurrency, 10);
         assert_eq!(config.user_agent, DEFAULT_USER_AGENT);
         assert!(config.respect_robots);
+        assert_eq!(config.max_query_params, 2);
+        assert!(config.ignore_sorting_facets);
         assert!(config.validate().is_ok());
 
         let mut invalid_config = config.clone();

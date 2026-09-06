@@ -144,6 +144,14 @@ pub static RULE_CATALOG: &[RuleDefinition] = &[
         description: "Time to First Byte (TTFB) exceeded 1,800 ms, indicating severe origin database or compute latency.",
         fix_advice: "Enable edge caching (CDN), optimize backend database queries, or increase server resources.",
     },
+    RuleDefinition {
+        id: RuleId::AlertFacetedSpiderTrap,
+        category: IssueCategory::HttpTransport,
+        severity: Severity::Alert,
+        title: "Faceted Navigation Spider Trap",
+        description: "The URL contains excessive faceted filter or sorting parameters without proper canonicalization, risking search engine crawl budget waste.",
+        fix_advice: "Implement self-referencing canonical tags to base URLs or disallow parameterized filter combinations in robots.txt.",
+    },
 
     // --- Category 2: Titles & Metadata ---
     RuleDefinition {

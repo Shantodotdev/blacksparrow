@@ -59,16 +59,12 @@
 
 use crate::error::{SeoError, SeoResult};
 use ahash::AHasher;
+use serde::{Deserialize, Serialize};
 use std::hash::Hasher;
 use url::Url;
 
-/// Known marketing, analytics, and advertising tracking parameters to strip.
-const TRACKING_PARAMS: &[&str] = &[
-    "utm_source",
-    "utm_medium",
-    "utm_campaign",
-    "utm_term",
-    "utm_content",
+/// Known marketing, analytics, session, and e-commerce tracking parameters to strip.
+pub const TRACKING_PARAMS: &[&str] = &[
     "fbclid",
     "gclid",
     "msclkid",
@@ -76,6 +72,22 @@ const TRACKING_PARAMS: &[&str] = &[
     "_ga",
     "_gl",
     "ref",
+    "source",
+    "affiliate",
+    // E-Commerce & ad network tokens (Daraz, Alibaba, Lazada, etc.)
+    "scm",
+    "spm",
+    "pvid",
+    "clicktrackinfo",
+    "wh_pid",
+    "hybrid",
+    "data_prefetch",
+];
+
+/// Known sorting, pagination size, and display/view layout query parameters.
+pub const SORTING_DISPLAY_PARAMS: &[&str] = &[
+    "sort", "order", "dir", "orderby", "sort_by", "limit", "count", "per_page", "view", "display",
+    "mode", "layout",
 ];
 
 /// Normalizes a raw URL string through the 8-stage canonicalization pipeline.
@@ -305,11 +317,69 @@ pub fn is_internal(target_url: &str, base_url: &str) -> bool {
     }
 }
 
-/// Checks whether a query parameter key matches known analytics or marketing trackers.
-fn is_tracking_parameter(key: &str) -> bool {
+/// Categorization of URL query parameters for crawl budget optimization.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum QueryParamCategory {
+    /// Marketing, analytics, or session trackers (e.g. `utm_*`, `fbclid`, `spm`, `scm`).
+    Tracking,
+    /// Sorting, pagination size, or layout variations (e.g. `sort`, `order`, `view`, `limit`).
+    SortingOrDisplay,
+    /// Genuine content filtering facets (e.g. `category`, `brand`, `tag`, `color`, `q`).
+    ContentFacet,
+}
+
+/// Checks whether a query parameter key matches known analytics, marketing, or session trackers.
+pub fn is_tracking_parameter(key: &str) -> bool {
+    let lower = key.to_ascii_lowercase();
+    if lower.starts_with("utm_") {
+        return true;
+    }
     TRACKING_PARAMS
         .iter()
-        .any(|&param| param.eq_ignore_ascii_case(key))
+        .any(|&param| param.eq_ignore_ascii_case(&lower))
+}
+
+/// Checks whether a query parameter key controls display ordering, pagination sizing, or layout.
+pub fn is_sorting_or_display_parameter(key: &str) -> bool {
+    let lower = key.to_ascii_lowercase();
+    SORTING_DISPLAY_PARAMS
+        .iter()
+        .any(|&param| param.eq_ignore_ascii_case(&lower))
+}
+
+/// Classifies a query parameter into its functional category: [`QueryParamCategory`].
+pub fn classify_parameter(key: &str) -> QueryParamCategory {
+    if is_tracking_parameter(key) {
+        QueryParamCategory::Tracking
+    } else if is_sorting_or_display_parameter(key) {
+        QueryParamCategory::SortingOrDisplay
+    } else {
+        QueryParamCategory::ContentFacet
+    }
+}
+
+/// Returns `true` if the URL contains any sorting, display ordering, or layout query parameters.
+pub fn has_sorting_facets(raw_url: &str) -> bool {
+    if let Ok(parsed) = Url::parse(raw_url) {
+        for (k, _) in parsed.query_pairs() {
+            if classify_parameter(&k) == QueryParamCategory::SortingOrDisplay {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Counts the number of content facet parameters present in the URL query string.
+pub fn count_content_facets(raw_url: &str) -> usize {
+    if let Ok(parsed) = Url::parse(raw_url) {
+        parsed
+            .query_pairs()
+            .filter(|(k, _)| classify_parameter(k) == QueryParamCategory::ContentFacet)
+            .count()
+    } else {
+        0
+    }
 }
 
 /// Known non-HTML static asset file extensions.

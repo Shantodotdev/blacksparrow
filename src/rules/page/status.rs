@@ -92,4 +92,17 @@ pub fn check_status(fetch: &FetchResult, issues: &mut Vec<IssueFinding>) {
             )),
         ));
     }
+
+    // 8. Faceted Spider Trap (> 2 content facet query parameters)
+    let content_facet_count = crate::core::url::count_content_facets(url);
+    if content_facet_count > 2 {
+        let rule = get_rule(RuleId::AlertFacetedSpiderTrap);
+        issues.push(rule.to_finding(
+            url,
+            Some(&format!(
+                "URL contains {} faceted filter parameters, risking a search engine spider trap: {}",
+                content_facet_count, url
+            )),
+        ));
+    }
 }

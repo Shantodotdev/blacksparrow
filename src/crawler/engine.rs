@@ -5,7 +5,10 @@
 
 use crate::core::config::CrawlConfig;
 use crate::core::models::{DiscoveredLink, IssueFinding, PageReport, Severity};
-use crate::core::url::{is_internal, is_static_asset_url, normalize_url, url_hash};
+use crate::core::url::{
+    count_content_facets, has_sorting_facets, is_internal, is_static_asset_url, normalize_url,
+    url_hash,
+};
 use crate::crawler::aimd::AimdController;
 use crate::crawler::client::{FetchOptions, FetchResult, HttpClient};
 use crate::crawler::frontier::{Frontier, FrontierEntry};
@@ -465,10 +468,41 @@ pub async fn run_crawl(
 
                 let discovered_count = if config.max_depth == 0 || outcome.depth < config.max_depth {
                     let mut f = frontier.lock().await;
-                    for link in outcome.discovered_links {
-                        if link.is_internal && !is_static_asset_url(&link.target_url) {
-                            let _ = f.push(&link.target_url, outcome.depth + 1, Some(&outcome.report.url));
+
+                    // Canonical facet pruning:
+                    // If the current page is a parameterized/faceted URL whose canonical URL points
+                    // to a base URL without those parameters (or canonical differs from current page),
+                    // do not enqueue parameterized child links discovered on this page.
+                    let is_canonicalized_away = match outcome.report.canonical_url {
+                        Some(ref canon) => {
+                            outcome.report.url.contains('?') && canon != &outcome.report.url
                         }
+                        None => false,
+                    };
+
+                    for link in outcome.discovered_links {
+                        if !link.is_internal || is_static_asset_url(&link.target_url) {
+                            continue;
+                        }
+
+                        // Faceted defense 1: Prune sorting & display facets if configured
+                        if config.ignore_sorting_facets && has_sorting_facets(&link.target_url) {
+                            continue;
+                        }
+
+                        // Faceted defense 2: Prune excessive content query parameters
+                        if config.max_query_params > 0
+                            && count_content_facets(&link.target_url) > config.max_query_params
+                        {
+                            continue;
+                        }
+
+                        // Faceted defense 3: Canonical facet pruning (do not crawl deeper parameter variants from a non-canonical facet page)
+                        if is_canonicalized_away && link.target_url.contains('?') {
+                            continue;
+                        }
+
+                        let _ = f.push(&link.target_url, outcome.depth + 1, Some(&outcome.report.url));
                     }
                     f.enqueued_count() as usize
                 } else {

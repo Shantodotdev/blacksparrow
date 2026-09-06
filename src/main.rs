@@ -108,6 +108,14 @@ pub struct AuditArgs {
     /// Disable dynamic AIMD rate throttling (useful for high-speed local site crawls)
     #[arg(long, default_value_t = false)]
     pub no_aimd: bool,
+
+    /// Maximum number of content query parameters before flagging or pruning faceted spider traps
+    #[arg(long, default_value_t = 2)]
+    pub max_query_params: usize,
+
+    /// Strip/prune sorting and display facets (sort, order, view, etc.)
+    #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
+    pub ignore_sorting_facets: bool,
 }
 
 #[derive(Args, Debug)]
@@ -171,6 +179,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             config.respect_robots = !args.no_robots;
             config.no_aimd = args.no_aimd;
             config.ephemeral = args.ephemeral;
+            config.max_query_params = args.max_query_params;
+            config.ignore_sorting_facets = args.ignore_sorting_facets;
 
             seo_lens::report::print_audit_banner(
                 &config.start_url,

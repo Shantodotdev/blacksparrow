@@ -143,5 +143,12 @@ pub fn calculate_url_importance(
     // 6. Pagination Penalty: -300 if paginated
     let p_pagination = if is_pagination_url(url) { 300i64 } else { 0i64 };
 
-    s_seed + s_depth + s_indegree + s_path - p_query - p_pagination
+    // 7. Sorting / Display Facet Penalty: -500 if contains sorting or display parameters
+    let p_sorting = if crate::core::url::has_sorting_facets(url) {
+        500i64
+    } else {
+        0i64
+    };
+
+    s_seed + s_depth + s_indegree + s_path - p_query - p_pagination - p_sorting
 }

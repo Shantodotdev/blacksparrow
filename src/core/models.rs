@@ -105,6 +105,7 @@ pub enum RuleId {
     InfoHttp307_308Redirect,
     AlertWafBotChallenge,
     WarnSlowTtfb,
+    AlertFacetedSpiderTrap,
 
     // --- Category 2: Titles & Basic Metadata ---
     ErrTitleMissing,
@@ -190,6 +191,7 @@ impl RuleId {
             Self::InfoHttp307_308Redirect => "INFO_HTTP_307_308_REDIRECT",
             Self::AlertWafBotChallenge => "ALERT_WAF_BOT_CHALLENGE",
             Self::WarnSlowTtfb => "WARN_SLOW_TTFB",
+            Self::AlertFacetedSpiderTrap => "ALERT_FACETED_SPIDER_TRAP",
 
             Self::ErrTitleMissing => "ERR_TITLE_MISSING",
             Self::WarnTitleTooShort => "WARN_TITLE_TOO_SHORT",
