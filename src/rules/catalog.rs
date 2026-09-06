@@ -602,6 +602,22 @@ pub static RULE_CATALOG: &[RuleDefinition] = &[
         description: "A structured data block lacks required fields needed to qualify for Google Rich Results.",
         fix_advice: "Provide all mandatory fields per Google Search Central structured data specifications.",
     },
+    RuleDefinition {
+        id: RuleId::WarnSchemaMultipleProductEntities,
+        category: IssueCategory::StructuredData,
+        severity: Severity::Warning,
+        title: "Multiple Product Schema Entities",
+        description: "Document defines multiple top-level Product schemas, creating ambiguity for Google Rich Results.",
+        fix_advice: "Consolidate into a single primary Product entity or nest secondary items under isRelatedTo or hasVariant.",
+    },
+    RuleDefinition {
+        id: RuleId::WarnSchemaInvalidDateFormat,
+        category: IssueCategory::StructuredData,
+        severity: Severity::Warning,
+        title: "Invalid Schema Date Format",
+        description: "Structured data date field fails ISO 8601 date format validation.",
+        fix_advice: "Format dates using standard ISO 8601 format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SSZ).",
+    },
 
     // --- Category 10: AI Search & Content Quality ---
     RuleDefinition {
@@ -620,8 +636,24 @@ pub static RULE_CATALOG: &[RuleDefinition] = &[
         description: "The document contains placeholder dummy text (\"Lorem ipsum\"), indicating unfinished production staging.",
         fix_advice: "Replace dummy placeholder text with finalized editorial copy before indexing.",
     },
+    RuleDefinition {
+        id: RuleId::AlertAiSearchBotsBlocked,
+        category: IssueCategory::GeoAiSearch,
+        severity: Severity::Alert,
+        title: "AI Search Citation Bots Blocked",
+        description: "Robots.txt disallows AI search and citation crawlers (e.g. GPTBot, PerplexityBot, ClaudeBot), preventing discovery in AI search overviews.",
+        fix_advice: "Remove Disallow directives for search citation user-agents in robots.txt if AI search visibility is desired.",
+    },
+    RuleDefinition {
+        id: RuleId::WarnLlmsTxtMissing,
+        category: IssueCategory::GeoAiSearch,
+        severity: Severity::Warning,
+        title: "Missing /llms.txt File",
+        description: "The website does not publish a /llms.txt file to guide AI crawlers and LLMs.",
+        fix_advice: "Publish a /llms.txt Markdown file at the domain root providing a structured overview of site content for LLMs.",
+    },
 
-    // --- Category 11: Internationalization & Hreflang (Graph) ---
+    // --- Category 11: Internationalization & Hreflang ---
     RuleDefinition {
         id: RuleId::ErrHreflangNotReciprocal,
         category: IssueCategory::Internationalization,
@@ -645,6 +677,46 @@ pub static RULE_CATALOG: &[RuleDefinition] = &[
         title: "Hreflang Points to Broken or Redirecting URL",
         description: "Hreflang alternate points to a target that returns a 3xx redirect, 4xx client error, or 5xx server error.",
         fix_advice: "Point hreflang annotations directly to active 200 OK canonical destinations.",
+    },
+    RuleDefinition {
+        id: RuleId::ErrHreflangInvalidLangCode,
+        category: IssueCategory::Internationalization,
+        severity: Severity::Critical,
+        title: "Invalid Hreflang Language/Region Code",
+        description: "Hreflang language or region code fails ISO 639-1 / RFC 5646 validation.",
+        fix_advice: "Correct language and region codes to match standard ISO formats (e.g. 'en-US', 'es', or 'x-default').",
+    },
+    RuleDefinition {
+        id: RuleId::WarnHreflangCrossDomain,
+        category: IssueCategory::Internationalization,
+        severity: Severity::Warning,
+        title: "Cross-Domain Hreflang Alternate",
+        description: "Hreflang tag references an external domain rather than the internal crawl host.",
+        fix_advice: "Verify that cross-domain hreflang clusters are reciprocal and intentionally configured.",
+    },
+    RuleDefinition {
+        id: RuleId::WarnHreflangMissingXDefault,
+        category: IssueCategory::Internationalization,
+        severity: Severity::Warning,
+        title: "Missing Hreflang x-default Tag",
+        description: "Hreflang cluster does not specify an 'x-default' fallback page for unmatched languages.",
+        fix_advice: "Add hreflang='x-default' pointing to the global landing or language selector page.",
+    },
+    RuleDefinition {
+        id: RuleId::ErrHreflangMissingSelfReference,
+        category: IssueCategory::Internationalization,
+        severity: Severity::Critical,
+        title: "Missing Self-Referencing Hreflang",
+        description: "Page declares alternate hreflang tags for other languages but omits a self-referencing tag for its own URL.",
+        fix_advice: "Include a self-referencing hreflang tag matching the current page's URL.",
+    },
+    RuleDefinition {
+        id: RuleId::WarnHtmlLangMissing,
+        category: IssueCategory::Internationalization,
+        severity: Severity::Warning,
+        title: "Missing HTML Lang Attribute",
+        description: "The root <html> tag lacks a lang attribute or contains empty whitespace.",
+        fix_advice: "Declare the primary document language on the root <html> tag (e.g. <html lang='en'>).",
     },
 
     // --- Category 12: Site-Wide Graph & Architecture (Post-Crawl) ---
@@ -727,6 +799,14 @@ pub static RULE_CATALOG: &[RuleDefinition] = &[
         title: "High Crawl Depth",
         description: "Page requires more than 4 link hops to reach from the root seed URL, causing search crawlers to crawl it infrequently.",
         fix_advice: "Flatten site architecture by linking important pages from higher-level hub pages or category navigation.",
+    },
+    RuleDefinition {
+        id: RuleId::WarnLowInternalPagerankHub,
+        category: IssueCategory::SiteGraph,
+        severity: Severity::Warning,
+        title: "Low PageRank Navigation Hub",
+        description: "Page contains high internal out-degree (50+ outgoing links) but receives very low PageRank equity, indicating an isolated navigation hub.",
+        fix_advice: "Strengthen incoming internal link pathways to this hub from the homepage, main navigation, or high-equity category pages.",
     },
 ];
 

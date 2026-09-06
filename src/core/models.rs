@@ -178,15 +178,24 @@ pub enum RuleId {
     // --- Category 9: Structured Data & Schema.org ---
     ErrSchemaSyntaxError,
     WarnSchemaMissingRequiredFields,
+    WarnSchemaMultipleProductEntities,
+    WarnSchemaInvalidDateFormat,
 
     // --- Category 10: Content Quality & AI Search ---
     WarnContentThin,
     WarnLoremIpsumDetected,
+    AlertAiSearchBotsBlocked,
+    WarnLlmsTxtMissing,
 
-    // --- Category 11: Internationalization & Hreflang (Graph) ---
+    // --- Category 11: Internationalization & Hreflang ---
     ErrHreflangNotReciprocal,
     ErrHreflangToNonCanonical,
     ErrHreflangToBrokenOrRedirect,
+    ErrHreflangInvalidLangCode,
+    WarnHreflangCrossDomain,
+    WarnHreflangMissingXDefault,
+    ErrHreflangMissingSelfReference,
+    WarnHtmlLangMissing,
 
     // --- Category 12: Site-Wide Graph & Architecture (Post-Crawl) ---
     AlertGraphOrphanPage,
@@ -199,6 +208,7 @@ pub enum RuleId {
     WarnGraphDuplicateMetaDescs,
     WarnGraphDeadEndPage,
     WarnGraphHighCrawlDepth,
+    WarnLowInternalPagerankHub,
 }
 
 impl RuleId {
@@ -276,13 +286,22 @@ impl RuleId {
 
             Self::ErrSchemaSyntaxError => "ERR_SCHEMA_SYNTAX_ERROR",
             Self::WarnSchemaMissingRequiredFields => "WARN_SCHEMA_MISSING_REQUIRED_FIELDS",
+            Self::WarnSchemaMultipleProductEntities => "WARN_SCHEMA_MULTIPLE_PRODUCT_ENTITIES",
+            Self::WarnSchemaInvalidDateFormat => "WARN_SCHEMA_INVALID_DATE_FORMAT",
 
             Self::WarnContentThin => "WARN_CONTENT_THIN",
             Self::WarnLoremIpsumDetected => "WARN_LOREM_IPSUM_DETECTED",
+            Self::AlertAiSearchBotsBlocked => "ALERT_AI_SEARCH_BOTS_BLOCKED",
+            Self::WarnLlmsTxtMissing => "WARN_LLMS_TXT_MISSING",
 
             Self::ErrHreflangNotReciprocal => "ERR_HREFLANG_NOT_RECIPROCAL",
             Self::ErrHreflangToNonCanonical => "ERR_HREFLANG_TO_NON_CANONICAL",
             Self::ErrHreflangToBrokenOrRedirect => "ERR_HREFLANG_TO_BROKEN_OR_REDIRECT",
+            Self::ErrHreflangInvalidLangCode => "ERR_HREFLANG_INVALID_LANG_CODE",
+            Self::WarnHreflangCrossDomain => "WARN_HREFLANG_CROSS_DOMAIN",
+            Self::WarnHreflangMissingXDefault => "WARN_HREFLANG_MISSING_X_DEFAULT",
+            Self::ErrHreflangMissingSelfReference => "ERR_HREFLANG_MISSING_SELF_REFERENCE",
+            Self::WarnHtmlLangMissing => "WARN_HTML_LANG_MISSING",
 
             Self::AlertGraphOrphanPage => "ALERT_GRAPH_ORPHAN_PAGE",
             Self::ErrGraphRedirectLoop => "ERR_GRAPH_REDIRECT_LOOP",
@@ -294,6 +313,7 @@ impl RuleId {
             Self::WarnGraphDuplicateMetaDescs => "WARN_GRAPH_DUPLICATE_META_DESCS",
             Self::WarnGraphDeadEndPage => "WARN_GRAPH_DEAD_END_PAGE",
             Self::WarnGraphHighCrawlDepth => "WARN_GRAPH_HIGH_CRAWL_DEPTH",
+            Self::WarnLowInternalPagerankHub => "WARN_LOW_INTERNAL_PAGERANK_HUB",
         }
     }
 }
