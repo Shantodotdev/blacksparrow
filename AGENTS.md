@@ -50,8 +50,9 @@ The repository is structured as a **2-Member Cargo Workspace**:
 ### Verification Protocol
 
 - **Mandatory Formatting**: After making any code changes and before handing over to the user, **always run `cargo fmt --all`**.
+- **Test Runner Preference**: If `cargo-nextest` is installed on the system (check via `cargo nextest --version`), always prioritize using `cargo nextest run` (or `cargo nextest run --workspace`) for running unit and integration tests because it is faster and provides superior UI output. Fall back to standard `cargo test` if `nextest` is unavailable. Note that doc tests are executed with `cargo test --doc`.
 - **Minor / Trivial Tasks**: Run `cargo fmt --all`, `cargo check`, and `cargo clippy`.
-- **Phase Work & Major Features**: Run `cargo fmt --all`, `cargo test`, and execute the manual verification gate defined in `docs/PRODUCTION_SPEC.md`.
+- **Phase Work & Major Features**: Run `cargo fmt --all`, run the test suite (preferring `cargo nextest run` if installed, otherwise `cargo test`), and execute the manual verification gate defined in `docs/PRODUCTION_SPEC.md`.
 - **Super Simple Edits** (e.g. typos, comments): Run `cargo fmt --all`.
 
 ---
