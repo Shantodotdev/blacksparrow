@@ -9,7 +9,7 @@ use crate::core::models::{IssueFinding, PageReport, RuleId};
 use crate::core::url::is_static_asset_url;
 use crate::graph::SiteGraph;
 use crate::rules::catalog::get_rule;
-use hashbrown::HashSet;
+use hashbrown::{HashMap, HashSet};
 
 /// Checks whether a URL targets a sitemap feed file or non-HTML resource.
 fn is_non_content_feed_or_asset(url: &str) -> bool {
@@ -21,13 +21,22 @@ fn is_non_content_feed_or_asset(url: &str) -> bool {
 }
 
 /// Evaluates orphan page defects across sitemap URLs and crawled pages.
+///
+/// In partial crawls (`crawl_exhaustive == false`), uncrawled sitemap URLs are skipped
+/// to avoid false-positive orphan traps on large websites capped by page quotas.
 pub fn evaluate_orphans(
     pages: &[PageReport],
     graph: &SiteGraph,
     sitemap_urls: &[String],
+    crawl_exhaustive: bool,
 ) -> Vec<IssueFinding> {
     let mut findings = Vec::new();
     let mut evaluated_urls = HashSet::new();
+
+    let crawled_pages_map: HashMap<&str, u16> = pages
+        .iter()
+        .map(|p| (p.url.as_str(), p.crawl_depth))
+        .collect();
 
     // 1. Evaluate explicit sitemap URLs provided from XML sitemap parsing
     for url in sitemap_urls {
@@ -35,8 +44,13 @@ pub fn evaluate_orphans(
             continue;
         }
 
-        // The crawl seed/root page (depth 0) is the entrypoint and cannot be an orphan.
-        if pages.iter().any(|p| p.url == *url && p.crawl_depth == 0) {
+        if let Some(&depth) = crawled_pages_map.get(url.as_str()) {
+            // Crawl seed/root page (depth 0) is the entrypoint and cannot be an orphan
+            if depth == 0 {
+                continue;
+            }
+        } else if !crawl_exhaustive {
+            // In a partial crawl, uncrawled sitemap URLs cannot be verified as orphans
             continue;
         }
 

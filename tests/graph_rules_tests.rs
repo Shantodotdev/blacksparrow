@@ -5,9 +5,12 @@
 
 use compact_str::CompactString;
 use seo_lens::core::models::{
-    DiscoveredLink, HreflangTag, IssueCategory, PageReport, RobotsFlags, RuleId, Severity,
+    DiscoveredLink, HreflangTag, IssueCategory, IssueFinding, PageReport, RobotsFlags, RuleId,
+    Severity,
 };
+use seo_lens::crawler::sitemap::{parse_sitemap, SitemapDocument};
 use seo_lens::graph::{compute_pagerank, LinkEdgeType, SiteGraph};
+use seo_lens::report::score::calculate_health_score;
 use seo_lens::rules::graph::evaluate_graph_rules;
 
 /// Helper to create a minimal dummy PageReport for graph tests.
@@ -299,7 +302,7 @@ fn test_rule_orphan_page_detection() {
     ];
 
     let graph = SiteGraph::from_pages(&pages, &sitemap_urls);
-    let issues = evaluate_graph_rules(&pages, &graph, &sitemap_urls);
+    let issues = evaluate_graph_rules(&pages, &graph, &sitemap_urls, true);
 
     let orphan_issues: Vec<_> = issues
         .iter()
@@ -364,7 +367,7 @@ fn test_sitemap_xml_and_static_assets_never_flagged_as_orphans() {
     ];
 
     let graph = SiteGraph::from_pages(&pages, &sitemap_urls);
-    let issues = evaluate_graph_rules(&pages, &graph, &sitemap_urls);
+    let issues = evaluate_graph_rules(&pages, &graph, &sitemap_urls, true);
 
     let orphan_issues: Vec<_> = issues
         .iter()
@@ -412,7 +415,7 @@ fn test_rule_circular_redirect_loop() {
 
     let pages = vec![page_a, page_b];
     let graph = SiteGraph::from_pages(&pages, &[]);
-    let issues = evaluate_graph_rules(&pages, &graph, &[]);
+    let issues = evaluate_graph_rules(&pages, &graph, &[], true);
 
     let loop_issues: Vec<_> = issues
         .iter()
@@ -473,7 +476,7 @@ fn test_rule_multi_hop_redirect_chain() {
 
     let pages = vec![page_a, page_b, page_c];
     let graph = SiteGraph::from_pages(&pages, &[]);
-    let issues = evaluate_graph_rules(&pages, &graph, &[]);
+    let issues = evaluate_graph_rules(&pages, &graph, &[], true);
 
     let chain_issues: Vec<_> = issues
         .iter()
@@ -520,7 +523,7 @@ fn test_rule_canonical_loop() {
 
     let pages = vec![page_a, page_b];
     let graph = SiteGraph::from_pages(&pages, &[]);
-    let issues = evaluate_graph_rules(&pages, &graph, &[]);
+    let issues = evaluate_graph_rules(&pages, &graph, &[], true);
 
     let canon_loop_issues: Vec<_> = issues
         .iter()
@@ -577,7 +580,7 @@ fn test_rule_exact_and_near_duplicate_content() {
 
     let pages = vec![page_1, page_2, page_3];
     let graph = SiteGraph::from_pages(&pages, &[]);
-    let issues = evaluate_graph_rules(&pages, &graph, &[]);
+    let issues = evaluate_graph_rules(&pages, &graph, &[], true);
 
     let exact_dups: Vec<_> = issues
         .iter()
@@ -627,7 +630,7 @@ fn test_rule_duplicate_title_and_meta_desc() {
 
     let pages = vec![page_1, page_2];
     let graph = SiteGraph::from_pages(&pages, &[]);
-    let issues = evaluate_graph_rules(&pages, &graph, &[]);
+    let issues = evaluate_graph_rules(&pages, &graph, &[], true);
 
     let dup_titles: Vec<_> = issues
         .iter()
@@ -684,7 +687,7 @@ fn test_rule_dead_end_page_and_crawl_depth() {
 
     let pages = vec![root, deep];
     let graph = SiteGraph::from_pages(&pages, &[]);
-    let issues = evaluate_graph_rules(&pages, &graph, &[]);
+    let issues = evaluate_graph_rules(&pages, &graph, &[], true);
 
     let dead_end: Vec<_> = issues
         .iter()
@@ -736,7 +739,7 @@ fn test_rule_hreflang_non_reciprocal() {
 
     let pages = vec![page_en, page_es];
     let graph = SiteGraph::from_pages(&pages, &[]);
-    let issues = evaluate_graph_rules(&pages, &graph, &[]);
+    let issues = evaluate_graph_rules(&pages, &graph, &[], true);
 
     let non_reciprocal: Vec<_> = issues
         .iter()
@@ -760,6 +763,272 @@ fn test_zero_panics_on_empty_and_disconnected_graphs() {
     let pr = compute_pagerank(&graph, 0.85, 100, 1e-6);
     assert!(pr.is_empty());
 
-    let issues = evaluate_graph_rules(&empty_pages, &graph, &[]);
+    let issues = evaluate_graph_rules(&empty_pages, &graph, &[], true);
     assert!(issues.is_empty());
+}
+
+#[test]
+fn test_partial_crawl_never_flags_uncrawled_sitemap_urls_as_orphans() {
+    let fixture_xml = include_str!("fixtures/large_sitemap_partial_crawl.xml");
+    let doc = parse_sitemap(fixture_xml.as_bytes()).expect("Failed to parse partial crawl fixture");
+    let sitemap_urls: Vec<String> = match doc {
+        SitemapDocument::UrlSet(entries) => {
+            entries.into_iter().map(|e| e.loc.to_string()).collect()
+        }
+        _ => panic!("Expected standard UrlSet in fixture"),
+    };
+
+    assert_eq!(
+        sitemap_urls.len(),
+        24,
+        "Fixture must contain 24 total sitemap URLs"
+    );
+
+    // Mock only 4 crawled pages (capped by max-pages = 4)
+    let page_home = mock_page(
+        "https://example.com/",
+        200,
+        0,
+        Some("Home"),
+        Some("Home Description"),
+        None,
+        0,
+        0,
+        vec![
+            mock_link("https://example.com/", "https://example.com/about", false),
+            mock_link("https://example.com/", "https://example.com/contact", false),
+        ],
+        vec![],
+    );
+    let page_about = mock_page(
+        "https://example.com/about",
+        200,
+        1,
+        Some("About Us"),
+        Some("About Us Description"),
+        None,
+        0,
+        0,
+        vec![
+            mock_link("https://example.com/about", "https://example.com/", false),
+            mock_link(
+                "https://example.com/about",
+                "https://example.com/contact",
+                false,
+            ),
+        ],
+        vec![],
+    );
+    let page_contact = mock_page(
+        "https://example.com/contact",
+        200,
+        1,
+        Some("Contact"),
+        Some("Contact Description"),
+        None,
+        0,
+        0,
+        vec![mock_link(
+            "https://example.com/contact",
+            "https://example.com/",
+            false,
+        )],
+        vec![],
+    );
+    // This page was crawled, declared in sitemap, but receives 0 internal incoming links from any crawled page!
+    let mut page_orphan = mock_page(
+        "https://example.com/orphan-crawled",
+        200,
+        1,
+        Some("Orphan Page"),
+        Some("Orphan Description"),
+        None,
+        0,
+        0,
+        vec![mock_link(
+            "https://example.com/orphan-crawled",
+            "https://example.com/",
+            false,
+        )],
+        vec![],
+    );
+    page_orphan.is_sitemap_url = true;
+
+    let pages = vec![page_home, page_about, page_contact, page_orphan];
+    let graph = SiteGraph::from_pages(&pages, &sitemap_urls);
+
+    // Evaluate with crawl_exhaustive = false (simulating partial crawl)
+    let issues = evaluate_graph_rules(&pages, &graph, &sitemap_urls, false);
+
+    let orphan_issues: Vec<_> = issues
+        .iter()
+        .filter(|i| i.code == RuleId::AlertGraphOrphanPage)
+        .collect();
+
+    // In a partial crawl, the 20 uncrawled sitemap URLs must NOT be flagged as orphans!
+    // ONLY the actually crawled orphan page (https://example.com/orphan-crawled) should be flagged.
+    assert_eq!(
+        orphan_issues.len(),
+        1,
+        "Partial crawl must ONLY flag actually crawled orphan pages, skipping uncrawled sitemap URLs"
+    );
+    assert_eq!(
+        orphan_issues[0].target_url,
+        "https://example.com/orphan-crawled"
+    );
+
+    // The health score for 4 crawled pages with 1 alert must NOT crash to 0!
+    // 1 alert = 2.0 penalty. 2.0 / 4 pages = 0.5 * 10 = 5 deduction. Health score = 95.
+    let score = calculate_health_score(pages.len(), &issues);
+    assert_eq!(
+        score, 95,
+        "Health score must be 95 instead of collapsing to 0"
+    );
+}
+
+#[test]
+fn test_exhaustive_crawl_flags_all_unlinked_sitemap_urls_as_orphans() {
+    let fixture_xml = include_str!("fixtures/large_sitemap_partial_crawl.xml");
+    let doc = parse_sitemap(fixture_xml.as_bytes()).expect("Failed to parse fixture");
+    let sitemap_urls: Vec<String> = match doc {
+        SitemapDocument::UrlSet(entries) => {
+            entries.into_iter().map(|e| e.loc.to_string()).collect()
+        }
+        _ => panic!("Expected standard UrlSet in fixture"),
+    };
+
+    let page_home = mock_page(
+        "https://example.com/",
+        200,
+        0,
+        Some("Home"),
+        Some("Home Description"),
+        None,
+        100,
+        200,
+        vec![
+            mock_link("https://example.com/", "https://example.com/about", false),
+            mock_link("https://example.com/", "https://example.com/contact", false),
+        ],
+        vec![],
+    );
+    let page_about = mock_page(
+        "https://example.com/about",
+        200,
+        1,
+        Some("About Us"),
+        Some("About Us Description"),
+        None,
+        101,
+        201,
+        vec![mock_link(
+            "https://example.com/about",
+            "https://example.com/",
+            false,
+        )],
+        vec![],
+    );
+    let page_contact = mock_page(
+        "https://example.com/contact",
+        200,
+        1,
+        Some("Contact"),
+        Some("Contact Description"),
+        None,
+        102,
+        202,
+        vec![mock_link(
+            "https://example.com/contact",
+            "https://example.com/",
+            false,
+        )],
+        vec![],
+    );
+    let mut page_orphan = mock_page(
+        "https://example.com/orphan-crawled",
+        200,
+        1,
+        Some("Orphan Page"),
+        Some("Orphan Description"),
+        None,
+        103,
+        203,
+        vec![mock_link(
+            "https://example.com/orphan-crawled",
+            "https://example.com/",
+            false,
+        )],
+        vec![],
+    );
+    page_orphan.is_sitemap_url = true;
+
+    let pages = vec![page_home, page_about, page_contact, page_orphan];
+    let graph = SiteGraph::from_pages(&pages, &sitemap_urls);
+
+    // Evaluate with crawl_exhaustive = true (simulating an exhaustive crawl that visited all linked pages)
+    let issues = evaluate_graph_rules(&pages, &graph, &sitemap_urls, true);
+
+    let orphan_issues: Vec<_> = issues
+        .iter()
+        .filter(|i| i.code == RuleId::AlertGraphOrphanPage)
+        .collect();
+
+    // In an exhaustive crawl, all 20 unlinked catalog URLs plus the 1 crawled orphan must be flagged = 21 orphans.
+    assert_eq!(
+        orphan_issues.len(),
+        21,
+        "Exhaustive crawl must flag all unlinked sitemap URLs as true orphans"
+    );
+}
+
+#[test]
+fn test_health_score_category_penalty_ceiling() {
+    let mock_issue = |category, severity| IssueFinding {
+        code: RuleId::AlertGraphOrphanPage,
+        category,
+        severity,
+        title: CompactString::new("Orphan Page"),
+        message: "Orphan description".to_string(),
+        target_url: "https://example.com/test".to_string(),
+        source_page_url: None,
+    };
+
+    // Case 1: 500 crawled pages with 20,000 Alert issues in a SINGLE category (e.g. SiteGraph)
+    // Total penalty = 20,000 * 2.0 = 40,000.
+    // Penalty per page = 40,000 / 500 = 80.0.
+    // Raw deduction = 800.0.
+    // With category ceiling of 35.0, deduction is capped at 35.0!
+    // Result score = 100 - 35 = 65!
+    let massive_single_category_issues: Vec<_> = (0..20_000)
+        .map(|_| mock_issue(IssueCategory::SiteGraph, Severity::Alert))
+        .collect();
+
+    let score = calculate_health_score(500, &massive_single_category_issues);
+    assert_eq!(
+        score, 65,
+        "A single catastrophic category defect must be capped at 35 points deduction, yielding 65/100"
+    );
+
+    // Case 2: Multi-category degradation across 3 distinct categories:
+    // Category 1 (SiteGraph): 35 points (capped)
+    // Category 2 (Security): 35 points (capped)
+    // Category 3 (TitleMetadata): 10 Alert issues across 500 pages = 20 / 500 = 0.04 * 10 = 0.4 points deduction
+    // Total deduction = 35 + 35 + 0.4 = 70.4 -> rounded to 70 deduction -> score = 30.
+    let mut multi_category_issues = massive_single_category_issues;
+    for _ in 0..10_000 {
+        multi_category_issues.push(mock_issue(IssueCategory::Security, Severity::Critical));
+    }
+    for _ in 0..10 {
+        multi_category_issues.push(mock_issue(IssueCategory::TitleMetadata, Severity::Alert));
+    }
+
+    let multi_score = calculate_health_score(500, &multi_category_issues);
+    assert_eq!(
+        multi_score, 30,
+        "Multiple distinct failing categories should sum their capped deductions properly"
+    );
+
+    // Case 3: Zero pages returns 100
+    assert_eq!(calculate_health_score(0, &[]), 100);
+    assert_eq!(calculate_health_score(0, &multi_category_issues), 100);
 }

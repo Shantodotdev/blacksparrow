@@ -18,10 +18,16 @@ pub fn evaluate_graph_rules(
     pages: &[PageReport],
     graph: &SiteGraph,
     sitemap_urls: &[String],
+    crawl_exhaustive: bool,
 ) -> Vec<IssueFinding> {
     let mut findings = Vec::new();
 
-    findings.extend(orphans::evaluate_orphans(pages, graph, sitemap_urls));
+    findings.extend(orphans::evaluate_orphans(
+        pages,
+        graph,
+        sitemap_urls,
+        crawl_exhaustive,
+    ));
     findings.extend(redirects::evaluate_redirects(graph));
     findings.extend(canonicals::evaluate_canonicals(graph));
     findings.extend(duplicates::evaluate_duplicates(pages));

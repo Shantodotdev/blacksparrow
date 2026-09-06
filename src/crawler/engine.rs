@@ -303,6 +303,7 @@ fn finalize_crawl(
     sitemap_urls: Vec<String>,
     aimd_delay_ms: u64,
     elapsed: Duration,
+    crawl_exhaustive: bool,
 ) -> CrawlResult {
     {
         let sitemap_set: HashSet<&str> = sitemap_urls.iter().map(|s| s.as_str()).collect();
@@ -316,7 +317,7 @@ fn finalize_crawl(
     let graph = SiteGraph::from_pages(&pages, &sitemap_urls);
     let pagerank = compute_pagerank(&graph, 0.85, 100, 1e-6);
 
-    let graph_issues = evaluate_graph(&pages, &graph, &sitemap_urls);
+    let graph_issues = evaluate_graph(&pages, &graph, &sitemap_urls, crawl_exhaustive);
     issues.extend(graph_issues);
 
     let health_score = calculate_health_score(pages.len(), &issues);
@@ -378,6 +379,7 @@ pub async fn run_crawl(
     let mut critical_count = 0usize;
     let mut alert_count = 0usize;
     let mut warning_count = 0usize;
+    let mut hit_max_pages = false;
 
     loop {
         while let Ok(permit) = semaphore.clone().try_acquire_owned() {
@@ -438,9 +440,12 @@ pub async fn run_crawl(
             f.is_empty()
         };
 
-        if (active == 0 && frontier_empty)
-            || (config.max_pages > 0 && crawled_pages.len() >= config.max_pages as usize)
-        {
+        if active == 0 && frontier_empty {
+            break;
+        }
+
+        if config.max_pages > 0 && crawled_pages.len() >= config.max_pages as usize {
+            hit_max_pages = true;
             break;
         }
 
@@ -506,6 +511,8 @@ pub async fn run_crawl(
         a.current_delay_ms()
     };
 
+    let crawl_exhaustive = !hit_max_pages;
+
     Ok(finalize_crawl(
         normalized_start,
         crawled_pages,
@@ -513,5 +520,6 @@ pub async fn run_crawl(
         sitemap_urls,
         final_aimd_delay,
         start_time.elapsed(),
+        crawl_exhaustive,
     ))
 }
