@@ -8,7 +8,7 @@ use crate::core::models::{DiscoveredLink, IssueFinding, PageReport, Severity};
 use crate::core::url::{is_internal, is_static_asset_url, normalize_url, url_hash};
 use crate::crawler::aimd::AimdController;
 use crate::crawler::client::{FetchOptions, FetchResult, HttpClient};
-use crate::crawler::frontier::{CrawlQueueOrder, Frontier, FrontierEntry};
+use crate::crawler::frontier::{Frontier, FrontierEntry};
 use crate::crawler::robots::RobotsTxt;
 use crate::crawler::sitemap::{parse_sitemap, SitemapDocument};
 use crate::error::SeoResult;
@@ -355,11 +355,11 @@ pub async fn run_crawl(
     let frontier = Arc::new(Mutex::new(Frontier::new(
         config.max_pages,
         config.max_depth,
-        CrawlQueueOrder::Bfs,
     )));
 
     {
         let mut f = frontier.lock().await;
+        f.register_sitemap_urls(&sitemap_urls);
         f.push(&normalized_start, 0, None)?;
     }
 

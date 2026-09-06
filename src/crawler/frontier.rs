@@ -17,19 +17,19 @@
 //!
 //! $$\text{Memory}(50{,}000\text{ URLs}) \approx 50{,}000 \times 8\text{ bytes} \approx 400\text{ KB}$$
 //!
-//! ## Queue Traversal Strategies
+//! ## Intelligent Importance Scheduling
 //!
-//! - **Breadth-First Search (BFS)**: Uses FIFO (`VecDeque::pop_front`). Discovers
-//!   shallow, high-priority site architecture and category pages first.
-//! - **Depth-First Search (DFS)**: Uses LIFO (`VecDeque::pop_back`). Traverses
-//!   deep structural branches before returning.
+//! The frontier uses an importance-weighted priority queue backed by [`std::collections::BinaryHeap`].
+//! Candidate URLs are scored using structural importance ($S_{\text{seed}}$, $S_{\text{depth}}$,
+//! $S_{\text{indegree}}$, $S_{\text{path}}$), query parameter penalties ($P_{\text{query}}$), and
+//! pagination deprioritization ($P_{\text{pagination}}$) via [`calculate_url_importance`].
 //!
 //! ## Examples
 //!
 //! ```rust
-//! use seo_lens::crawler::frontier::{Frontier, CrawlQueueOrder};
+//! use seo_lens::crawler::frontier::Frontier;
 //!
-//! let mut frontier = Frontier::new(500, 3, CrawlQueueOrder::Bfs);
+//! let mut frontier = Frontier::new(500, 3);
 //!
 //! // Enqueue root URL at depth 0
 //! assert!(frontier.push("https://example.com", 0, None).unwrap());
@@ -43,20 +43,11 @@
 //! ```
 
 use crate::core::url::{normalize_url, url_hash};
+use crate::crawler::priority::calculate_url_importance;
 use crate::error::SeoResult;
 use compact_str::CompactString;
-use hashbrown::HashSet;
-use std::collections::VecDeque;
-
-/// Crawl traversal order strategy for the URL frontier.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum CrawlQueueOrder {
-    /// Breadth-First Search (FIFO queue): Shallow pages crawled before deep pages.
-    #[default]
-    Bfs,
-    /// Depth-First Search (LIFO stack): Deep branches explored before siblings.
-    Dfs,
-}
+use hashbrown::{HashMap, HashSet};
+use std::collections::BinaryHeap;
 
 /// A scheduled crawl target popped from the frontier.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -69,49 +60,94 @@ pub struct FrontierEntry {
     pub source_url: Option<CompactString>,
 }
 
+/// Wrapper for scheduling URLs in a max-heap prioritized by importance score.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PrioritizedEntry {
+    /// Importance score $P(u)$.
+    pub priority: i64,
+    /// Tie-breaking sequence counter (lower sequence = earlier discovery).
+    pub sequence: u64,
+    /// 64-bit URL hash for fast SwissTable lookup.
+    pub url_hash: u64,
+    /// The wrapped frontier entry.
+    pub entry: FrontierEntry,
+}
+
+impl Ord for PrioritizedEntry {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.priority
+            .cmp(&other.priority)
+            // Tie-break: lower sequence number wins (FIFO among identical scores)
+            .then_with(|| other.sequence.cmp(&self.sequence))
+    }
+}
+
+impl PartialOrd for PrioritizedEntry {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 /// High-performance URL scheduler with SwissTable hash deduplication.
 #[derive(Debug, Clone)]
 pub struct Frontier {
-    /// Pending candidate queue.
-    queue: VecDeque<FrontierEntry>,
+    /// Priority heap for importance-based traversal.
+    priority_heap: BinaryHeap<PrioritizedEntry>,
     /// SwissTable set containing 64-bit hashes of all scheduled/visited URLs.
     visited: HashSet<u64>,
+    /// SwissTable set of URLs currently waiting in the frontier queue (for deduplication and in-flight updates).
+    pending_urls: HashSet<u64>,
+    /// In-degree incoming reference counter per URL hash for authority accumulation.
+    in_degrees: HashMap<u64, u32>,
+    /// 64-bit hashes of declared XML sitemap URLs for seed boost calculation.
+    sitemap_hashes: HashSet<u64>,
+    /// Monotonically increasing sequence number for deterministic tie-breaking.
+    sequence_counter: u64,
     /// Maximum number of total unique pages to enqueue (0 = unlimited).
     max_pages: u32,
     /// Maximum crawl depth hops allowed (0 = seed only).
     max_depth: u16,
-    /// Traversal order strategy (BFS vs DFS).
-    order: CrawlQueueOrder,
     /// Cumulative count of successfully enqueued unique URLs.
     enqueued_count: u32,
 }
 
 impl Frontier {
-    /// Creates a new `Frontier` queue with specified boundaries and ordering.
+    /// Creates a new `Frontier` priority queue with specified boundaries.
     ///
     /// # Arguments
     ///
     /// * `max_pages` - Maximum unique pages to admit (0 for unlimited).
     /// * `max_depth` - Maximum allowed link depth hops.
-    /// * `order` - Traversal strategy (`Bfs` or `Dfs`).
     ///
     /// # Examples
     ///
     /// ```rust
-    /// use seo_lens::crawler::frontier::{Frontier, CrawlQueueOrder};
+    /// use seo_lens::crawler::frontier::Frontier;
     ///
-    /// let frontier = Frontier::new(1000, 5, CrawlQueueOrder::Bfs);
+    /// let frontier = Frontier::new(1000, 5);
     /// assert_eq!(frontier.len(), 0);
     /// assert!(frontier.is_empty());
     /// ```
-    pub fn new(max_pages: u32, max_depth: u16, order: CrawlQueueOrder) -> Self {
+    pub fn new(max_pages: u32, max_depth: u16) -> Self {
         Self {
-            queue: VecDeque::with_capacity(128),
+            priority_heap: BinaryHeap::with_capacity(128),
             visited: HashSet::with_capacity(256),
+            pending_urls: HashSet::with_capacity(128),
+            in_degrees: HashMap::with_capacity(128),
+            sitemap_hashes: HashSet::with_capacity(64),
+            sequence_counter: 0,
             max_pages,
             max_depth,
-            order,
             enqueued_count: 0,
+        }
+    }
+
+    /// Registers a collection of XML sitemap URLs to receive seed priority boosts.
+    pub fn register_sitemap_urls(&mut self, urls: &[String]) {
+        for url in urls {
+            if let Ok(normalized) = normalize_url(url) {
+                self.sitemap_hashes.insert(url_hash(&normalized));
+            }
         }
     }
 
@@ -122,6 +158,9 @@ impl Frontier {
     /// 2. The 64-bit hash of the normalized URL is already present in `visited`.
     /// 3. `self.max_pages > 0` and `enqueued_count >= self.max_pages`.
     ///
+    /// If the URL is already pending in the queue, its in-degree reference count
+    /// is incremented and an updated entry with boosted priority is pushed to the heap.
+    ///
     /// # Errors
     ///
     /// Returns [`crate::error::SeoError::Url`] if the URL is syntactically invalid.
@@ -129,9 +168,9 @@ impl Frontier {
     /// # Examples
     ///
     /// ```rust
-    /// use seo_lens::crawler::frontier::{Frontier, CrawlQueueOrder};
+    /// use seo_lens::crawler::frontier::Frontier;
     ///
-    /// let mut frontier = Frontier::new(2, 1, CrawlQueueOrder::Bfs);
+    /// let mut frontier = Frontier::new(2, 1);
     /// assert!(frontier.push("https://example.com/page1", 1, None).unwrap());
     ///
     /// // Duplicate URL
@@ -145,51 +184,88 @@ impl Frontier {
             return Ok(false);
         }
 
+        let normalized = normalize_url(raw_url)?;
+        let hash = url_hash(&normalized);
+
+        // Dynamic in-degree authority accumulation:
+        // If the candidate URL is already pending in the queue, increment its reference count
+        // and re-push a prioritized entry with escalated importance!
+        if self.pending_urls.contains(&hash) {
+            let count = self.in_degrees.entry(hash).or_insert(1);
+            *count = count.saturating_add(1);
+            let in_degree = *count;
+
+            let is_sitemap = self.sitemap_hashes.contains(&hash);
+            let priority = calculate_url_importance(&normalized, depth, in_degree, is_sitemap);
+            self.sequence_counter += 1;
+            self.priority_heap.push(PrioritizedEntry {
+                priority,
+                sequence: self.sequence_counter,
+                url_hash: hash,
+                entry: FrontierEntry {
+                    url: CompactString::new(&normalized),
+                    depth,
+                    source_url: source_url.map(CompactString::new),
+                },
+            });
+            return Ok(false);
+        }
+
         if self.max_pages > 0 && self.enqueued_count >= self.max_pages {
             return Ok(false);
         }
 
-        let normalized = normalize_url(raw_url)?;
-        let hash = url_hash(&normalized);
-
         if !self.visited.insert(hash) {
-            // Already seen/enqueued
+            // Already visited / crawled
             return Ok(false);
         }
 
         self.enqueued_count += 1;
-        self.queue.push_back(FrontierEntry {
+        self.pending_urls.insert(hash);
+        self.in_degrees.insert(hash, 1);
+        self.sequence_counter += 1;
+
+        let entry = FrontierEntry {
             url: CompactString::new(&normalized),
             depth,
             source_url: source_url.map(CompactString::new),
+        };
+
+        let is_sitemap = self.sitemap_hashes.contains(&hash);
+        let priority = calculate_url_importance(&normalized, depth, 1, is_sitemap);
+        self.priority_heap.push(PrioritizedEntry {
+            priority,
+            sequence: self.sequence_counter,
+            url_hash: hash,
+            entry,
         });
 
         Ok(true)
     }
 
-    /// Pops the next `FrontierEntry` according to the configured [`CrawlQueueOrder`].
+    /// Pops the next highest-scoring `FrontierEntry` from the priority heap.
     ///
-    /// - `Bfs`: Pops from the front of the queue (FIFO).
-    /// - `Dfs`: Pops from the back of the queue (LIFO).
-    ///
+    /// Lazily prunes stale duplicate entries whose URL was already popped.
     /// Returns `None` if the queue is empty.
     pub fn pop(&mut self) -> Option<FrontierEntry> {
-        match self.order {
-            CrawlQueueOrder::Bfs => self.queue.pop_front(),
-            CrawlQueueOrder::Dfs => self.queue.pop_back(),
+        while let Some(prioritized) = self.priority_heap.pop() {
+            if self.pending_urls.remove(&prioritized.url_hash) {
+                return Some(prioritized.entry);
+            }
         }
+        None
     }
 
-    /// Returns the number of currently pending URLs in the frontier queue.
+    /// Returns the number of currently pending unique URLs in the frontier queue.
     #[inline]
     pub fn len(&self) -> usize {
-        self.queue.len()
+        self.pending_urls.len()
     }
 
     /// Returns `true` if there are no pending URLs in the frontier.
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.queue.is_empty()
+        self.pending_urls.is_empty()
     }
 
     /// Checks whether a given URL has already been visited or enqueued.
@@ -222,7 +298,7 @@ mod tests {
 
     #[test]
     fn test_frontier_visited_query() {
-        let mut frontier = Frontier::new(50, 3, CrawlQueueOrder::Bfs);
+        let mut frontier = Frontier::new(50, 3);
         assert!(!frontier.is_visited("https://example.com/hello").unwrap());
         assert!(frontier.push("https://example.com/hello", 0, None).unwrap());
         assert!(frontier

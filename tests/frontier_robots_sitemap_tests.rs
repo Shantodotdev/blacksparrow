@@ -7,7 +7,7 @@
 
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use seo_lens::crawler::frontier::{CrawlQueueOrder, Frontier};
+use seo_lens::crawler::frontier::Frontier;
 use seo_lens::crawler::robots::RobotsTxt;
 use seo_lens::crawler::sitemap::{parse_sitemap, SitemapDocument};
 use std::io::Write;
@@ -18,8 +18,8 @@ use std::time::Duration;
 // =========================================================================
 
 #[test]
-fn test_frontier_bfs_fifo_ordering() {
-    let mut frontier = Frontier::new(100, 5, CrawlQueueOrder::Bfs);
+fn test_frontier_fifo_tie_breaking_order() {
+    let mut frontier = Frontier::new(100, 5);
 
     assert!(frontier.push("https://example.com/", 0, None).unwrap());
     assert!(frontier
@@ -29,7 +29,7 @@ fn test_frontier_bfs_fifo_ordering() {
         .push("https://example.com/b", 1, Some("https://example.com/"))
         .unwrap());
 
-    // BFS must pop in FIFO order
+    // Priority queue pops root first, then tie-breaks identical score pages in FIFO order
     let first = frontier.pop().unwrap();
     assert_eq!(first.url, "https://example.com/");
     assert_eq!(first.depth, 0);
@@ -46,31 +46,8 @@ fn test_frontier_bfs_fifo_ordering() {
 }
 
 #[test]
-fn test_frontier_dfs_lifo_ordering() {
-    let mut frontier = Frontier::new(100, 5, CrawlQueueOrder::Dfs);
-
-    assert!(frontier.push("https://example.com/", 0, None).unwrap());
-    assert!(frontier.push("https://example.com/first", 1, None).unwrap());
-    assert!(frontier
-        .push("https://example.com/second", 1, None)
-        .unwrap());
-
-    // DFS must pop the most recently pushed item (LIFO)
-    let first_popped = frontier.pop().unwrap();
-    assert_eq!(first_popped.url, "https://example.com/second");
-
-    let second_popped = frontier.pop().unwrap();
-    assert_eq!(second_popped.url, "https://example.com/first");
-
-    let third_popped = frontier.pop().unwrap();
-    assert_eq!(third_popped.url, "https://example.com/");
-
-    assert!(frontier.is_empty());
-}
-
-#[test]
 fn test_frontier_swisstable_deduplication() {
-    let mut frontier = Frontier::new(100, 5, CrawlQueueOrder::Bfs);
+    let mut frontier = Frontier::new(100, 5);
 
     // Initial push
     assert!(frontier
@@ -103,7 +80,7 @@ fn test_frontier_swisstable_deduplication() {
 
 #[test]
 fn test_frontier_max_depth_enforcement() {
-    let mut frontier = Frontier::new(100, 2, CrawlQueueOrder::Bfs);
+    let mut frontier = Frontier::new(100, 2);
 
     assert!(frontier
         .push("https://example.com/depth-0", 0, None)
@@ -128,7 +105,7 @@ fn test_frontier_max_depth_enforcement() {
 
 #[test]
 fn test_frontier_max_pages_ceiling() {
-    let mut frontier = Frontier::new(3, 10, CrawlQueueOrder::Bfs);
+    let mut frontier = Frontier::new(3, 10);
 
     assert!(frontier
         .push("https://example.com/page-1", 0, None)
