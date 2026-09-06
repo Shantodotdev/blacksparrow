@@ -27,11 +27,29 @@ pub enum Commands {
     Report(ReportArgs),
     /// List all historical audit sessions stored locally
     List(ListArgs),
+    /// Drill down and filter audit findings for a session
+    Issues(IssuesArgs),
+    /// Check website readiness for AI search engines (ChatGPT Search, Perplexity, Claude) and /llms.txt
+    CheckAi(CheckAiArgs),
+    /// Delete a specific crawl session and its associated records
+    Delete(DeleteArgs),
+    /// Clean historical crawl sessions from the database
+    Clean(CleanArgs),
+    /// Validate JSON-LD / schema against Google Rich Results guidelines
+    Schema(SchemaArgs),
 }
 
 /// Command-line arguments for the `list` subcommand.
 #[derive(Args, Debug, Clone, Default)]
 pub struct ListArgs {
+    /// Maximum number of sessions to display
+    #[arg(short = 'n', long, default_value_t = 20)]
+    pub limit: usize,
+
+    /// Output format: terminal (default) or json
+    #[arg(short = 'f', long, default_value = "terminal")]
+    pub format: String,
+
     /// Custom path to SQLite persistence database
     #[arg(long)]
     pub db_path: Option<PathBuf>,
@@ -106,6 +124,30 @@ pub struct AuditArgs {
     /// Custom path to SQLite persistence database (default: .seolens/seolens.db)
     #[arg(long)]
     pub db_path: Option<PathBuf>,
+
+    /// Only crawl URLs matching this regex pattern
+    #[arg(short = 'i', long)]
+    pub include: Option<String>,
+
+    /// Skip crawling URLs matching this regex pattern
+    #[arg(short = 'e', long)]
+    pub exclude: Option<String>,
+
+    /// Custom HTTP request header(s) (e.g. -H "Authorization: Bearer xyz")
+    #[arg(short = 'H', long = "header")]
+    pub headers: Vec<String>,
+
+    /// Explicit XML sitemap URL to crawl
+    #[arg(long)]
+    pub sitemap: Option<String>,
+
+    /// Suppress progress bar output for clean CI/CD scripting
+    #[arg(short = 'q', long, default_value_t = false)]
+    pub quiet: bool,
+
+    /// Optional audit or project name
+    #[arg(long)]
+    pub name: Option<String>,
 }
 
 /// Command-line arguments for the `inspect` subcommand.
@@ -121,6 +163,14 @@ pub struct InspectArgs {
     /// Request timeout in seconds
     #[arg(long, default_value_t = 15)]
     pub timeout: u64,
+
+    /// Output format: terminal (default), json, md
+    #[arg(short = 'f', long, default_value = "terminal")]
+    pub format: String,
+
+    /// Custom HTTP request header(s) (e.g. -H "Authorization: Bearer xyz")
+    #[arg(short = 'H', long = "header")]
+    pub headers: Vec<String>,
 }
 
 /// Command-line arguments for the `mcp` subcommand.
@@ -157,4 +207,118 @@ pub struct ReportArgs {
     /// Custom path to SQLite persistence database
     #[arg(long)]
     pub db_path: Option<PathBuf>,
+}
+
+/// Command-line arguments for the `issues` subcommand.
+#[derive(Args, Debug, Clone, Default)]
+pub struct IssuesArgs {
+    /// Session ID to inspect
+    #[arg(short = 's', long)]
+    pub session: Option<String>,
+
+    /// Session ID positional argument
+    #[arg(value_name = "SESSION_ID")]
+    pub session_pos: Option<String>,
+
+    /// Filter by severity tier (critical, alert, warning, notice)
+    #[arg(long)]
+    pub severity: Option<String>,
+
+    /// Filter by issue category (e.g. indexability, links, titles)
+    #[arg(short = 'c', long)]
+    pub category: Option<String>,
+
+    /// Filter by rule ID code (e.g. ERR_HTTP_4XX_CLIENT_ERROR)
+    #[arg(long)]
+    pub code: Option<String>,
+
+    /// Filter by URL substring (e.g. /blog/)
+    #[arg(long)]
+    pub url: Option<String>,
+
+    /// Maximum number of issues to display
+    #[arg(short = 'n', long, default_value_t = 50)]
+    pub limit: usize,
+
+    /// Pagination offset
+    #[arg(long, default_value_t = 0)]
+    pub offset: usize,
+
+    /// Output format: terminal (default), json, md
+    #[arg(short = 'f', long, default_value = "terminal")]
+    pub format: String,
+
+    /// Custom path to SQLite persistence database
+    #[arg(long)]
+    pub db_path: Option<PathBuf>,
+}
+
+/// Command-line arguments for the `check-ai` subcommand.
+#[derive(Args, Debug, Clone)]
+pub struct CheckAiArgs {
+    /// Website root URL to check (e.g. https://example.com)
+    pub url: String,
+
+    /// Custom User-Agent string
+    #[arg(short = 'u', long, default_value = "SEOLens/1.0")]
+    pub user_agent: String,
+
+    /// Request timeout in seconds
+    #[arg(long, default_value_t = 15)]
+    pub timeout: u64,
+
+    /// Output format: terminal (default), json, md
+    #[arg(short = 'f', long, default_value = "terminal")]
+    pub format: String,
+}
+
+/// Command-line arguments for the `delete` subcommand.
+#[derive(Args, Debug, Clone, Default)]
+pub struct DeleteArgs {
+    /// Session ID to delete
+    #[arg(short = 's', long)]
+    pub session: Option<String>,
+
+    /// Session ID positional argument
+    #[arg(value_name = "SESSION_ID")]
+    pub session_pos: Option<String>,
+
+    /// Custom path to SQLite persistence database
+    #[arg(long)]
+    pub db_path: Option<PathBuf>,
+}
+
+/// Command-line arguments for the `clean` subcommand.
+#[derive(Args, Debug, Clone, Default)]
+pub struct CleanArgs {
+    /// Purge all crawl sessions
+    #[arg(long, default_value_t = false)]
+    pub all: bool,
+
+    /// Purge sessions started older than N days ago
+    #[arg(long)]
+    pub older_than: Option<u32>,
+
+    /// Custom path to SQLite persistence database
+    #[arg(long)]
+    pub db_path: Option<PathBuf>,
+}
+
+/// Command-line arguments for the `schema` subcommand.
+#[derive(Args, Debug, Clone)]
+pub struct SchemaArgs {
+    /// URL or path to a local JSON/HTML file containing structured data
+    pub target: String,
+
+    /// Expected schema @type (e.g. Product, Article, FAQPage)
+    #[arg(short = 't', long = "type")]
+    pub expected_type: Option<String>,
+
+    /// Output format: terminal (default) or json
+    #[arg(short = 'f', long, default_value = "terminal")]
+    pub format: String,
+
+    /// Custom User-Agent string (when target is a URL)
+    #[arg(short = 'u', long, default_value = "SEOLens/1.0")]
+    pub user_agent: String,
 }

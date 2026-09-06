@@ -6,8 +6,10 @@
 //! - Deep audit scorecard with visual health gauges, protocol radar, defect triage trees,
 //!   PageRank authority distribution tables, and artifact links.
 
-use crate::core::models::{CrawlSummary, Severity};
+use crate::core::models::{CrawlSummary, IssueFinding, Severity};
+use crate::crawler::ai_check::{AiReadinessReport, AiSearchRisk};
 use crate::crawler::engine::{CrawlResult, ProgressUpdate};
+use crate::rules::page::schema_val::SchemaValidationOutcome;
 use hashbrown::HashMap;
 use std::io::{self, Write};
 use std::path::Path;
@@ -459,4 +461,220 @@ pub fn print_historical_sessions(db_path: &Path, crawls: &[CrawlSummary]) {
     println!("  {ANSI_CYAN}◈ Re-inspect session {ANSI_RESET} : seolens report <SESSION_ID>");
     println!("  {ANSI_CYAN}◈ Re-export artifacts{ANSI_RESET} : seolens report <SESSION_ID> --format md,json");
     println!("  {ANSI_CYAN}◈ Start fresh crawl  {ANSI_RESET} : seolens audit <URL>\n");
+}
+
+/// Formats and prints a filtered issues matrix in the terminal.
+pub fn print_issues_matrix(
+    session_id: &str,
+    issues: &[IssueFinding],
+    total_count: usize,
+    offset: usize,
+    limit: usize,
+) {
+    println!(
+        "\n{ANSI_CYAN}{ANSI_BOLD}  ███████╗███████╗ ██████╗     ██╗███████╗███████╗██╗   ██╗███████╗███████╗\n  ██╔════╝██╔════╝██╔═══██╗    ██║██╔════╝██╔════╝██║   ██║██╔════╝██╔════╝\n  ███████╗█████╗  ██║   ██║    ██║███████╗███████╗██║   ██║█████╗  ███████╗\n  ╚════██║██╔══╝  ██║   ██║    ██║╚════██║╚════██║██║   ██║██╔══╝  ╚════██║\n  ███████║███████╗╚██████╔╝    ██║███████║███████║╚██████╔╝███████╗███████║\n  ╚══════╝╚══════╝ ╚═════╝     ╚═╝╚══════╝╚══════╝ ╚═════╝ ╚══════╝╚══════╝{ANSI_RESET}\n"
+    );
+
+    println!(
+        "{ANSI_DIM}┌──[{ANSI_RESET} {ANSI_BOLD}AUDIT DEFECTS // FILTERED QUERY{ANSI_RESET} {ANSI_DIM}]───────────────────────────────────────{ANSI_RESET}\n{ANSI_DIM}│{ANSI_RESET}  {ANSI_BOLD}Session ID{ANSI_RESET} : {ANSI_CYAN}{session_id}{ANSI_RESET}\n{ANSI_DIM}│{ANSI_RESET}  {ANSI_BOLD}Matching  {ANSI_RESET} : {total_count} issues found (showing {offset}..{})\n{ANSI_DIM}└────────────────────────────────────────────────────────────────────────┘{ANSI_RESET}\n",
+        (offset + issues.len()).min(total_count)
+    );
+
+    if issues.is_empty() {
+        println!("  {ANSI_GREEN}✔ No issues matched your filter criteria.{ANSI_RESET}\n");
+        return;
+    }
+
+    for (i, issue) in issues.iter().enumerate() {
+        let (badge, color) = match issue.severity {
+            Severity::Critical => (
+                format!("{ANSI_RED}{ANSI_BOLD}[🚨 CRITICAL]{ANSI_RESET}"),
+                ANSI_RED,
+            ),
+            Severity::Alert => (
+                format!("{ANSI_YELLOW}{ANSI_BOLD}[⚠️ ALERT]{ANSI_RESET}"),
+                ANSI_YELLOW,
+            ),
+            Severity::Warning => (
+                format!("{ANSI_YELLOW}[⚡ WARNING]{ANSI_RESET}"),
+                ANSI_YELLOW,
+            ),
+            Severity::Notice => (format!("{ANSI_CYAN}[ℹ NOTICE]{ANSI_RESET}"), ANSI_CYAN),
+        };
+
+        println!(
+            "  {ANSI_BOLD}#{:03}{ANSI_RESET} {badge} {color}{ANSI_BOLD}{}{ANSI_RESET}",
+            offset + i + 1,
+            issue.code.as_str()
+        );
+        println!(
+            "       {ANSI_BOLD}Target URL {ANSI_RESET}: {ANSI_CYAN}{}{ANSI_RESET}",
+            issue.target_url
+        );
+        println!(
+            "       {ANSI_BOLD}Diagnosis  {ANSI_RESET}: {}",
+            issue.message
+        );
+        if let Some(ref src) = issue.source_page_url {
+            println!("       {ANSI_BOLD}Source Page{ANSI_RESET}: {ANSI_DIM}{src}{ANSI_RESET}");
+        }
+        println!();
+    }
+
+    if total_count > offset + issues.len() {
+        let next_offset = offset + limit;
+        println!(
+            "  {ANSI_DIM}◈ To view more: seolens issues {session_id} --offset {next_offset} --limit {limit}{ANSI_RESET}\n"
+        );
+    }
+}
+
+/// Prints a cyberpunk AI search & GEO readiness assessment scorecard.
+pub fn print_ai_readiness_scorecard(report: &AiReadinessReport) {
+    println!(
+        "\n{ANSI_CYAN}{ANSI_BOLD}  ███████╗███████╗ ██████╗      █████╗ ██╗    ███████╗███████╗ ██████╗ \n  ██╔════╝██╔════╝██╔═══██╗    ██╔══██╗██║    ██╔════╝██╔════╝██╔═══██╗\n  ███████╗█████╗  ██║   ██║    ███████║██║    ███████╗█████╗  ██║   ██║\n  ╚════██║██╔══╝  ██║   ██║    ██╔══██║██║    ╚════██║██╔══╝  ██║   ██║\n  ███████║███████╗╚██████╔╝    ██║  ██║██║    ███████║███████╗╚██████╔╝\n  ╚══════╝╚══════╝ ╚═════╝     ╚═╝  ╚═╝╚═╝    ╚══════╝╚══════╝ ╚═════╝ {ANSI_RESET}\n"
+    );
+
+    let (risk_badge, risk_desc) = match report.citation_search_risk {
+        AiSearchRisk::Low => (
+            format!("{ANSI_GREEN}{ANSI_BOLD}[ LOW CITATION RISK ]{ANSI_RESET}"),
+            format!("{ANSI_GREEN}Optimized for ChatGPT Search, Perplexity, and Claude{ANSI_RESET}"),
+        ),
+        AiSearchRisk::Medium => (
+            format!("{ANSI_YELLOW}{ANSI_BOLD}[ MEDIUM CITATION RISK ]{ANSI_RESET}"),
+            format!("{ANSI_YELLOW}Missing structured documentation (/llms.txt) or partial bot limits{ANSI_RESET}"),
+        ),
+        AiSearchRisk::High => (
+            format!("{ANSI_RED}{ANSI_BOLD}[ HIGH CITATION RISK ]{ANSI_RESET}"),
+            format!("{ANSI_RED}Critical AI search and retrieval engines blocked in robots.txt{ANSI_RESET}"),
+        ),
+    };
+
+    println!("{ANSI_DIM}┌──[{ANSI_RESET} {ANSI_BOLD}GENERATIVE ENGINE OPTIMIZATION (GEO){ANSI_RESET} {ANSI_DIM}]─────────────────────────────{ANSI_RESET}");
+    println!(
+        "{ANSI_DIM}│{ANSI_RESET}  {ANSI_BOLD}Target Domain{ANSI_RESET} : {ANSI_CYAN}{}{ANSI_RESET}",
+        report.base_url
+    );
+    println!("{ANSI_DIM}│{ANSI_RESET}  {ANSI_BOLD}Citation Risk{ANSI_RESET} : {risk_badge} - {risk_desc}");
+    println!("{ANSI_DIM}└────────────────────────────────────────────────────────────────────────┘{ANSI_RESET}\n");
+
+    // 1. LLMS.TXT Artifacts
+    print!("{}", format_section_header("LLMS.TXT PROTOCOL READINESS"));
+    let llms_status = if report.llms_txt_found {
+        format!("{ANSI_GREEN}✔ FOUND (200 OK){ANSI_RESET}")
+    } else {
+        format!("{ANSI_RED}✖ MISSING (404 NOT FOUND){ANSI_RESET}")
+    };
+    let llms_full_status = if report.llms_full_txt_found {
+        format!("{ANSI_GREEN}✔ FOUND (200 OK){ANSI_RESET}")
+    } else {
+        format!("{ANSI_DIM}○ NOT PUBLISHED{ANSI_RESET}")
+    };
+
+    println!("  {ANSI_BOLD}/llms.txt     {ANSI_RESET} : {llms_status}");
+    println!("  {ANSI_BOLD}/llms-full.txt{ANSI_RESET} : {llms_full_status}");
+    if let Some(ref summary) = report.llms_txt_summary {
+        println!("\n  {ANSI_DIM}Preview:{ANSI_RESET}");
+        for line in summary.lines() {
+            println!("    {ANSI_CYAN}{line}{ANSI_RESET}");
+        }
+    }
+    println!();
+
+    // 2. Real-Time Search & Retrieval Bots
+    print!(
+        "{}",
+        format_section_header("REAL-TIME AI SEARCH & CITATION CRAWLERS")
+    );
+    for (bot, status) in &report.retrieval_bots {
+        let status_str = if status == "ALLOWED" {
+            format!("{ANSI_GREEN}ALLOWED ✔{ANSI_RESET}")
+        } else {
+            format!("{ANSI_RED}{ANSI_BOLD}DISALLOWED ✖{ANSI_RESET}")
+        };
+        println!("  {ANSI_BOLD}{:<18}{ANSI_RESET} : {status_str}", bot);
+    }
+    println!();
+
+    // 3. AI Training Crawlers
+    print!(
+        "{}",
+        format_section_header("AI FOUNDATION MODEL TRAINING BOTS")
+    );
+    for (bot, status) in &report.training_bots {
+        let status_str = if status == "ALLOWED" {
+            format!("{ANSI_GREEN}ALLOWED ✔{ANSI_RESET}")
+        } else {
+            format!("{ANSI_YELLOW}DISALLOWED ✖{ANSI_RESET}")
+        };
+        println!("  {ANSI_BOLD}{:<18}{ANSI_RESET} : {status_str}", bot);
+    }
+    println!();
+
+    // 4. Actionable Recommendations
+    if !report.recommendations.is_empty() {
+        print!(
+            "{}",
+            format_section_header("GEO REMEDIATION // ACTION ITEMS")
+        );
+        for (idx, rec) in report.recommendations.iter().enumerate() {
+            println!("  {ANSI_CYAN}◈ #{:02}{ANSI_RESET} : {rec}", idx + 1);
+        }
+        println!();
+    }
+}
+
+/// Prints a schema validation assessment in the terminal.
+pub fn print_schema_outcome(outcome: &SchemaValidationOutcome) {
+    println!(
+        "\n{ANSI_CYAN}{ANSI_BOLD}  ███████╗███████╗ ██████╗     ███████╗ ██████╗██╗  ██╗███████╗███╗   ███╗ █████╗ \n  ██╔════╝██╔════╝██╔═══██╗    ██╔════╝██╔════╝██║  ██║██╔════╝████╗ ████║██╔══██╗\n  ███████╗█████╗  ██║   ██║    ███████╗██║     ███████║█████╗  ██╔████╔██║███████║\n  ╚════██║██╔══╝  ██║   ██║    ╚════██║██║     ██╔══██║██╔══╝  ██║╚██╔╝██║██╔══██║\n  ███████║███████╗╚██████╔╝    ███████║╚██████╗██║  ██║███████╗██║ ╚═╝ ██║██║  ██║\n  ╚══════╝╚══════╝ ╚═════╝     ╚══════╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝╚═╝  ╚═╝{ANSI_RESET}\n"
+    );
+
+    let (badge, color) = if outcome.is_rich_result_eligible {
+        (
+            format!("{ANSI_GREEN}{ANSI_BOLD}[ GOOGLE RICH RESULTS ELIGIBLE ✔ ]{ANSI_RESET}"),
+            ANSI_GREEN,
+        )
+    } else {
+        (
+            format!("{ANSI_RED}{ANSI_BOLD}[ NOT RICH RESULTS ELIGIBLE ✖ ]{ANSI_RESET}"),
+            ANSI_RED,
+        )
+    };
+
+    println!("{ANSI_DIM}┌──[{ANSI_RESET} {ANSI_BOLD}SCHEMA.ORG STRUCTURED DATA AUDIT{ANSI_RESET} {ANSI_DIM}]────────────────────────────────{ANSI_RESET}");
+    println!(
+        "{ANSI_DIM}│{ANSI_RESET}  {ANSI_BOLD}Syntax Status{ANSI_RESET} : {}",
+        if outcome.is_valid_json {
+            format!("{ANSI_GREEN}Valid JSON-LD ✔{ANSI_RESET}")
+        } else {
+            format!("{ANSI_RED}Invalid JSON ✖{ANSI_RESET}")
+        }
+    );
+    println!(
+        "{ANSI_DIM}│{ANSI_RESET}  {ANSI_BOLD}Detected @type{ANSI_RESET}: {ANSI_CYAN}{}{ANSI_RESET}",
+        outcome.detected_type.as_deref().unwrap_or("Unknown")
+    );
+    println!("{ANSI_DIM}│{ANSI_RESET}  {ANSI_BOLD}Eligibility  {ANSI_RESET} : {badge}");
+    println!("{ANSI_DIM}└────────────────────────────────────────────────────────────────────────┘{ANSI_RESET}\n");
+
+    if !outcome.missing_required_fields.is_empty() {
+        println!("  {ANSI_RED}{ANSI_BOLD}🚨 Missing Required Properties (Blocks Rich Results):{ANSI_RESET}");
+        for field in &outcome.missing_required_fields {
+            println!("    {ANSI_RED}✖ {field}{ANSI_RESET}");
+        }
+        println!();
+    }
+
+    if !outcome.missing_recommended_fields.is_empty() {
+        println!("  {ANSI_YELLOW}⚡ Missing Recommended Properties (Enhances SERP Snippets):{ANSI_RESET}");
+        for field in &outcome.missing_recommended_fields {
+            println!("    {ANSI_YELLOW}○ {field}{ANSI_RESET}");
+        }
+        println!();
+    }
+
+    if outcome.is_rich_result_eligible && outcome.missing_recommended_fields.is_empty() {
+        println!("  {color}✔ Schema passes all Google Rich Results and schema.org guidelines.{ANSI_RESET}\n");
+    }
 }
