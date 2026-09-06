@@ -152,6 +152,14 @@ pub static RULE_CATALOG: &[RuleDefinition] = &[
         description: "The URL contains excessive faceted filter or sorting parameters without proper canonicalization, risking search engine crawl budget waste.",
         fix_advice: "Implement self-referencing canonical tags to base URLs or disallow parameterized filter combinations in robots.txt.",
     },
+    RuleDefinition {
+        id: RuleId::ErrHttpSoft404,
+        category: IssueCategory::HttpTransport,
+        severity: Severity::Critical,
+        title: "Soft 404 Error Detected",
+        description: "Page returned HTTP 200 OK but content contains '404 Not Found' or error messaging, confusing search engines.",
+        fix_advice: "Return a true HTTP 404 Not Found or 410 Gone status code, or 301 redirect to relevant content.",
+    },
 
     // --- Category 2: Titles & Metadata ---
     RuleDefinition {
@@ -195,6 +203,14 @@ pub static RULE_CATALOG: &[RuleDefinition] = &[
         fix_advice: "Trim leading and trailing whitespace from the `<title>` tag template.",
     },
     RuleDefinition {
+        id: RuleId::WarnTitleSameAsH1,
+        category: IssueCategory::TitleMetadata,
+        severity: Severity::Warning,
+        title: "Title Tag Identical to H1",
+        description: "The document <title> text exactly matches the primary <h1> heading, missing an opportunity to target complementary keywords.",
+        fix_advice: "Differentiate the <title> tag for search result snippets and the <h1> tag for on-page visitors.",
+    },
+    RuleDefinition {
         id: RuleId::WarnMetaDescMissing,
         category: IssueCategory::TitleMetadata,
         severity: Severity::Warning,
@@ -225,6 +241,14 @@ pub static RULE_CATALOG: &[RuleDefinition] = &[
         title: "Multiple Meta Description Tags",
         description: "Multiple `<meta name=\"description\">` tags exist in the document.",
         fix_advice: "Remove duplicate meta description elements, retaining only the primary summary.",
+    },
+    RuleDefinition {
+        id: RuleId::WarnMetaKeywordsPresent,
+        category: IssueCategory::TitleMetadata,
+        severity: Severity::Notice,
+        title: "Obsolete Meta Keywords Tag Present",
+        description: "The <meta name=\"keywords\"> tag is ignored by all major search engines and may expose internal keyword targeting to competitors.",
+        fix_advice: "Safely remove the <meta name=\"keywords\"> tag from the document head.",
     },
 
     // --- Category 3: Headings & Hierarchy ---
@@ -268,6 +292,22 @@ pub static RULE_CATALOG: &[RuleDefinition] = &[
         description: "Heading tags skip structural tiers (e.g. jumping directly from H1 to H3 or H4 without intermediate levels).",
         fix_advice: "Nest headings sequentially (H1 -> H2 -> H3) to maintain accessible document outlines.",
     },
+    RuleDefinition {
+        id: RuleId::WarnDuplicateHeadingText,
+        category: IssueCategory::Headings,
+        severity: Severity::Warning,
+        title: "Duplicate Heading Text",
+        description: "Multiple headings share identical text content, creating repetitive structural hierarchy.",
+        fix_advice: "Author distinctive, descriptive heading text reflecting section-specific topics.",
+    },
+    RuleDefinition {
+        id: RuleId::WarnExcessiveDomDepth,
+        category: IssueCategory::Headings,
+        severity: Severity::Warning,
+        title: "Excessive DOM Element Depth",
+        description: "The HTML document contains more than 1,500 DOM elements, slowing parsing and increasing memory pressure.",
+        fix_advice: "Simplify DOM structure, remove unnecessary wrapper elements, and paginate or virtualize large lists.",
+    },
 
     // --- Category 4: Directives & Robots ---
     RuleDefinition {
@@ -302,6 +342,30 @@ pub static RULE_CATALOG: &[RuleDefinition] = &[
         description: "The page forbids search engines from showing text snippets or video previews in search results.",
         fix_advice: "Review if disabling text snippets is intentional.",
     },
+    RuleDefinition {
+        id: RuleId::WarnPaginationMissingCanonical,
+        category: IssueCategory::Indexability,
+        severity: Severity::Warning,
+        title: "Paginated Page Missing Canonical",
+        description: "A paginated URL (?page=N or /page/N) lacks a canonical link tag, risking duplicate indexing or ranking cannibalization.",
+        fix_advice: "Add a self-referencing canonical tag to each paginated page or link to a view-all version.",
+    },
+    RuleDefinition {
+        id: RuleId::AlertPaginationNoindex,
+        category: IssueCategory::Indexability,
+        severity: Severity::Alert,
+        title: "Paginated Page Blocked by noindex",
+        description: "A paginated component page specifies noindex, which can prevent discovery and crawling of deep internal links over time.",
+        fix_advice: "Allow pagination pages to be indexed with self-referencing canonicals rather than noindex.",
+    },
+    RuleDefinition {
+        id: RuleId::AlertUnrenderedSpaHeuristic,
+        category: IssueCategory::Indexability,
+        severity: Severity::Alert,
+        title: "Unrendered SPA Container Detected",
+        description: "Page appears to be a client-side Single Page Application (SPA) container with empty root elements and minimal server-rendered HTML.",
+        fix_advice: "Implement server-side rendering (SSR), static site generation (SSG), or pre-rendering for search crawlers.",
+    },
 
     // --- Category 5: Canonicalization ---
     RuleDefinition {
@@ -335,6 +399,22 @@ pub static RULE_CATALOG: &[RuleDefinition] = &[
         title: "Canonical URL Mismatch",
         description: "The declared canonical URL points to a different resource than the current request URL.",
         fix_advice: "Verify whether this page is meant to be indexed or consolidated under the canonical target.",
+    },
+    RuleDefinition {
+        id: RuleId::AlertCanonicalCrossDomain,
+        category: IssueCategory::Canonicalization,
+        severity: Severity::Alert,
+        title: "Cross-Domain Canonical URL",
+        description: "The canonical tag points to an external third-party domain rather than the current website host.",
+        fix_advice: "Verify that canonicalizing to an external domain is intended for syndication, otherwise use an internal URL.",
+    },
+    RuleDefinition {
+        id: RuleId::WarnCanonicalToUnverifiedHttp,
+        category: IssueCategory::Canonicalization,
+        severity: Severity::Warning,
+        title: "HTTPS Page Canonicalizes to HTTP",
+        description: "An HTTPS page specifies an insecure HTTP URL in its canonical tag, downgrading security signaling.",
+        fix_advice: "Update canonical target URLs to use the secure https:// scheme.",
     },
 
     // --- Category 6: Modern Security & Transport ---
@@ -386,6 +466,30 @@ pub static RULE_CATALOG: &[RuleDefinition] = &[
         description: "The response lacks `X-Content-Type-Options: nosniff` to prevent MIME-confusion exploits.",
         fix_advice: "Include `X-Content-Type-Options: nosniff` on all HTTP responses.",
     },
+    RuleDefinition {
+        id: RuleId::WarnSecurityMissingReferrerPolicy,
+        category: IssueCategory::Security,
+        severity: Severity::Notice,
+        title: "Missing Referrer-Policy Header",
+        description: "The HTTP response does not specify a Referrer-Policy header, risking referrer information leakage.",
+        fix_advice: "Configure `Referrer-Policy: strict-origin-when-cross-origin` or similar secure policy in server headers.",
+    },
+    RuleDefinition {
+        id: RuleId::WarnSecurityTargetBlankNoOpener,
+        category: IssueCategory::Security,
+        severity: Severity::Warning,
+        title: "Target Blank Link Missing noopener",
+        description: "An external link with `target=\"_blank\"` lacks `rel=\"noopener\"` or `rel=\"noreferrer\"`, exposing reverse tabnabbing vulnerabilities.",
+        fix_advice: "Add `rel=\"noopener noreferrer\"` to all hyperlinks opening in new windows.",
+    },
+    RuleDefinition {
+        id: RuleId::WarnSecurityInsecureForm,
+        category: IssueCategory::Security,
+        severity: Severity::Alert,
+        title: "Insecure Form Action URL",
+        description: "An HTML `<form>` action points to an unencrypted HTTP URL, risking cleartext transmission of user form data.",
+        fix_advice: "Ensure all form actions submit to secure HTTPS endpoints.",
+    },
 
     // --- Category 7: Images & Core Web Vitals (CLS) ---
     RuleDefinition {
@@ -412,6 +516,14 @@ pub static RULE_CATALOG: &[RuleDefinition] = &[
         description: "An image is embedded directly in the HTML as a base64 data URI, bloating initial document transfer.",
         fix_advice: "Host images externally as optimized WebP or AVIF assets.",
     },
+    RuleDefinition {
+        id: RuleId::WarnImgAltTooLong,
+        category: IssueCategory::TitleMetadata,
+        severity: Severity::Notice,
+        title: "Image Alt Text Too Long",
+        description: "An image alt attribute exceeds 125 characters, reading more like a paragraph than a concise description.",
+        fix_advice: "Shorten image alt descriptions to 125 characters or fewer for screen readers and search engines.",
+    },
 
     // --- Category 8: Mobile UX & Viewports ---
     RuleDefinition {
@@ -429,6 +541,48 @@ pub static RULE_CATALOG: &[RuleDefinition] = &[
         title: "Viewport Disables User Zooming",
         description: "The viewport tag disables user zoom (`user-scalable=no` or `maximum-scale=1.0`), violating accessibility guidelines.",
         fix_advice: "Allow users to scale and zoom content freely on mobile devices.",
+    },
+    RuleDefinition {
+        id: RuleId::WarnPerfLargeHtmlPayload,
+        category: IssueCategory::MobileUx,
+        severity: Severity::Warning,
+        title: "Large HTML Payload Size",
+        description: "The uncompressed HTML response exceeds 1.5 MB, increasing download latency and mobile memory consumption.",
+        fix_advice: "Minify HTML, reduce inline CSS/JS, and defer heavy scripts or large embedded payloads.",
+    },
+    RuleDefinition {
+        id: RuleId::ErrPerfExcessiveHtmlPayload,
+        category: IssueCategory::MobileUx,
+        severity: Severity::Critical,
+        title: "Excessive HTML Payload Size",
+        description: "The uncompressed HTML response exceeds 3.0 MB, severely hurting mobile performance and crawl efficiency.",
+        fix_advice: "Split large pages, paginate data tables, and offload inline media or JSON blobs to separate endpoints.",
+    },
+
+    // --- Category 9: Links & Anchor Quality ---
+    RuleDefinition {
+        id: RuleId::WarnLinksTooManyOnPage,
+        category: IssueCategory::Links,
+        severity: Severity::Warning,
+        title: "Excessive Links On Page",
+        description: "Page contains more than 250 hyperlinks, diluting internal link equity distribution across pages.",
+        fix_advice: "Reduce excessive link counts and prune redundant header/footer or mega-menu links.",
+    },
+    RuleDefinition {
+        id: RuleId::WarnLinkSuspiciousAnchor,
+        category: IssueCategory::Links,
+        severity: Severity::Warning,
+        title: "Non-Descriptive Generic Anchor Text",
+        description: "Hyperlink uses generic anchor text (e.g. 'click here', 'read more') lacking descriptive topical context.",
+        fix_advice: "Replace generic anchor text with descriptive keywords communicating the target page topic.",
+    },
+    RuleDefinition {
+        id: RuleId::WarnLinkEmptyAnchor,
+        category: IssueCategory::Links,
+        severity: Severity::Warning,
+        title: "Empty Hyperlink Anchor Text",
+        description: "A text hyperlink contains zero text or only whitespace characters, hindering screen readers and search discovery.",
+        fix_advice: "Provide descriptive anchor text or an aria-label attribute for every text link.",
     },
 
     // --- Category 9: Structured Data & Schema.org ---
