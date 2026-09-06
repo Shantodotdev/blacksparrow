@@ -8,6 +8,7 @@ pub mod directives;
 pub mod geo;
 pub mod headings;
 pub mod images;
+pub mod international;
 pub mod links;
 pub mod mobile;
 pub mod schema_val;
@@ -36,6 +37,12 @@ pub fn evaluate_page_rules(page: &ParsedPage, fetch: &FetchResult) -> Vec<IssueF
     links::check_links(page, url, &mut issues);
     schema_val::check_schemas(page, url, &mut issues);
     geo::check_content_and_ai(page, fetch, url, &mut issues);
+    international::check_international(
+        page.html_lang.as_deref(),
+        &page.hreflangs,
+        url,
+        &mut issues,
+    );
 
     issues
 }
