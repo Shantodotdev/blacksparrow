@@ -41,6 +41,7 @@ quick-xml = "0.37"
 flate2 = "1.0"
 petgraph = "0.8"
 regex = "1.11"
+rusqlite = { version = "0.33", features = ["bundled"] }
 
 
 [dev-dependencies]

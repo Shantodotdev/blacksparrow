@@ -50,6 +50,24 @@ pub enum Severity {
     Notice = 4,
 }
 
+impl Severity {
+    /// Converts a 1-based integer (1..=4) to Severity tier.
+    pub const fn from_u8(val: u8) -> Option<Self> {
+        match val {
+            1 => Some(Self::Critical),
+            2 => Some(Self::Alert),
+            3 => Some(Self::Warning),
+            4 => Some(Self::Notice),
+            _ => None,
+        }
+    }
+
+    /// Returns the integer value (1..=4).
+    pub const fn as_u8(&self) -> u8 {
+        *self as u8
+    }
+}
+
 /// Functional categories mapping to the 120-check technical SEO audit catalog.
 ///
 /// Organizes audit findings into logical audit domains for reporting and filtering.
@@ -91,6 +109,47 @@ pub enum IssueCategory {
     SiteGraph,
     /// Client-side JavaScript DOM rendering diffs (CSR vs SSR content differences).
     JsDiff,
+}
+
+impl IssueCategory {
+    /// Returns the snake_case string representation.
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::HttpTransport => "http_transport",
+            Self::TitleMetadata => "title_metadata",
+            Self::Headings => "headings",
+            Self::Indexability => "indexability",
+            Self::Canonicalization => "canonicalization",
+            Self::Links => "links",
+            Self::Security => "security",
+            Self::MobileUx => "mobile_ux",
+            Self::Internationalization => "internationalization",
+            Self::StructuredData => "structured_data",
+            Self::GeoAiSearch => "geo_ai_search",
+            Self::SiteGraph => "site_graph",
+            Self::JsDiff => "js_diff",
+        }
+    }
+
+    /// Parses from string representation.
+    pub fn from_str_name(s: &str) -> Option<Self> {
+        match s {
+            "http_transport" | "HttpTransport" => Some(Self::HttpTransport),
+            "title_metadata" | "TitleMetadata" => Some(Self::TitleMetadata),
+            "headings" | "Headings" => Some(Self::Headings),
+            "indexability" | "Indexability" => Some(Self::Indexability),
+            "canonicalization" | "Canonicalization" => Some(Self::Canonicalization),
+            "links" | "Links" => Some(Self::Links),
+            "security" | "Security" => Some(Self::Security),
+            "mobile_ux" | "MobileUx" => Some(Self::MobileUx),
+            "internationalization" | "Internationalization" => Some(Self::Internationalization),
+            "structured_data" | "StructuredData" => Some(Self::StructuredData),
+            "geo_ai_search" | "GeoAiSearch" => Some(Self::GeoAiSearch),
+            "site_graph" | "SiteGraph" => Some(Self::SiteGraph),
+            "js_diff" | "JsDiff" => Some(Self::JsDiff),
+            _ => None,
+        }
+    }
 }
 
 /// Strongly typed identifier for technical SEO audit rules.
@@ -646,6 +705,9 @@ pub struct CrawlSummary {
     pub session_id: String,
     /// Seed root URL of the crawl.
     pub target_url: String,
+    /// Crawl session status ('crawling', 'completed', 'interrupted', 'failed').
+    #[serde(default)]
+    pub status: String,
     /// ISO 8601 timestamp when the crawl started.
     pub started_at: String,
     /// ISO 8601 timestamp when the crawl completed, if finished.
@@ -795,6 +857,7 @@ mod tests {
         let summary = CrawlSummary {
             session_id: "test-session".to_string(),
             target_url: "https://example.com/".to_string(),
+            status: "completed".to_string(),
             started_at: "2026-09-04T12:00:00Z".to_string(),
             finished_at: None,
             total_pages_crawled: 1,

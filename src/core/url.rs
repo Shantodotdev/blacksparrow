@@ -58,7 +58,6 @@
 //! ```
 
 use crate::error::{SeoError, SeoResult};
-use ahash::AHasher;
 use serde::{Deserialize, Serialize};
 use std::hash::Hasher;
 use url::Url;
@@ -278,7 +277,8 @@ pub fn resolve_relative(base: &str, relative: &str) -> SeoResult<String> {
 /// assert_eq!(url_hash(&url_a), url_hash(&url_b));
 /// ```
 pub fn url_hash(normalized_url: &str) -> u64 {
-    let mut hasher = AHasher::default();
+    use std::hash::BuildHasher;
+    let mut hasher = ahash::RandomState::with_seeds(0x1234, 0x5678, 0x9ABC, 0xDEF0).build_hasher();
     hasher.write(normalized_url.as_bytes());
     hasher.finish()
 }

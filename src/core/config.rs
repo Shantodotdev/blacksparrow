@@ -74,6 +74,10 @@ pub struct CrawlConfig {
     pub max_query_params: usize,
     /// Whether to prune sorting and display facet URLs (e.g. ?sort=, ?order=, ?view=) (default: true).
     pub ignore_sorting_facets: bool,
+    /// Optional crawl session identifier (auto-generated if None).
+    pub session_id: Option<String>,
+    /// Optional path override for SQLite persistence database.
+    pub db_path: Option<std::path::PathBuf>,
 }
 
 impl CrawlConfig {
@@ -88,6 +92,8 @@ impl CrawlConfig {
     /// - `respect_robots`: true
     /// - `max_query_params`: 2
     /// - `ignore_sorting_facets`: true
+    /// - `session_id`: None
+    /// - `db_path`: None
     ///
     /// # Errors
     ///
@@ -123,6 +129,8 @@ impl CrawlConfig {
             no_aimd: false,
             max_query_params: 2,
             ignore_sorting_facets: true,
+            session_id: None,
+            db_path: None,
         })
     }
 

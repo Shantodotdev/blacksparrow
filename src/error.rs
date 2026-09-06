@@ -48,6 +48,16 @@ pub enum SeoError {
     /// Unexpected internal engine state or parser rewriter failure.
     #[error("Internal engine error: {0}")]
     Internal(String),
+
+    /// SQLite persistence or query execution failure.
+    #[error("Storage error: {0}")]
+    Storage(String),
+}
+
+impl From<rusqlite::Error> for SeoError {
+    fn from(err: rusqlite::Error) -> Self {
+        SeoError::Storage(err.to_string())
+    }
 }
 
 /// Specialized Result type for SEO Lens operations.
