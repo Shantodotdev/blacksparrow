@@ -70,6 +70,7 @@ fn mock_page(
         schemas: vec![],
         hreflangs,
         issues: vec![],
+        page_intent: Default::default(),
     }
 }
 

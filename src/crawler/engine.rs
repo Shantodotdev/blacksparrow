@@ -135,6 +135,7 @@ fn build_page_report(
         report.images = p.images.clone();
         report.schemas = p.schemas.clone();
         report.hreflangs = p.hreflangs.clone();
+        report.page_intent = p.page_intent.clone();
     }
 
     report

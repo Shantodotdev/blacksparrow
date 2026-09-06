@@ -1546,6 +1546,7 @@ dependencies = [
  "lol_html",
  "petgraph",
  "quick-xml",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",

@@ -108,6 +108,7 @@ fn test_format_page_inspection_with_rich_metadata() {
             (CompactString::new("twitter:card"), "summary_large_image".to_string()),
             (CompactString::new("twitter:site"), "@rustlang".to_string()),
         ],
+        page_intent: Default::default(),
     };
 
     let fetch = FetchResult {
@@ -187,6 +188,7 @@ fn test_format_page_inspection_wraps_long_descriptions() {
             CompactString::new("twitter:description"),
             long_og_desc.to_string(),
         )],
+        page_intent: Default::default(),
     };
 
     let fetch = FetchResult {

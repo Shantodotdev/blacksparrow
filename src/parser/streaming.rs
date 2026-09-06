@@ -614,7 +614,7 @@ pub fn parse_html(html: &str, base_url: &str) -> SeoResult<ParsedPage> {
     let final_og = open_graph.take();
     let final_tw = twitter_cards.take();
 
-    Ok(ParsedPage {
+    let mut page = ParsedPage {
         title,
         meta_description: final_meta_desc,
         meta_keywords: final_meta_keywords,
@@ -638,7 +638,13 @@ pub fn parse_html(html: &str, base_url: &str) -> SeoResult<ParsedPage> {
         hreflangs: final_hreflangs,
         open_graph: final_og,
         twitter_cards: final_tw,
-    })
+        page_intent: Default::default(),
+    };
+
+    let intent = crate::parser::intent::classify_intent(html, base_url, &page, None);
+    page.page_intent = intent;
+
+    Ok(page)
 }
 
 /// Validates, normalizes, and appends a pending hyperlink into the discovered links collection.

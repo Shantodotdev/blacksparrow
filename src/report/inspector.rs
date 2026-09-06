@@ -95,6 +95,12 @@ pub fn format_page_inspection(
         check(has_x_content),
     ));
 
+    let archetype_badge = page.page_intent.archetype.badge();
+    let conf_pct = (page.page_intent.confidence * 100.0).round() as u32;
+    out.push_str(&format!(
+        "  {ANSI_BOLD}Archetype    {ANSI_RESET}: {ANSI_CYAN}{ANSI_BOLD}[{archetype_badge}]{ANSI_RESET} {ANSI_DIM}({conf_pct}% confidence){ANSI_RESET}\n",
+    ));
+
     // 3. Core Metadata & Directives (with generous vertical spacing before header)
     out.push_str(&format!(
         "\n\n{}",

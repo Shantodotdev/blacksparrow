@@ -319,6 +319,7 @@ fn test_markdown_and_json_report_exporters() {
         schemas: vec![],
         hreflangs: vec![],
         issues: vec![],
+        page_intent: Default::default(),
     };
 
     let mut graph = SiteGraph::new();

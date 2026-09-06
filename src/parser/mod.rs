@@ -88,13 +88,17 @@
 //! ```
 
 pub mod content;
+pub mod intent;
 pub mod metadata;
 pub mod schema;
 pub mod streaming;
 
+pub use intent::{classify_intent, CdpIntentSignals};
 pub use streaming::parse_html;
 
-use crate::core::models::{DiscoveredLink, HreflangTag, ImageResource, RobotsFlags, SchemaRecord};
+use crate::core::models::{
+    DiscoveredLink, HreflangTag, ImageResource, PageIntent, RobotsFlags, SchemaRecord,
+};
 use compact_str::CompactString;
 use serde::{Deserialize, Serialize};
 
@@ -150,6 +154,8 @@ pub struct ParsedPage {
     pub open_graph: Vec<(CompactString, String)>,
     /// Twitter Card metadata key-value pairs (e.g. `("twitter:card", "...")`).
     pub twitter_cards: Vec<(CompactString, String)>,
+    /// Inferred semantic archetype and intent of the page.
+    pub page_intent: PageIntent,
 }
 
 impl ParsedPage {
