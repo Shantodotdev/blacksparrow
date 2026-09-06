@@ -109,6 +109,10 @@ pub struct Frontier {
     max_depth: u16,
     /// Cumulative count of successfully enqueued unique URLs.
     enqueued_count: u32,
+    /// Whether any candidate URL was rejected because max_pages limit was reached.
+    hit_max_pages: bool,
+    /// Whether any candidate URL was rejected because max_depth limit was exceeded.
+    hit_max_depth: bool,
 }
 
 impl Frontier {
@@ -139,6 +143,8 @@ impl Frontier {
             max_pages,
             max_depth,
             enqueued_count: 0,
+            hit_max_pages: false,
+            hit_max_depth: false,
         }
     }
 
@@ -181,6 +187,7 @@ impl Frontier {
     /// ```
     pub fn push(&mut self, raw_url: &str, depth: u16, source_url: Option<&str>) -> SeoResult<bool> {
         if depth > self.max_depth {
+            self.hit_max_depth = true;
             return Ok(false);
         }
 
@@ -212,6 +219,7 @@ impl Frontier {
         }
 
         if self.max_pages > 0 && self.enqueued_count >= self.max_pages {
+            self.hit_max_pages = true;
             return Ok(false);
         }
 
@@ -289,6 +297,18 @@ impl Frontier {
     #[inline]
     pub fn enqueued_count(&self) -> u32 {
         self.enqueued_count
+    }
+
+    /// Returns `true` if any candidate URL was rejected due to the max pages limit.
+    #[inline]
+    pub fn hit_max_pages(&self) -> bool {
+        self.hit_max_pages
+    }
+
+    /// Returns `true` if any candidate URL was rejected due to the max depth limit.
+    #[inline]
+    pub fn hit_max_depth(&self) -> bool {
+        self.hit_max_depth
     }
 }
 
