@@ -12,7 +12,7 @@ ui/dist/
 *.db
 *.db-wal
 *.db-shm
-reports/
+report*
 
 # OS / Editor
 .DS_Store
