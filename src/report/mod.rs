@@ -18,5 +18,5 @@ pub use markdown::export_markdown_report;
 pub use score::calculate_health_score;
 pub use terminal::{
     create_crawl_progress_bar, finish_crawl_progress, print_audit_banner,
-    print_executive_scorecard, update_crawl_progress,
+    print_executive_scorecard, print_historical_sessions, update_crawl_progress,
 };

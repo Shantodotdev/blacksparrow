@@ -6,7 +6,7 @@
 //! - Deep audit scorecard with visual health gauges, protocol radar, defect triage trees,
 //!   PageRank authority distribution tables, and artifact links.
 
-use crate::core::models::Severity;
+use crate::core::models::{CrawlSummary, Severity};
 use crate::crawler::engine::{CrawlResult, ProgressUpdate};
 use hashbrown::HashMap;
 use std::io::{self, Write};
@@ -21,6 +21,7 @@ const ANSI_GREEN: &str = "\x1b[38;5;48m";
 const ANSI_RED: &str = "\x1b[38;5;196m";
 const ANSI_YELLOW: &str = "\x1b[38;5;220m";
 const ANSI_DIM: &str = "\x1b[38;5;244m";
+const ANSI_BRIGHT_WHITE: &str = "\x1b[38;5;231m";
 const ANSI_BOLD: &str = "\x1b[1m";
 const ANSI_RESET: &str = "\x1b[0m";
 
@@ -336,4 +337,126 @@ pub fn print_executive_scorecard(result: &CrawlResult, exported_paths: &[(&str, 
         }
         println!("{ANSI_DIM}└────────────────────────────────────────────────────────────────────────┘{ANSI_RESET}\n");
     }
+}
+
+fn format_section_header(title: &str) -> String {
+    let pad = title.chars().count() + 4;
+    let top = format!(
+        "  {ANSI_BOLD}{ANSI_CYAN}┌{}┐{ANSI_RESET}\n",
+        "─".repeat(pad)
+    );
+    let mid = format!(
+        "  {ANSI_BOLD}{ANSI_CYAN}│{ANSI_RESET}  {ANSI_BOLD}{ANSI_BRIGHT_WHITE}{title}{ANSI_RESET}  {ANSI_BOLD}{ANSI_CYAN}│{ANSI_RESET}\n"
+    );
+    let bot = format!(
+        "  {ANSI_BOLD}{ANSI_CYAN}└{}┘{ANSI_RESET}\n",
+        "─".repeat(pad)
+    );
+    format!("{top}{mid}{bot}")
+}
+
+/// Renders the cyberpunk-styled historical crawl sessions in developer inspector aesthetic.
+pub fn print_historical_sessions(db_path: &Path, crawls: &[CrawlSummary]) {
+    // 1. Big Cyberpunk ASCII Header (matching inspect command)
+    println!(
+        "\n{ANSI_CYAN}{ANSI_BOLD}  ███████╗███████╗ ██████╗     ██╗     ███████╗███╗   ██╗███████╗\n  ██╔════╝██╔════╝██╔═══██╗    ██║     ██╔════╝████╗  ██║██╔════╝\n  ███████╗█████╗  ██║   ██║    ██║     █████╗  ██╔██╗ ██║███████╗\n  ╚════██║██╔══╝  ██║   ██║    ██║     ██╔══╝  ██║╚██╗██║╚════██║\n  ███████║███████╗╚██████╔╝    ███████╗███████╗██║ ╚████║███████║\n  ╚══════╝╚══════╝ ╚═════╝     ╚══════╝╚══════╝╚═╝  ╚═══╝╚══════╝{ANSI_RESET}\n"
+    );
+
+    // 2. Persistence Repository
+    print!("{}", format_section_header("PERSISTENCE REPOSITORY"));
+    println!(
+        "  {ANSI_BOLD}Database Path{ANSI_RESET} : {ANSI_CYAN}{}{ANSI_RESET}",
+        db_path.display()
+    );
+    let session_count_str = match crawls.len() {
+        0 => format!("{ANSI_YELLOW}0 sessions recorded{ANSI_RESET}"),
+        1 => format!("{ANSI_GREEN}1 session recorded{ANSI_RESET}"),
+        n => format!("{ANSI_GREEN}{n} sessions recorded{ANSI_RESET}"),
+    };
+    println!(
+        "  {ANSI_BOLD}Total Audits {ANSI_RESET} : {session_count_str} {ANSI_DIM}│{ANSI_RESET} SQLite WAL Mode Active\n"
+    );
+
+    if crawls.is_empty() {
+        println!("  {ANSI_YELLOW}⚡ No crawl sessions found in persistence.{ANSI_RESET}");
+        println!("  Run {ANSI_CYAN}{ANSI_BOLD}seolens audit <URL>{ANSI_RESET} to start your first technical SEO crawl.\n");
+        return;
+    }
+
+    // 3. Historical Audit Sessions
+    print!("{}", format_section_header("HISTORICAL AUDIT SESSIONS"));
+
+    for (i, c) in crawls.iter().enumerate() {
+        let status_badge = match c.status.to_lowercase().as_str() {
+            "completed" => format!("{ANSI_GREEN}● COMPLETED{ANSI_RESET}"),
+            "interrupted" => format!("{ANSI_YELLOW}▲ INTERRUPTED{ANSI_RESET}"),
+            "crawling" => format!("{ANSI_CYAN}■ CRAWLING{ANSI_RESET}"),
+            "failed" => format!("{ANSI_RED}✖ FAILED{ANSI_RESET}"),
+            _ => {
+                if c.finished_at.is_some() {
+                    format!("{ANSI_GREEN}● COMPLETED{ANSI_RESET}")
+                } else {
+                    format!("{ANSI_YELLOW}▲ UNKNOWN{ANSI_RESET}")
+                }
+            }
+        };
+
+        let (score_color, rating) = if c.health_score >= 90 {
+            (ANSI_GREEN, "Excellent")
+        } else if c.health_score >= 75 {
+            (ANSI_YELLOW, "Good // Minor Defects")
+        } else if c.health_score >= 50 {
+            (ANSI_CYAN, "Needs Attention")
+        } else {
+            (ANSI_RED, "Critical Defects Detected")
+        };
+
+        let started_clean = c.started_at.replace('T', " ");
+        let started_short = if started_clean.len() >= 16 {
+            &started_clean[..16]
+        } else {
+            &started_clean
+        };
+
+        let defects = if c.total_errors == 0 && c.total_alerts == 0 && c.total_warnings == 0 {
+            format!("{ANSI_GREEN}✔ 0 defects{ANSI_RESET}")
+        } else {
+            format!(
+                "{ANSI_RED}🚨 {} Critical{ANSI_RESET} {ANSI_DIM}│{ANSI_RESET} {ANSI_YELLOW}⚠️ {} Alerts{ANSI_RESET} {ANSI_DIM}│{ANSI_RESET} {ANSI_YELLOW}⚡ {} Warnings{ANSI_RESET}",
+                c.total_errors, c.total_alerts, c.total_warnings
+            )
+        };
+
+        println!(
+            "  {ANSI_BOLD}{ANSI_CYAN}▸ {}{ANSI_RESET}  {status_badge}  {ANSI_DIM}[{started_short}]{ANSI_RESET}",
+            c.session_id
+        );
+        println!(
+            "    {ANSI_BOLD}Target URL  {ANSI_RESET} : {ANSI_CYAN}{}{ANSI_RESET}",
+            c.target_url
+        );
+        println!(
+            "    {ANSI_BOLD}Health Score{ANSI_RESET} : {score_color}{ANSI_BOLD}{}/100{ANSI_RESET} {ANSI_DIM}({rating}){ANSI_RESET}",
+            c.health_score
+        );
+        println!(
+            "    {ANSI_BOLD}Probed Nodes{ANSI_RESET} : {ANSI_BOLD}{}{ANSI_RESET} pages",
+            c.total_pages_crawled
+        );
+        println!("    {ANSI_BOLD}Defect Triage{ANSI_RESET}: {defects}");
+
+        if i < crawls.len() - 1 {
+            println!();
+        }
+    }
+
+    println!();
+    // 4. Action Dispatch
+    print!(
+        "{}",
+        format_section_header("ACTION DISPATCH // QUICK COMMANDS")
+    );
+    println!("  {ANSI_CYAN}◈ Re-inspect session {ANSI_RESET} : seolens report <SESSION_ID>");
+    println!("  {ANSI_CYAN}◈ Re-export artifacts{ANSI_RESET} : seolens report <SESSION_ID> --format md,json");
+    println!("  {ANSI_CYAN}◈ Start fresh crawl  {ANSI_RESET} : seolens audit <URL>\n");
 }

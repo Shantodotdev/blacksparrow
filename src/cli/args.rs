@@ -26,7 +26,15 @@ pub enum Commands {
     /// Re-export or inspect an existing audit from the SQLite database
     Report(ReportArgs),
     /// List all historical audit sessions stored locally
-    List,
+    List(ListArgs),
+}
+
+/// Command-line arguments for the `list` subcommand.
+#[derive(Args, Debug, Clone, Default)]
+pub struct ListArgs {
+    /// Custom path to SQLite persistence database
+    #[arg(long)]
+    pub db_path: Option<PathBuf>,
 }
 
 /// Command-line arguments for the `audit` subcommand.
@@ -94,6 +102,10 @@ pub struct AuditArgs {
     /// Strip/prune sorting and display facets (sort, order, view, etc.)
     #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
     pub ignore_sorting_facets: bool,
+
+    /// Custom path to SQLite persistence database (default: .seolens/seolens.db)
+    #[arg(long)]
+    pub db_path: Option<PathBuf>,
 }
 
 /// Command-line arguments for the `inspect` subcommand.
@@ -127,7 +139,12 @@ pub struct McpArgs {
 #[derive(Args, Debug, Clone)]
 pub struct ReportArgs {
     /// Session ID to inspect or re-export
-    pub session: String,
+    #[arg(short = 's', long)]
+    pub session: Option<String>,
+
+    /// Session ID positional argument
+    #[arg(value_name = "SESSION_ID")]
+    pub session_pos: Option<String>,
 
     /// Comma-separated export formats: csv,json,md,html
     #[arg(short = 'f', long)]
@@ -136,4 +153,8 @@ pub struct ReportArgs {
     /// Directory where export artifacts are saved
     #[arg(short = 'o', long)]
     pub output_dir: Option<PathBuf>,
+
+    /// Custom path to SQLite persistence database
+    #[arg(long)]
+    pub db_path: Option<PathBuf>,
 }

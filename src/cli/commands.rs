@@ -2,15 +2,19 @@
 //!
 //! Implements execution logic for `audit`, `inspect`, `mcp`, `report`, and `list` commands.
 
-use crate::cli::args::{AuditArgs, Cli, Commands, InspectArgs, McpArgs, ReportArgs};
+use crate::cli::args::{AuditArgs, Cli, Commands, InspectArgs, ListArgs, McpArgs, ReportArgs};
 use crate::core::config::CrawlConfig;
 use crate::core::models::Severity;
-use crate::crawler::engine::{run_crawl, ProgressCallback};
+use crate::crawler::engine::{run_crawl_with_options, CrawlResult, ProgressCallback};
 use crate::crawler::inspector::inspect_url;
+use crate::graph::{compute_pagerank, SiteGraph};
 use crate::report::{
     create_crawl_progress_bar, export_json_report, export_markdown_report, finish_crawl_progress,
-    print_audit_banner, print_executive_scorecard, print_page_inspection, update_crawl_progress,
+    print_audit_banner, print_executive_scorecard, print_historical_sessions,
+    print_page_inspection, update_crawl_progress,
 };
+use crate::storage::{default_db_path, CrawlSessionInit, Database};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::info;
@@ -22,7 +26,7 @@ pub async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         Commands::Inspect(args) => handle_inspect(args).await,
         Commands::Mcp(args) => handle_mcp(args).await,
         Commands::Report(args) => handle_report(args).await,
-        Commands::List => handle_list().await,
+        Commands::List(args) => handle_list(args).await,
     }
 }
 
@@ -40,6 +44,34 @@ async fn handle_audit(args: AuditArgs) -> Result<(), Box<dyn std::error::Error>>
     config.max_query_params = args.max_query_params;
     config.ignore_sorting_facets = args.ignore_sorting_facets;
 
+    let db_path = args.db_path.clone().unwrap_or_else(default_db_path);
+    config.db_path = Some(db_path.clone());
+
+    let session_id = format!(
+        "crawl_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs()
+    );
+    config.session_id = Some(session_id.clone());
+
+    let (writer_handle, writer_task) = if !args.ephemeral {
+        let db = Database::open(&db_path)?;
+        db.init_crawl_session(&CrawlSessionInit {
+            session_id: session_id.clone(),
+            target_url: config.start_url.clone(),
+            max_pages: config.max_pages,
+            max_depth: config.max_depth,
+            respect_robots: config.respect_robots,
+            render_js: config.render_js,
+        })?;
+        let (handle, task) = db.spawn_writer(&session_id, 50, Duration::from_millis(500))?;
+        (Some(handle), Some(task))
+    } else {
+        (None, None)
+    };
+
     print_audit_banner(
         &config.start_url,
         config.max_pages,
@@ -54,8 +86,24 @@ async fn handle_audit(args: AuditArgs) -> Result<(), Box<dyn std::error::Error>>
         update_crawl_progress(&pb_clone, &update);
     });
 
-    let crawl_result = run_crawl(&config, Some(progress_cb)).await?;
+    let crawl_result =
+        run_crawl_with_options(&config, Some(progress_cb), writer_handle.clone(), None).await?;
     finish_crawl_progress(&pb);
+
+    if let (Some(handle), Some(task)) = (writer_handle, writer_task) {
+        let _ = handle.shutdown().await;
+        let _ = task.await;
+    }
+
+    if args.ephemeral && db_path.exists() {
+        let _ = std::fs::remove_file(&db_path);
+        let mut shm = db_path.clone();
+        shm.set_extension("db-shm");
+        let _ = std::fs::remove_file(shm);
+        let mut wal = db_path.clone();
+        wal.set_extension("db-wal");
+        let _ = std::fs::remove_file(wal);
+    }
 
     // Handle file exports
     let formats: Vec<&str> = args.format.split(',').map(|s| s.trim()).collect();
@@ -144,14 +192,104 @@ async fn handle_mcp(args: McpArgs) -> Result<(), Box<dyn std::error::Error>> {
 
 /// Inspects or re-exports an existing audit session from persistence.
 async fn handle_report(args: ReportArgs) -> Result<(), Box<dyn std::error::Error>> {
-    info!(session_id = %args.session, "Inspecting report session (scaffold)");
-    println!("Exporting audit session: {}", args.session);
+    let db_path = args.db_path.unwrap_or_else(default_db_path);
+    if !db_path.exists() {
+        eprintln!(
+            "❌ Persistence database not found at '{}'. Run an audit first.",
+            db_path.display()
+        );
+        std::process::exit(1);
+    }
+
+    let session_id = match args.session.or(args.session_pos) {
+        Some(s) => s,
+        None => {
+            eprintln!("❌ Missing session ID. Usage: seolens report <SESSION_ID> or seolens report --session <SESSION_ID>");
+            std::process::exit(1);
+        }
+    };
+
+    let db = Database::open(&db_path)?;
+    let crawl = match db.get_crawl(&session_id)? {
+        Some(c) => c,
+        None => {
+            eprintln!(
+                "❌ Session '{}' was not found in '{}'. Use 'seolens list' to see saved sessions.",
+                session_id,
+                db_path.display()
+            );
+            std::process::exit(1);
+        }
+    };
+
+    println!("📦 Loading session '{}' from SQLite...", session_id);
+    let pages = db.get_crawl_pages(&session_id, 100_000, 0)?;
+    let issues = db.get_crawl_issues(&session_id, None, None)?;
+
+    let sitemap_urls: Vec<String> = pages
+        .iter()
+        .filter(|p| p.is_sitemap_url)
+        .map(|p| p.url.clone())
+        .collect();
+    let graph = SiteGraph::from_pages(&pages, &sitemap_urls);
+    let pagerank = compute_pagerank(&graph, 0.85, 100, 1e-6);
+
+    let crawl_result = CrawlResult {
+        target_url: crawl.target_url.clone(),
+        pages,
+        graph,
+        pagerank,
+        issues,
+        duration: Duration::from_secs(0),
+        sitemap_urls,
+        aimd_delay_ms: 0,
+        health_score: crawl.health_score,
+    };
+
+    let output_dir = args
+        .output_dir
+        .unwrap_or_else(|| PathBuf::from("./reports"));
+    let format_str = args
+        .format
+        .unwrap_or_else(|| "terminal,json,md".to_string());
+    let formats: Vec<&str> = format_str.split(',').map(|s| s.trim()).collect();
+    let mut exported_artifacts = Vec::new();
+
+    if formats.contains(&"md") || formats.contains(&"all") {
+        if let Ok(path) = export_markdown_report(&crawl_result, &output_dir) {
+            exported_artifacts.push(("Markdown", path));
+        }
+    }
+
+    if formats.contains(&"json") || formats.contains(&"all") {
+        if let Ok(path) = export_json_report(&crawl_result, &output_dir) {
+            exported_artifacts.push(("JSON", path));
+        }
+    }
+
+    if formats.contains(&"terminal") || formats.contains(&"all") || formats.is_empty() {
+        let ref_paths: Vec<(&str, &std::path::Path)> = exported_artifacts
+            .iter()
+            .map(|(fmt, p)| (*fmt, p.as_path()))
+            .collect();
+        print_executive_scorecard(&crawl_result, &ref_paths);
+    }
+
     Ok(())
 }
 
 /// Lists historical audit sessions stored locally.
-async fn handle_list() -> Result<(), Box<dyn std::error::Error>> {
-    info!("Listing audit sessions (scaffold)");
-    println!("Stored audit sessions: none (Phase 0 scaffolding)");
+async fn handle_list(args: ListArgs) -> Result<(), Box<dyn std::error::Error>> {
+    let db_path = args.db_path.unwrap_or_else(default_db_path);
+    if !db_path.exists() {
+        print_historical_sessions(&db_path, &[]);
+        return Ok(());
+    }
+
+    let db = Database::open(&db_path)?;
+    let crawls = db.list_crawls()?;
+
+    print_historical_sessions(&db_path, &crawls);
+
     Ok(())
 }
