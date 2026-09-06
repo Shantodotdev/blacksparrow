@@ -442,3 +442,93 @@ async fn test_crawl_ignores_non_html_assets_and_content_type() {
         .iter()
         .any(|i| i.code == RuleId::ErrMobileNoViewport));
 }
+
+#[test]
+fn test_json_report_export_compact_link_metrics() {
+    use hashbrown::HashMap;
+    use seo_lens::core::models::{DiscoveredLink, PageReport};
+    use seo_lens::crawler::engine::CrawlResult;
+    use seo_lens::graph::SiteGraph;
+    use std::time::Duration;
+
+    let temp_dir = std::env::temp_dir().join(format!(
+        "seolens_json_test_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+
+    let mut page = PageReport {
+        url: "https://example.com/catalog".to_string(),
+        status_code: 200,
+        title: Some("Catalog".to_string()),
+        ..Default::default()
+    };
+
+    // Add 150 internal links and 50 external links
+    for i in 0..150 {
+        page.links.push(DiscoveredLink {
+            source_url: page.url.clone(),
+            target_url: format!("https://example.com/item-{}", i),
+            target_url_hash: i as u64,
+            anchor_text: format!("Item {}", i),
+            is_internal: true,
+            is_nofollow: false,
+            is_image_link: false,
+            is_target_blank: false,
+            has_opener_or_referrer: false,
+            status_code: None,
+        });
+    }
+    for i in 0..50 {
+        page.links.push(DiscoveredLink {
+            source_url: page.url.clone(),
+            target_url: format!("https://external.com/partner-{}", i),
+            target_url_hash: (1000 + i) as u64,
+            anchor_text: format!("Partner {}", i),
+            is_internal: false,
+            is_nofollow: true,
+            is_image_link: false,
+            is_target_blank: true,
+            has_opener_or_referrer: true,
+            status_code: None,
+        });
+    }
+
+    let crawl_result = CrawlResult {
+        target_url: "https://example.com/".to_string(),
+        pages: vec![page],
+        graph: SiteGraph::new(),
+        pagerank: HashMap::new(),
+        issues: vec![],
+        duration: Duration::from_secs(1),
+        sitemap_urls: vec![],
+        aimd_delay_ms: 0,
+        health_score: 100,
+    };
+
+    let json_path = export_json_report(&crawl_result, &temp_dir).unwrap();
+    assert!(json_path.exists());
+    let json_content = fs::read_to_string(&json_path).unwrap();
+    let json_val: serde_json::Value = serde_json::from_str(&json_content).unwrap();
+
+    let page_json = &json_val["pages"][0];
+    assert_eq!(page_json["url"], "https://example.com/catalog");
+    assert_eq!(page_json["links_count"], 200);
+    assert_eq!(page_json["internal_links_count"], 150);
+    assert_eq!(page_json["external_links_count"], 50);
+
+    // Verify raw links array is omitted to keep JSON reports compact and fast
+    assert!(page_json.get("links").is_none());
+
+    // File size must remain very small (< 10 KB for 1 page)
+    let metadata = fs::metadata(&json_path).unwrap();
+    assert!(
+        metadata.len() < 10_000,
+        "JSON file must remain compact, got {} bytes",
+        metadata.len()
+    );
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
