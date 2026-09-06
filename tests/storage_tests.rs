@@ -415,6 +415,7 @@ async fn test_cli_commands_list_and_report() {
     let list_cli = Cli {
         command: Commands::List(ListArgs {
             db_path: Some(db_path.clone()),
+            ..Default::default()
         }),
     };
     execute(list_cli).await.expect("List command execution");

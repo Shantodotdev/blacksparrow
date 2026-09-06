@@ -207,7 +207,7 @@ async fn run_writer_loop(
     Ok(())
 }
 
-fn flush_to_db(
+pub(crate) fn flush_to_db(
     conn: &mut Connection,
     crawl_id: &str,
     pages: &mut Vec<PageReport>,

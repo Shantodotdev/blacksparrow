@@ -582,3 +582,144 @@ pub fn get_crawl_issues(
 
     Ok(issues)
 }
+
+/// Deletes a specific crawl session from SQLite (cascading to pages, issues, links, etc.).
+pub fn delete_crawl(conn: &Connection, session_id: &str) -> SeoResult<bool> {
+    let rows = conn.execute(
+        "DELETE FROM crawls WHERE session_id = ?1",
+        params![session_id],
+    )?;
+    Ok(rows > 0)
+}
+
+/// Cleans/purges crawl sessions started older than `days` days ago.
+pub fn clean_crawls_older_than(conn: &Connection, days: u32) -> SeoResult<usize> {
+    let rows = conn.execute(
+        "DELETE FROM crawls WHERE started_at < datetime('now', '-' || ?1 || ' days')",
+        params![days],
+    )?;
+    Ok(rows)
+}
+
+/// Purges all historical crawl sessions from SQLite.
+pub fn clean_all_crawls(conn: &Connection) -> SeoResult<usize> {
+    let rows = conn.execute("DELETE FROM crawls", [])?;
+    Ok(rows)
+}
+
+/// Criteria for filtering issues during queries and counting.
+#[derive(Debug, Clone, Default)]
+pub struct IssueFilterCriteria<'a> {
+    pub severity: Option<Severity>,
+    pub category: Option<IssueCategory>,
+    pub code: Option<&'a str>,
+    pub url_substring: Option<&'a str>,
+    pub limit: usize,
+    pub offset: usize,
+}
+
+/// Advanced query for crawl issues with optional filters for severity, category, rule code, URL substring, and pagination.
+pub fn query_issues_filtered(
+    conn: &Connection,
+    session_id: &str,
+    criteria: &IssueFilterCriteria,
+) -> SeoResult<Vec<IssueFinding>> {
+    let mut sql = "SELECT target_url, code, category, severity, title, message, source_page_url
+                   FROM issues WHERE crawl_id = ?1"
+        .to_string();
+    let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(session_id.to_string())];
+
+    if let Some(sev) = criteria.severity {
+        params_vec.push(Box::new(sev.as_u8()));
+        sql.push_str(&format!(" AND severity = ?{}", params_vec.len()));
+    }
+    if let Some(cat) = criteria.category {
+        params_vec.push(Box::new(cat.as_str().to_string()));
+        sql.push_str(&format!(" AND category = ?{}", params_vec.len()));
+    }
+    if let Some(code) = criteria.code {
+        params_vec.push(Box::new(code.to_string()));
+        sql.push_str(&format!(" AND code = ?{}", params_vec.len()));
+    }
+    if let Some(sub) = criteria.url_substring {
+        params_vec.push(Box::new(format!("%{sub}%")));
+        sql.push_str(&format!(" AND target_url LIKE ?{}", params_vec.len()));
+    }
+
+    sql.push_str(" ORDER BY severity ASC, id ASC");
+    let limit = if criteria.limit == 0 {
+        50
+    } else {
+        criteria.limit
+    };
+    params_vec.push(Box::new(limit as i64));
+    sql.push_str(&format!(" LIMIT ?{}", params_vec.len()));
+    params_vec.push(Box::new(criteria.offset as i64));
+    sql.push_str(&format!(" OFFSET ?{}", params_vec.len()));
+
+    let mut stmt = conn.prepare(&sql)?;
+    let param_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|b| b.as_ref()).collect();
+
+    let rows = stmt.query_map(param_refs.as_slice(), |row| {
+        let target_url: String = row.get(0)?;
+        let code_str: String = row.get(1)?;
+        let cat_str: String = row.get(2)?;
+        let sev_u8: u8 = row.get(3)?;
+        let title: String = row.get(4)?;
+        let message: String = row.get(5)?;
+        let source_page_url: Option<String> = row.get(6)?;
+
+        let code = RuleId::from_code(&code_str).unwrap_or(RuleId::ErrHttp5xxServerError);
+        let category =
+            IssueCategory::from_str_name(&cat_str).unwrap_or(IssueCategory::HttpTransport);
+        let severity = Severity::from_u8(sev_u8).unwrap_or(Severity::Warning);
+
+        Ok(IssueFinding {
+            code,
+            category,
+            severity,
+            title: CompactString::new(&title),
+            message,
+            target_url,
+            source_page_url,
+        })
+    })?;
+
+    let mut list = Vec::new();
+    for r in rows {
+        list.push(r?);
+    }
+    Ok(list)
+}
+
+/// Counts total issues matching filters for pagination.
+pub fn count_issues_filtered(
+    conn: &Connection,
+    session_id: &str,
+    criteria: &IssueFilterCriteria,
+) -> SeoResult<usize> {
+    let mut sql = "SELECT COUNT(*) FROM issues WHERE crawl_id = ?1".to_string();
+    let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(session_id.to_string())];
+
+    if let Some(sev) = criteria.severity {
+        params_vec.push(Box::new(sev.as_u8()));
+        sql.push_str(&format!(" AND severity = ?{}", params_vec.len()));
+    }
+    if let Some(cat) = criteria.category {
+        params_vec.push(Box::new(cat.as_str().to_string()));
+        sql.push_str(&format!(" AND category = ?{}", params_vec.len()));
+    }
+    if let Some(code) = criteria.code {
+        params_vec.push(Box::new(code.to_string()));
+        sql.push_str(&format!(" AND code = ?{}", params_vec.len()));
+    }
+    if let Some(sub) = criteria.url_substring {
+        params_vec.push(Box::new(format!("%{sub}%")));
+        sql.push_str(&format!(" AND target_url LIKE ?{}", params_vec.len()));
+    }
+
+    let mut stmt = conn.prepare(&sql)?;
+    let param_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|b| b.as_ref()).collect();
+    let count: usize = stmt.query_row(param_refs.as_slice(), |r| r.get(0))?;
+    Ok(count)
+}

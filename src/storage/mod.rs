@@ -8,8 +8,9 @@ pub mod sqlite;
 pub mod writer;
 
 pub use queries::{
-    get_crawl, get_crawl_issues, get_crawl_pages, init_crawl_session, list_crawls,
-    update_crawl_status, CrawlSessionInit,
+    clean_all_crawls, clean_crawls_older_than, count_issues_filtered, delete_crawl, get_crawl,
+    get_crawl_issues, get_crawl_pages, init_crawl_session, list_crawls, query_issues_filtered,
+    update_crawl_status, CrawlSessionInit, IssueFilterCriteria,
 };
 pub use sqlite::{default_db_path, open_connection, SCHEMA};
 pub use writer::{spawn_db_writer, DbMessage, DbWriterHandle};
@@ -123,5 +124,64 @@ impl Database {
             batch_size,
             flush_interval,
         )
+    }
+
+    /// Alias for initializing a new crawl session.
+    pub fn init_crawl(&self, init: &CrawlSessionInit) -> SeoResult<()> {
+        self.init_crawl_session(init)
+    }
+
+    /// Deletes a specific crawl session and its cascading child records.
+    pub fn delete_crawl(&self, session_id: &str) -> SeoResult<bool> {
+        let conn = self.connect()?;
+        queries::delete_crawl(&conn, session_id)
+    }
+
+    /// Purges crawl sessions older than `days` days.
+    pub fn clean_crawls_older_than(&self, days: u32) -> SeoResult<usize> {
+        let conn = self.connect()?;
+        queries::clean_crawls_older_than(&conn, days)
+    }
+
+    /// Purges all historical crawl sessions from the database.
+    pub fn clean_all_crawls(&self) -> SeoResult<usize> {
+        let conn = self.connect()?;
+        queries::clean_all_crawls(&conn)
+    }
+
+    /// Queries issues with advanced filters (severity, category, code, url substring, and pagination).
+    pub fn query_issues_filtered(
+        &self,
+        session_id: &str,
+        criteria: &IssueFilterCriteria,
+    ) -> SeoResult<Vec<IssueFinding>> {
+        let conn = self.connect()?;
+        queries::query_issues_filtered(&conn, session_id, criteria)
+    }
+
+    /// Counts issues matching the specified filters.
+    pub fn count_issues_filtered(
+        &self,
+        session_id: &str,
+        criteria: &IssueFilterCriteria,
+    ) -> SeoResult<usize> {
+        let conn = self.connect()?;
+        queries::count_issues_filtered(&conn, session_id, criteria)
+    }
+
+    /// Directly persists a batch of page reports into SQLite within a transaction.
+    pub fn save_page_batch(&self, session_id: &str, pages: &[PageReport]) -> SeoResult<()> {
+        let mut conn = self.connect()?;
+        let mut pages_vec = pages.to_vec();
+        let mut issues_vec = Vec::new();
+        writer::flush_to_db(&mut conn, session_id, &mut pages_vec, &mut issues_vec)
+    }
+
+    /// Directly persists a batch of issue findings into SQLite within a transaction.
+    pub fn save_issue_batch(&self, session_id: &str, issues: &[IssueFinding]) -> SeoResult<()> {
+        let mut conn = self.connect()?;
+        let mut pages_vec = Vec::new();
+        let mut issues_vec = issues.to_vec();
+        writer::flush_to_db(&mut conn, session_id, &mut pages_vec, &mut issues_vec)
     }
 }
