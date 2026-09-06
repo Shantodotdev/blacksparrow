@@ -1,7 +1,13 @@
 //! # Multi-Page Asynchronous Crawl Engine
 //!
-//! Coordinates concurrent fetching, frontier scheduling, robots.txt compliance,
-//! streaming HTML parsing, AIMD politeness throttling, and post-crawl site graph analysis.
+//! Coordinates the end-to-end technical SEO audit workflow:
+//! 1. **Discovery**: Fetches `robots.txt`, identifies AI crawler restrictions, probes `/llms.txt`, and parses recursive XML sitemaps.
+//! 2. **Frontier Scheduling**: Manages URL prioritization, depth limits, deduplication, and query parameter filtering.
+//! 3. **Concurrent Execution**: Spawns Tokio green tasks bounded by an asynchronous semaphore and rate-limited by an adaptive AIMD controller.
+//! 4. **Streaming Processing**: Parses HTML in a single streaming pass (`lol_html`) and evaluates 120 technical SEO rules.
+//! 5. **Real-Time Persistence**: Streams page reports and findings into SQLite WAL storage via an asynchronous batch actor.
+//! 6. **Graceful Cancellation**: Traps SIGINT (`Ctrl+C`) and cancellation channels to drain in-flight workers and persist partial crawls cleanly.
+//! 7. **Topology & Scoring**: Constructs a petgraph directed link graph, computes internal PageRank, detects whole-site graph issues, and produces the health scorecard.
 
 use crate::core::config::CrawlConfig;
 use crate::core::models::{DiscoveredLink, IssueFinding, PageReport, RuleId, Severity};
@@ -32,30 +38,51 @@ use tokio::sync::{mpsc, Mutex, Semaphore};
 /// Real-time progress update telemetry emitted during crawl execution.
 #[derive(Debug, Clone)]
 pub struct ProgressUpdate {
+    /// Total number of unique pages successfully fetched and audited.
     pub crawled_pages: usize,
+    /// Total count of unique URLs discovered so far (crawled + pending in frontier).
     pub discovered_pages: usize,
+    /// Configured maximum page limit (0 indicates unlimited crawl).
     pub max_pages: u32,
+    /// Normalized URL of the most recently processed page.
     pub current_url: String,
+    /// HTTP status code returned by the most recent page fetch.
     pub status_code: u16,
+    /// Time to first byte (TTFB) latency in milliseconds for the most recent page.
     pub ttfb_ms: u32,
+    /// Current dynamic inter-request delay imposed by the AIMD congestion controller in milliseconds.
     pub aimd_delay_ms: u64,
+    /// Cumulative count of Critical severity defects detected across all pages.
     pub critical_count: usize,
+    /// Cumulative count of Alert severity defects detected across all pages.
     pub alert_count: usize,
+    /// Cumulative count of Warning severity defects detected across all pages.
     pub warning_count: usize,
 }
 
+/// Thread-safe callback closure invoked with live telemetry as pages are processed.
 pub type ProgressCallback = Arc<dyn Fn(ProgressUpdate) + Send + Sync>;
 
+/// Complete aggregated output of a multi-page technical SEO audit.
 #[derive(Debug, Clone)]
 pub struct CrawlResult {
+    /// Seed start URL that initiated the crawl.
     pub target_url: String,
+    /// Individual audited page reports for all successfully crawled URLs.
     pub pages: Vec<PageReport>,
+    /// Directed hyperlink topology graph representing site architecture.
     pub graph: SiteGraph,
+    /// Internal PageRank authority scores keyed by 64-bit URL hash.
     pub pagerank: HashMap<u64, f64>,
+    /// All technical SEO defects detected (both single-page and post-crawl graph rules).
     pub issues: Vec<IssueFinding>,
+    /// Total wall-clock time elapsed during crawl execution.
     pub duration: Duration,
+    /// URLs discovered and registered from XML sitemaps.
     pub sitemap_urls: Vec<String>,
+    /// Final dynamic delay in milliseconds calculated by the AIMD controller.
     pub aimd_delay_ms: u64,
+    /// Overall technical health score on a normalized 0–100 scale.
     pub health_score: u8,
 }
 
@@ -143,6 +170,14 @@ fn build_page_report(
     report
 }
 
+/// Discovers and parses robots.txt and XML sitemaps before crawling starts.
+///
+/// 1. Probes `/robots.txt` and extracts sitemap declarations.
+/// 2. Audits AI search crawler disallows (`GPTBot`, `ClaudeBot`, etc.) per Rule 11.1.
+/// 3. Checks for presence of `/llms.txt` per Rule 11.2.
+/// 4. If no sitemaps are declared in robots.txt, falls back to probing convention paths
+///    (`/sitemap.xml`, `/sitemap_index.xml`, `/wp-sitemap.xml`) per CRAWLER_SPEC §5.2.
+/// 5. Recursively resolves nested sitemap index feeds up to 3 levels deep.
 async fn discover_robots_and_sitemaps(
     client: &HttpClient,
     seed_url: &str,
@@ -278,6 +313,10 @@ async fn discover_robots_and_sitemaps(
     (robots, sitemap_urls, site_issues)
 }
 
+/// Fetches a single frontier entry, applies AIMD politeness throttling, evaluates single-page rules, and generates a PageReport.
+///
+/// Feeds TTFB latency metrics and HTTP response status codes back into the AIMD controller
+/// to dynamically optimize request throughput without overloading the target origin.
 async fn fetch_and_audit_page(
     session_id: &str,
     entry: FrontierEntry,
@@ -352,6 +391,9 @@ async fn fetch_and_audit_page(
     }
 }
 
+/// Constructs the directed site graph, computes PageRank, evaluates whole-site graph rules, and calculates the health score.
+///
+/// Executed after the crawl loop terminates (either upon exhaustive discovery, hitting max page limits, or cancellation).
 fn finalize_crawl(
     normalized_start: String,
     mut pages: Vec<PageReport>,
@@ -391,6 +433,19 @@ fn finalize_crawl(
     }
 }
 
+/// Executes a full technical SEO crawl using default in-memory channels.
+///
+/// Dispatches concurrent workers up to the configured concurrency limit,
+/// evaluates SEO rules on each page, and aggregates the final audit matrix.
+///
+/// # Arguments
+///
+/// * `config` - Crawl options controlling target URL, concurrency, depth limits, and politeness.
+/// * `progress_cb` - Optional closure invoked as each page completes to update progress bars or UI.
+///
+/// # Errors
+///
+/// Returns [`SeoError`](crate::error::SeoError) if the seed URL is invalid or the HTTP client fails initialization.
 pub async fn run_crawl(
     config: &CrawlConfig,
     progress_cb: Option<ProgressCallback>,
@@ -398,6 +453,25 @@ pub async fn run_crawl(
     run_crawl_with_options(config, progress_cb, None, None).await
 }
 
+/// Executes a full technical SEO crawl with support for real-time SQLite streaming and cooperative cancellation.
+///
+/// # Concurrency & Graceful Shutdown
+///
+/// - Worker green tasks are governed by a [`tokio::sync::Semaphore`] set to `config.concurrency`.
+/// - If a SIGINT (`Ctrl+C`) or `cancel_rx` signal is received, the engine halts dispatch of new URLs,
+///   allows in-flight worker tasks up to 2 seconds to complete and save their results,
+///   updates the session status to `interrupted`, and flushes all pending records to SQLite.
+///
+/// # Arguments
+///
+/// * `config` - Crawl configuration options.
+/// * `progress_cb` - Optional callback invoked with live telemetry updates.
+/// * `db_writer` - Optional actor handle to stream pages and issues directly into SQLite WAL storage.
+/// * `cancel_rx` - Optional receiver for cooperative external cancellation (e.g. from desktop UI or test).
+///
+/// # Errors
+///
+/// Returns [`SeoError`](crate::error::SeoError) if URL normalization or network client initialization fails.
 pub async fn run_crawl_with_options(
     config: &CrawlConfig,
     progress_cb: Option<ProgressCallback>,

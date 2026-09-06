@@ -15,11 +15,17 @@ use rusqlite::{params, Connection};
 /// Parameters for initializing a new crawl session in SQLite.
 #[derive(Debug, Clone)]
 pub struct CrawlSessionInit {
+    /// Unique crawl session identifier.
     pub session_id: String,
+    /// Seed root URL of the crawl.
     pub target_url: String,
+    /// Configured maximum page limit (0 for unlimited).
     pub max_pages: u32,
+    /// Maximum link traversal hop depth from the seed.
     pub max_depth: u16,
+    /// Whether robots.txt directives were enforced.
     pub respect_robots: bool,
+    /// Whether headless Chrome CDP browser rendering was active.
     pub render_js: bool,
 }
 

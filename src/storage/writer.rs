@@ -109,7 +109,15 @@ impl DbWriterHandle {
     }
 }
 
-/// Spawns the background writer actor task.
+/// Spawns the background SQLite writer actor task.
+///
+/// Implements an actor pattern where Tokio worker green tasks stream page reports and detected issues
+/// into an asynchronous bounded channel. The actor buffers entries in memory and flushes them
+/// to SQLite within a single write transaction whenever:
+/// 1. The buffered page count reaches `batch_size` (high-throughput burst trigger), or
+/// 2. The `flush_interval` timer tick fires (low-latency idle trigger).
+///
+/// Returns a cloneable [`DbWriterHandle`] for dispatching records and the actor's [`JoinHandle`](tokio::task::JoinHandle).
 pub fn spawn_db_writer(
     db_path: PathBuf,
     session_id: String,

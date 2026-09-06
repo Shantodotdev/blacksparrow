@@ -34,13 +34,21 @@ pub fn open_connection(path: &Path) -> SeoResult<Connection> {
     Ok(conn)
 }
 
-/// Configures PRAGMAs and applies table migrations.
+/// Configures connection PRAGMAs for concurrency and durability, then executes schema migrations.
 pub fn init_connection(conn: &Connection) -> SeoResult<()> {
-    // Apply essential performance and concurrency pragmas
+    // 1. WAL mode: Non-blocking readers during background crawl ingestion via sequential log append.
     let _ = conn.pragma_update(None, "journal_mode", "WAL");
+
+    // 2. Synchronous NORMAL: Avoids per-commit fsync stalls while preserving crash safety in WAL mode.
     conn.pragma_update(None, "synchronous", "NORMAL")?;
+
+    // 3. Foreign Keys: Explicitly enforce ON DELETE CASCADE constraints (disabled by default in SQLite).
     conn.pragma_update(None, "foreign_keys", "ON")?;
+
+    // 4. Busy Timeout: Sleep and retry up to 5,000ms to resolve transient lock contention gracefully.
     conn.pragma_update(None, "busy_timeout", 5000)?;
+
+    // 5. Cache Size: Negative value allocates exactly 64 MiB (64,000 KiB) of RAM for B-Tree page cache.
     conn.pragma_update(None, "cache_size", -64000)?;
 
     // Execute schema DDL
