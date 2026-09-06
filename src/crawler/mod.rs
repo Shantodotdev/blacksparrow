@@ -24,7 +24,9 @@ pub mod waf;
 
 pub use aimd::AimdController;
 pub use client::{FetchOptions, FetchResult, HttpClient};
-pub use engine::{run_crawl, CrawlResult, ProgressCallback, ProgressUpdate};
+pub use engine::{
+    run_crawl, run_crawl_with_options, CrawlResult, ProgressCallback, ProgressUpdate,
+};
 pub use frontier::{Frontier, FrontierEntry};
 pub use inspector::inspect_url;
 pub use priority::{calculate_url_importance, is_pagination_url, parse_url_segments};

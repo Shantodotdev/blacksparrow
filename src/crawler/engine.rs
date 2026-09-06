@@ -20,6 +20,7 @@ use crate::parser::{parse_html, ParsedPage};
 use crate::report::score::calculate_health_score;
 use crate::rules::catalog::get_rule;
 use crate::rules::{evaluate_graph, evaluate_page};
+use crate::storage::DbWriterHandle;
 use compact_str::CompactString;
 use hashbrown::{HashMap, HashSet};
 use std::collections::VecDeque;
@@ -83,6 +84,7 @@ fn is_html_document(content_type: &str, body: &str) -> bool {
 }
 
 fn build_page_report(
+    session_id: &str,
     url: &str,
     depth: u16,
     res: &FetchResult,
@@ -90,7 +92,7 @@ fn build_page_report(
     issues: Vec<IssueFinding>,
 ) -> PageReport {
     let mut report = PageReport {
-        crawl_id: CompactString::new("cli-session"),
+        crawl_id: CompactString::new(session_id),
         url: url.to_string(),
         url_hash: url_hash(url),
         final_url: Some(res.final_url.clone()),
@@ -277,6 +279,7 @@ async fn discover_robots_and_sitemaps(
 }
 
 async fn fetch_and_audit_page(
+    session_id: &str,
     entry: FrontierEntry,
     client: Arc<HttpClient>,
     aimd: Arc<Mutex<AimdController>>,
@@ -324,7 +327,14 @@ async fn fetch_and_audit_page(
             let discovered_links = parsed.as_ref().map(|p| p.links.clone()).unwrap_or_default();
             let depth = entry.depth;
 
-            let report = build_page_report(url_str, depth, &res, parsed.as_ref(), page_issues);
+            let report = build_page_report(
+                session_id,
+                url_str,
+                depth,
+                &res,
+                parsed.as_ref(),
+                page_issues,
+            );
 
             Some(WorkerPageOutcome {
                 report,
@@ -385,8 +395,27 @@ pub async fn run_crawl(
     config: &CrawlConfig,
     progress_cb: Option<ProgressCallback>,
 ) -> SeoResult<CrawlResult> {
+    run_crawl_with_options(config, progress_cb, None, None).await
+}
+
+pub async fn run_crawl_with_options(
+    config: &CrawlConfig,
+    progress_cb: Option<ProgressCallback>,
+    db_writer: Option<DbWriterHandle>,
+    mut cancel_rx: Option<tokio::sync::oneshot::Receiver<()>>,
+) -> SeoResult<CrawlResult> {
     let start_time = Instant::now();
     let normalized_start = normalize_url(&config.start_url)?;
+
+    let session_id = config.session_id.clone().unwrap_or_else(|| {
+        format!(
+            "crawl_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs()
+        )
+    });
 
     let client = Arc::new(HttpClient::new(FetchOptions {
         user_agent: config.user_agent.clone(),
@@ -397,6 +426,10 @@ pub async fn run_crawl(
 
     let (robots_txt, sitemap_urls, site_issues) =
         discover_robots_and_sitemaps(&client, &normalized_start, config.respect_robots).await;
+
+    if let Some(ref writer) = db_writer {
+        let _ = writer.save_issues(site_issues.clone()).await;
+    }
 
     let frontier = Arc::new(Mutex::new(Frontier::new(
         config.max_pages,
@@ -426,6 +459,8 @@ pub async fn run_crawl(
     let mut alert_count = 0usize;
     let mut warning_count = 0usize;
     let mut hit_max_pages = false;
+    let mut interrupted = false;
+    let mut ctrl_c_stream = Box::pin(tokio::signal::ctrl_c());
 
     for issue in &site_issues {
         match issue.severity {
@@ -438,7 +473,16 @@ pub async fn run_crawl(
     }
 
     loop {
+        if interrupted {
+            break;
+        }
+
         while let Ok(permit) = semaphore.clone().try_acquire_owned() {
+            if interrupted {
+                drop(permit);
+                break;
+            }
+
             let next_entry = {
                 let mut f = frontier.lock().await;
                 if config.max_pages > 0
@@ -467,10 +511,12 @@ pub async fn run_crawl(
                     let tx_clone = tx.clone();
                     let no_aimd = config.no_aimd;
                     let static_delay = config.delay_ms;
+                    let sess_id = session_id.clone();
 
                     tokio::spawn(async move {
                         let _permit = permit;
                         if let Some(outcome) = fetch_and_audit_page(
+                            &sess_id,
                             entry,
                             client_clone,
                             aimd_clone,
@@ -506,6 +552,28 @@ pub async fn run_crawl(
         }
 
         tokio::select! {
+            biased;
+
+            res = &mut ctrl_c_stream, if !interrupted => {
+                if res.is_ok() {
+                    interrupted = true;
+                    eprintln!("\n⚠️ Audit interrupted by user (Ctrl+C). Gracefully finalizing and saving crawled pages...");
+                }
+            }
+
+            res = async {
+                if let Some(ref mut rx) = cancel_rx {
+                    rx.await.is_ok()
+                } else {
+                    std::future::pending::<bool>().await
+                }
+            }, if !interrupted && cancel_rx.is_some() => {
+                if res {
+                    interrupted = true;
+                    eprintln!("\n⚠️ Audit interrupted by cancellation signal. Gracefully finalizing and saving crawled pages...");
+                }
+            }
+
             Some(outcome) = rx.recv() => {
                 active_workers.fetch_sub(1, Ordering::SeqCst);
 
@@ -517,6 +585,10 @@ pub async fn run_crawl(
                         Severity::Notice => {}
                     }
                     all_issues.push(issue.clone());
+                }
+
+                if let Some(ref writer) = db_writer {
+                    let _ = writer.save_page(outcome.report.clone()).await;
                 }
 
                 let discovered_count = if config.max_depth == 0 || outcome.depth < config.max_depth {
@@ -593,6 +665,24 @@ pub async fn run_crawl(
         }
     }
 
+    if interrupted {
+        let drain_deadline = Instant::now() + Duration::from_secs(2);
+        while active_workers.load(Ordering::SeqCst) > 0 && Instant::now() < drain_deadline {
+            if let Ok(Some(outcome)) =
+                tokio::time::timeout(Duration::from_millis(200), rx.recv()).await
+            {
+                active_workers.fetch_sub(1, Ordering::SeqCst);
+                all_issues.extend(outcome.report.issues.clone());
+                if let Some(ref writer) = db_writer {
+                    let _ = writer.save_page(outcome.report.clone()).await;
+                }
+                crawled_pages.push(outcome.report);
+            } else {
+                break;
+            }
+        }
+    }
+
     let final_aimd_delay = {
         let a = aimd.lock().await;
         a.current_delay_ms()
@@ -607,10 +697,11 @@ pub async fn run_crawl(
         || (config.max_pages > 0 && crawled_pages.len() >= config.max_pages as usize)
         || hit_frontier_page_limit;
 
-    let is_partial_crawl = hit_max_pages || hit_frontier_depth_limit || frontier_has_remaining;
+    let is_partial_crawl =
+        interrupted || hit_max_pages || hit_frontier_depth_limit || frontier_has_remaining;
     let crawl_exhaustive = !is_partial_crawl;
 
-    Ok(finalize_crawl(
+    let crawl_result = finalize_crawl(
         normalized_start,
         crawled_pages,
         all_issues,
@@ -618,5 +709,53 @@ pub async fn run_crawl(
         final_aimd_delay,
         start_time.elapsed(),
         crawl_exhaustive,
-    ))
+    );
+
+    let final_status = if interrupted {
+        "interrupted"
+    } else {
+        "completed"
+    };
+    if let Some(ref writer) = db_writer {
+        let graph_issues: Vec<IssueFinding> = crawl_result
+            .issues
+            .iter()
+            .filter(|i| i.category == crate::core::models::IssueCategory::SiteGraph)
+            .cloned()
+            .collect();
+        if !graph_issues.is_empty() {
+            let _ = writer.save_issues(graph_issues).await;
+        }
+
+        let criticals = crawl_result
+            .issues
+            .iter()
+            .filter(|i| i.severity == Severity::Critical)
+            .count() as u32;
+        let alerts = crawl_result
+            .issues
+            .iter()
+            .filter(|i| i.severity == Severity::Alert)
+            .count() as u32;
+        let warnings = crawl_result
+            .issues
+            .iter()
+            .filter(|i| i.severity == Severity::Warning)
+            .count() as u32;
+
+        let _ = writer
+            .update_status(
+                final_status.to_string(),
+                None,
+                crawl_result.pages.len() as u32,
+                criticals,
+                alerts,
+                warnings,
+                Some(crawl_result.health_score),
+            )
+            .await;
+        let _ = writer.flush().await;
+    }
+
+    Ok(crawl_result)
 }
