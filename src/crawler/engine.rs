@@ -437,6 +437,11 @@ pub async fn run_crawl(
             }
         }
 
+        if config.max_pages > 0 && crawled_pages.len() >= config.max_pages as usize {
+            hit_max_pages = true;
+            break;
+        }
+
         let active = active_workers.load(Ordering::SeqCst);
         let frontier_empty = {
             let f = frontier.lock().await;
@@ -444,11 +449,6 @@ pub async fn run_crawl(
         };
 
         if active == 0 && frontier_empty {
-            break;
-        }
-
-        if config.max_pages > 0 && crawled_pages.len() >= config.max_pages as usize {
-            hit_max_pages = true;
             break;
         }
 
@@ -545,7 +545,17 @@ pub async fn run_crawl(
         a.current_delay_ms()
     };
 
-    let crawl_exhaustive = !hit_max_pages;
+    let (hit_frontier_page_limit, hit_frontier_depth_limit, frontier_has_remaining) = {
+        let f = frontier.lock().await;
+        (f.hit_max_pages(), f.hit_max_depth(), !f.is_empty())
+    };
+
+    let hit_max_pages = hit_max_pages
+        || (config.max_pages > 0 && crawled_pages.len() >= config.max_pages as usize)
+        || hit_frontier_page_limit;
+
+    let is_partial_crawl = hit_max_pages || hit_frontier_depth_limit || frontier_has_remaining;
+    let crawl_exhaustive = !is_partial_crawl;
 
     Ok(finalize_crawl(
         normalized_start,
