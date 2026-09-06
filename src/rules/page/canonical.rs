@@ -36,6 +36,29 @@ pub fn check_canonical(page: &ParsedPage, url: &str, issues: &mut Vec<IssueFindi
                     )),
                 ));
             }
+
+            if let (Ok(u), Ok(c)) = (url::Url::parse(url), url::Url::parse(trimmed)) {
+                // Cross domain check
+                if u.host_str() != c.host_str() {
+                    let rule = get_rule(RuleId::AlertCanonicalCrossDomain);
+                    issues.push(rule.to_finding(
+                        url,
+                        Some(&format!(
+                            "Canonical target points across domains to '{}'.",
+                            c.host_str().unwrap_or("external host")
+                        )),
+                    ));
+                }
+
+                // Insecure HTTP canonical on HTTPS page
+                if u.scheme() == "https" && c.scheme() == "http" {
+                    let rule = get_rule(RuleId::WarnCanonicalToUnverifiedHttp);
+                    issues.push(rule.to_finding(
+                        url,
+                        Some("Secure HTTPS page specifies an insecure HTTP canonical target URL."),
+                    ));
+                }
+            }
         }
     }
 }

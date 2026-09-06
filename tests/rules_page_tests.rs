@@ -53,6 +53,10 @@ fn make_default_clean_headers() -> HeaderMap {
         "x-content-type-options",
         HeaderValue::from_static("nosniff"),
     );
+    headers.insert(
+        "referrer-policy",
+        HeaderValue::from_static("strict-origin-when-cross-origin"),
+    );
     headers
 }
 
@@ -510,6 +514,9 @@ fn test_security_and_transport_exhaustive() {
     assert!(issues
         .iter()
         .any(|i| i.code == RuleId::WarnSecurityMissingXContentType));
+    assert!(issues
+        .iter()
+        .any(|i| i.code == RuleId::WarnSecurityMissingReferrerPolicy));
 
     // 3. Mixed Content Subresources (images, forms, iframes)
     incomplete_headers = make_default_clean_headers();

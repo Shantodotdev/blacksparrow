@@ -51,4 +51,26 @@ pub fn check_titles(page: &ParsedPage, url: &str, issues: &mut Vec<IssueFinding>
             }
         }
     }
+
+    // Title same as primary H1
+    if let (Some(raw_title), Some(raw_h1)) = (&page.title, &page.h1_primary) {
+        let t = raw_title.trim();
+        let h = raw_h1.trim();
+        if !t.is_empty() && t.eq_ignore_ascii_case(h) {
+            let rule = get_rule(RuleId::WarnTitleSameAsH1);
+            issues.push(rule.to_finding(
+                url,
+                Some("Document title is identical to primary <h1> heading."),
+            ));
+        }
+    }
+
+    // Meta keywords present
+    if page.meta_keywords.is_some() {
+        let rule = get_rule(RuleId::WarnMetaKeywordsPresent);
+        issues.push(rule.to_finding(
+            url,
+            Some("Document contains obsolete <meta name=\"keywords\"> tag."),
+        ));
+    }
 }

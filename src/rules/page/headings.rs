@@ -55,4 +55,41 @@ pub fn check_headings(page: &ParsedPage, url: &str, issues: &mut Vec<IssueFindin
             Some("Document hierarchy skips from `<h1>` directly to `<h3>` with zero `<h2>` headings."),
         ));
     }
+
+    // 5. Duplicate Heading Text
+    let mut has_duplicate_heading = false;
+    let mut seen_h2 = std::collections::HashSet::new();
+    for h2 in &page.h2_headings {
+        let trimmed = h2.trim();
+        if !trimmed.is_empty() && !seen_h2.insert(trimmed.to_lowercase()) {
+            has_duplicate_heading = true;
+            break;
+        }
+    }
+    if !has_duplicate_heading {
+        let mut seen_h3 = std::collections::HashSet::new();
+        for h3 in &page.h3_headings {
+            let trimmed = h3.trim();
+            if !trimmed.is_empty() && !seen_h3.insert(trimmed.to_lowercase()) {
+                has_duplicate_heading = true;
+                break;
+            }
+        }
+    }
+    if has_duplicate_heading {
+        let rule = get_rule(RuleId::WarnDuplicateHeadingText);
+        issues.push(rule.to_finding(url, Some("Multiple headings share identical text content.")));
+    }
+
+    // 6. Excessive DOM Depth / Element Count (> 1500 elements)
+    if page.dom_element_count > 1500 {
+        let rule = get_rule(RuleId::WarnExcessiveDomDepth);
+        issues.push(rule.to_finding(
+            url,
+            Some(&format!(
+                "Page contains {} DOM elements (threshold: 1500 elements).",
+                page.dom_element_count
+            )),
+        ));
+    }
 }

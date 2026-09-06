@@ -63,4 +63,34 @@ pub fn check_security(
         let rule = get_rule(RuleId::WarnSecurityMissingXContentType);
         issues.push(rule.to_finding(url, None));
     }
+
+    // 7. Missing Referrer-Policy
+    if !fetch.headers.contains_key("referrer-policy") {
+        let rule = get_rule(RuleId::WarnSecurityMissingReferrerPolicy);
+        issues.push(rule.to_finding(url, None));
+    }
+
+    // 8. Target _blank without noopener
+    let has_target_blank_no_opener = page
+        .links
+        .iter()
+        .any(|link| link.is_target_blank && !link.has_opener_or_referrer);
+    if has_target_blank_no_opener {
+        let rule = get_rule(RuleId::WarnSecurityTargetBlankNoOpener);
+        issues.push(rule.to_finding(
+            url,
+            Some("External links opening in new tabs (target=\"_blank\") lack rel=\"noopener\" or rel=\"noreferrer\"."),
+        ));
+    }
+
+    // 9. Insecure Form Action
+    let body_has_insecure_form =
+        fetch.body.contains("action=\"http://") || fetch.body.contains("action='http://");
+    if body_has_insecure_form {
+        let rule = get_rule(RuleId::WarnSecurityInsecureForm);
+        issues.push(rule.to_finding(
+            url,
+            Some("Page contains a form submitting data to an insecure HTTP endpoint."),
+        ));
+    }
 }

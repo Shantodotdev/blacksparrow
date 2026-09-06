@@ -64,4 +64,25 @@ pub fn check_images(page: &ParsedPage, url: &str, issues: &mut Vec<IssueFinding>
             )),
         ));
     }
+
+    let long_alt_count = page
+        .images
+        .iter()
+        .filter(|img| {
+            img.alt_text
+                .as_deref()
+                .map(|s| s.chars().count() > 125)
+                .unwrap_or(false)
+        })
+        .count();
+
+    if long_alt_count > 0 {
+        let rule = get_rule(RuleId::WarnImgAltTooLong);
+        issues.push(rule.to_finding(
+            url,
+            Some(&format!(
+                "{long_alt_count} image(s) have alt text exceeding 125 characters."
+            )),
+        ));
+    }
 }
