@@ -10,9 +10,65 @@ use std::path::{Path, PathBuf};
 /// Embedded authoritative SQLite DDL schema.
 pub const SCHEMA: &str = include_str!("schema.sql");
 
-/// Returns the standard default path for the SQLite database: `.seolens/seolens.db`.
-pub fn default_db_path() -> PathBuf {
+/// Returns the local database path in the current working directory: `.seolens/seolens.db`.
+pub fn local_db_path() -> PathBuf {
     PathBuf::from(".seolens").join("seolens.db")
+}
+
+/// Returns the standard default path for the SQLite persistence database.
+///
+/// Resolution precedence:
+/// 1. `SEOLENS_DB_PATH` environment variable (if set and non-empty).
+/// 2. Local `./.seolens/seolens.db` in current working directory if it already exists.
+/// 3. OS standard user data directory:
+///    - Linux: `$XDG_DATA_HOME/seolens/seolens.db` (defaults to `~/.local/share/seolens/seolens.db`)
+///    - macOS: `~/Library/Application Support/seolens/seolens.db`
+///    - Windows: `%LOCALAPPDATA%\seolens\seolens.db`
+/// 4. Fallback to `./.seolens/seolens.db` if the OS data directory cannot be determined.
+pub fn default_db_path() -> PathBuf {
+    // 1. Environment variable override
+    if let Ok(env_path) = std::env::var("SEOLENS_DB_PATH") {
+        let trimmed = env_path.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed);
+        }
+    }
+
+    // 2. Existing local .seolens/seolens.db in current working directory
+    let local = local_db_path();
+    if local.exists() {
+        return local;
+    }
+
+    // 3. Standard modern OS user data directory (XDG on Linux, App Support on macOS, AppData on Windows)
+    if let Some(mut data_dir) = dirs::data_dir() {
+        data_dir.push("seolens");
+        data_dir.push("seolens.db");
+        return data_dir;
+    }
+
+    // 4. Fallback
+    local
+}
+
+/// Resolves the database path based on explicit CLI arguments, the local flag, and environment/OS defaults.
+///
+/// Precedence:
+/// 1. Explicit path (`--db-path <PATH>`) if provided.
+/// 2. `local` (`-L, --local`) flag if true: returns `./.seolens/seolens.db`.
+/// 3. Standard resolution via [`default_db_path`]:
+///    - `SEOLENS_DB_PATH` environment variable
+///    - Local `./.seolens/seolens.db` if it already exists
+///    - Standard OS user data directory (`~/.local/share/seolens/seolens.db` on Linux, etc.)
+///    - Fallback `./.seolens/seolens.db`
+pub fn resolve_db_path(explicit: Option<PathBuf>, local: bool) -> PathBuf {
+    if let Some(p) = explicit {
+        return p;
+    }
+    if local {
+        return local_db_path();
+    }
+    default_db_path()
 }
 
 /// Opens a SQLite connection to the specified path and applies WAL mode and schema.

@@ -21,7 +21,7 @@ use crate::report::{
     update_crawl_progress,
 };
 use crate::rules::page::schema_val::validate_raw_schema;
-use crate::storage::{default_db_path, CrawlSessionInit, Database, IssueFilterCriteria};
+use crate::storage::{resolve_db_path, CrawlSessionInit, Database, IssueFilterCriteria};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -71,7 +71,7 @@ async fn handle_audit(args: AuditArgs) -> Result<(), Box<dyn std::error::Error>>
         }
     }
 
-    let db_path = args.db_path.clone().unwrap_or_else(default_db_path);
+    let db_path = resolve_db_path(args.db_path.clone(), args.local);
     config.db_path = Some(db_path.clone());
 
     let session_id = format!(
@@ -267,8 +267,9 @@ async fn handle_inspect(args: InspectArgs) -> Result<(), Box<dyn std::error::Err
 
 /// Launches the native Model Context Protocol (MCP) server.
 async fn handle_mcp(args: McpArgs) -> Result<(), Box<dyn std::error::Error>> {
+    let db_path = resolve_db_path(args.db_path, args.local);
     if args.transport.eq_ignore_ascii_case("stdio") {
-        crate::mcp::run_mcp_server(args.db_path).await?;
+        crate::mcp::run_mcp_server(Some(db_path)).await?;
     } else {
         eprintln!(
             "❌ Transport '{}' is not currently supported. Please use '--transport stdio'.",
@@ -281,7 +282,7 @@ async fn handle_mcp(args: McpArgs) -> Result<(), Box<dyn std::error::Error>> {
 
 /// Inspects or re-exports an existing audit session from persistence.
 async fn handle_report(args: ReportArgs) -> Result<(), Box<dyn std::error::Error>> {
-    let db_path = args.db_path.unwrap_or_else(default_db_path);
+    let db_path = resolve_db_path(args.db_path, args.local);
     if !db_path.exists() {
         eprintln!(
             "❌ Persistence database not found at '{}'. Run an audit first.",
@@ -369,7 +370,7 @@ async fn handle_report(args: ReportArgs) -> Result<(), Box<dyn std::error::Error
 
 /// Lists historical audit sessions stored locally.
 async fn handle_list(args: ListArgs) -> Result<(), Box<dyn std::error::Error>> {
-    let db_path = args.db_path.unwrap_or_else(default_db_path);
+    let db_path = resolve_db_path(args.db_path, args.local);
     if !db_path.exists() {
         if args.format.eq_ignore_ascii_case("json") {
             println!("[]");
@@ -411,7 +412,7 @@ async fn handle_issues(args: IssuesArgs) -> Result<(), Box<dyn std::error::Error
         }
     };
 
-    let db_path = args.db_path.unwrap_or_else(default_db_path);
+    let db_path = resolve_db_path(args.db_path, args.local);
     if !db_path.exists() {
         eprintln!(
             "❌ Database not found at '{}'. Run an audit first.",
@@ -543,7 +544,7 @@ async fn handle_delete(args: DeleteArgs) -> Result<(), Box<dyn std::error::Error
         }
     };
 
-    let db_path = args.db_path.unwrap_or_else(default_db_path);
+    let db_path = resolve_db_path(args.db_path, args.local);
     if !db_path.exists() {
         eprintln!("❌ Database not found at '{}'.", db_path.display());
         std::process::exit(1);
@@ -563,7 +564,7 @@ async fn handle_delete(args: DeleteArgs) -> Result<(), Box<dyn std::error::Error
 
 /// Clean historical crawl sessions from the database.
 async fn handle_clean(args: CleanArgs) -> Result<(), Box<dyn std::error::Error>> {
-    let db_path = args.db_path.unwrap_or_else(default_db_path);
+    let db_path = resolve_db_path(args.db_path, args.local);
     if !db_path.exists() {
         println!(
             "Database file '{}' does not exist. Nothing to clean.",

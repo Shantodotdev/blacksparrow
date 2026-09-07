@@ -548,3 +548,87 @@ fn test_schema_validator_google_rich_results() {
         .missing_required_fields
         .contains(&"offers".to_string()));
 }
+
+#[test]
+fn test_cli_local_and_db_path_flags() {
+    // 1. Audit command with --local and -L
+    let parsed1 =
+        Cli::try_parse_from(["seolens", "audit", "https://example.com", "--local"]).unwrap();
+    if let Commands::Audit(args) = parsed1.command {
+        assert!(args.local);
+        assert!(args.db_path.is_none());
+    } else {
+        panic!("Expected Audit command");
+    }
+
+    let parsed2 = Cli::try_parse_from(["seolens", "audit", "https://example.com", "-L"]).unwrap();
+    if let Commands::Audit(args) = parsed2.command {
+        assert!(args.local);
+    } else {
+        panic!("Expected Audit command");
+    }
+
+    // 2. Audit with explicit --db-path
+    let parsed3 = Cli::try_parse_from([
+        "seolens",
+        "audit",
+        "https://example.com",
+        "--db-path",
+        "/tmp/custom.db",
+    ])
+    .unwrap();
+    if let Commands::Audit(args) = parsed3.command {
+        assert_eq!(args.db_path, Some(PathBuf::from("/tmp/custom.db")));
+        assert!(!args.local);
+    } else {
+        panic!("Expected Audit command");
+    }
+
+    // 3. List command
+    let parsed_list = Cli::try_parse_from(["seolens", "list", "--local"]).unwrap();
+    if let Commands::List(args) = parsed_list.command {
+        assert!(args.local);
+    } else {
+        panic!("Expected List command");
+    }
+
+    // 4. Mcp command
+    let parsed_mcp = Cli::try_parse_from(["seolens", "mcp", "-L"]).unwrap();
+    if let Commands::Mcp(args) = parsed_mcp.command {
+        assert!(args.local);
+    } else {
+        panic!("Expected Mcp command");
+    }
+
+    // 5. Report command
+    let parsed_report = Cli::try_parse_from(["seolens", "report", "crawl_123", "--local"]).unwrap();
+    if let Commands::Report(args) = parsed_report.command {
+        assert!(args.local);
+    } else {
+        panic!("Expected Report command");
+    }
+
+    // 6. Issues command
+    let parsed_issues = Cli::try_parse_from(["seolens", "issues", "crawl_123", "-L"]).unwrap();
+    if let Commands::Issues(args) = parsed_issues.command {
+        assert!(args.local);
+    } else {
+        panic!("Expected Issues command");
+    }
+
+    // 7. Delete command
+    let parsed_del = Cli::try_parse_from(["seolens", "delete", "crawl_123", "--local"]).unwrap();
+    if let Commands::Delete(args) = parsed_del.command {
+        assert!(args.local);
+    } else {
+        panic!("Expected Delete command");
+    }
+
+    // 8. Clean command
+    let parsed_clean = Cli::try_parse_from(["seolens", "clean", "--all", "-L"]).unwrap();
+    if let Commands::Clean(args) = parsed_clean.command {
+        assert!(args.local);
+    } else {
+        panic!("Expected Clean command");
+    }
+}

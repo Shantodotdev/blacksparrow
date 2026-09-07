@@ -71,6 +71,10 @@ pub struct ListArgs {
     /// Custom path to SQLite persistence database
     #[arg(long)]
     pub db_path: Option<PathBuf>,
+
+    /// Force database persistence to project-local `.seolens/seolens.db`
+    #[arg(short = 'L', long, default_value_t = false)]
+    pub local: bool,
 }
 
 /// Command-line arguments for the `audit` subcommand.
@@ -139,9 +143,13 @@ pub struct AuditArgs {
     #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
     pub ignore_sorting_facets: bool,
 
-    /// Custom path to SQLite persistence database (default: .seolens/seolens.db)
+    /// Custom path to SQLite persistence database
     #[arg(long)]
     pub db_path: Option<PathBuf>,
+
+    /// Force database persistence to project-local `.seolens/seolens.db`
+    #[arg(short = 'L', long, default_value_t = false)]
+    pub local: bool,
 
     /// Only crawl URLs matching this regex pattern
     #[arg(short = 'i', long)]
@@ -192,7 +200,7 @@ pub struct InspectArgs {
 }
 
 /// Command-line arguments for the `mcp` subcommand.
-#[derive(Args, Debug, Clone)]
+#[derive(Args, Debug, Clone, Default)]
 pub struct McpArgs {
     /// Transport mechanism: stdio (local agents) or sse (remote HTTP)
     #[arg(long, default_value = "stdio")]
@@ -205,10 +213,14 @@ pub struct McpArgs {
     /// Custom path to SQLite persistence database
     #[arg(long)]
     pub db_path: Option<PathBuf>,
+
+    /// Force database persistence to project-local `.seolens/seolens.db`
+    #[arg(short = 'L', long, default_value_t = false)]
+    pub local: bool,
 }
 
 /// Command-line arguments for the `report` subcommand.
-#[derive(Args, Debug, Clone)]
+#[derive(Args, Debug, Clone, Default)]
 pub struct ReportArgs {
     /// Session ID to inspect or re-export
     #[arg(short = 's', long)]
@@ -229,6 +241,10 @@ pub struct ReportArgs {
     /// Custom path to SQLite persistence database
     #[arg(long)]
     pub db_path: Option<PathBuf>,
+
+    /// Force database persistence to project-local `.seolens/seolens.db`
+    #[arg(short = 'L', long, default_value_t = false)]
+    pub local: bool,
 }
 
 /// Command-line arguments for the `issues` subcommand.
@@ -273,6 +289,10 @@ pub struct IssuesArgs {
     /// Custom path to SQLite persistence database
     #[arg(long)]
     pub db_path: Option<PathBuf>,
+
+    /// Force database persistence to project-local `.seolens/seolens.db`
+    #[arg(short = 'L', long, default_value_t = false)]
+    pub local: bool,
 }
 
 /// Command-line arguments for the `check-ai` subcommand.
@@ -308,6 +328,10 @@ pub struct DeleteArgs {
     /// Custom path to SQLite persistence database
     #[arg(long)]
     pub db_path: Option<PathBuf>,
+
+    /// Force database persistence to project-local `.seolens/seolens.db`
+    #[arg(short = 'L', long, default_value_t = false)]
+    pub local: bool,
 }
 
 /// Command-line arguments for the `clean` subcommand.
@@ -324,6 +348,10 @@ pub struct CleanArgs {
     /// Custom path to SQLite persistence database
     #[arg(long)]
     pub db_path: Option<PathBuf>,
+
+    /// Force database persistence to project-local `.seolens/seolens.db`
+    #[arg(short = 'L', long, default_value_t = false)]
+    pub local: bool,
 }
 
 /// Command-line arguments for the `schema` subcommand.

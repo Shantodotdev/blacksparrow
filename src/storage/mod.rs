@@ -12,7 +12,7 @@ pub use queries::{
     get_crawl_issues, get_crawl_pages, init_crawl_session, list_crawls, query_issues_filtered,
     update_crawl_status, CrawlSessionInit, IssueFilterCriteria,
 };
-pub use sqlite::{default_db_path, open_connection, SCHEMA};
+pub use sqlite::{default_db_path, local_db_path, open_connection, resolve_db_path, SCHEMA};
 pub use writer::{spawn_db_writer, DbMessage, DbWriterHandle};
 
 use crate::core::models::{CrawlSummary, IssueCategory, IssueFinding, PageReport, Severity};
