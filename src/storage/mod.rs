@@ -34,6 +34,13 @@ impl Database {
         Ok(Self { path: path_buf })
     }
 
+    /// Creates a Database handle pointing to the specified path without opening a connection immediately.
+    pub fn from_path(path: impl AsRef<Path>) -> Self {
+        Self {
+            path: path.as_ref().to_path_buf(),
+        }
+    }
+
     /// Returns the database file path on disk.
     pub fn path(&self) -> &Path {
         &self.path

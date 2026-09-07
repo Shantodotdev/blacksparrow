@@ -74,6 +74,7 @@ pub mod core;
 pub mod crawler;
 pub mod error;
 pub mod graph;
+pub mod mcp;
 pub mod parser;
 pub mod report;
 pub mod rules;
