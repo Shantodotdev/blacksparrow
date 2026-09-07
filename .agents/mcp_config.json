@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "seolens": {
+      "command": "/mnt/Code/PROJECTS/seo-lens/target/release/seolens",
+      "args": [
+        "mcp"
+      ]
+    }
+  }
+}

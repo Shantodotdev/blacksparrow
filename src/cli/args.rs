@@ -201,6 +201,10 @@ pub struct McpArgs {
     /// Port to bind for HTTP/SSE transport (when --transport sse)
     #[arg(long, default_value_t = 8080)]
     pub port: u16,
+
+    /// Custom path to SQLite persistence database
+    #[arg(long)]
+    pub db_path: Option<PathBuf>,
 }
 
 /// Command-line arguments for the `report` subcommand.

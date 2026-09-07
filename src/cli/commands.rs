@@ -25,7 +25,6 @@ use crate::storage::{default_db_path, CrawlSessionInit, Database, IssueFilterCri
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::info;
 
 /// Executes the parsed CLI command.
 pub async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
@@ -268,11 +267,15 @@ async fn handle_inspect(args: InspectArgs) -> Result<(), Box<dyn std::error::Err
 
 /// Launches the native Model Context Protocol (MCP) server.
 async fn handle_mcp(args: McpArgs) -> Result<(), Box<dyn std::error::Error>> {
-    info!(transport = %args.transport, "Starting MCP server (scaffold)");
-    println!(
-        "Starting SEO Lens MCP server on transport: {}",
-        args.transport
-    );
+    if args.transport.eq_ignore_ascii_case("stdio") {
+        crate::mcp::run_mcp_server(args.db_path).await?;
+    } else {
+        eprintln!(
+            "❌ Transport '{}' is not currently supported. Please use '--transport stdio'.",
+            args.transport
+        );
+        std::process::exit(1);
+    }
     Ok(())
 }
 
