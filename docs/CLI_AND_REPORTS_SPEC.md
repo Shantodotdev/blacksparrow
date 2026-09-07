@@ -1,224 +1,237 @@
-# SEO Lens: CLI Interface & Report Exporters Specification
+# SEO Lens: CLI & Exporters Reference
 
-Command-Line Interface (Clap v4), Terminal UI (Indicatif), CI/CD Exit Codes, and Multi-Format Exporters (JSON, Markdown, HTML, Screaming Frog CSVs)
+Welcome to the command-line interface (CLI) and reporting reference for **SEO Lens**!
+
+Whether you're running audits locally from your terminal, integrating SEO checks into your CI/CD pipelines, or exporting data for spreadsheets and dashboards, this guide covers every subcommand, option, exit code, and export format.
 
 ---
 
-## 1. CLI Command Hierarchy & Subcommands
+## 1. Quick Tour & Subcommand Overview
 
-`SEO Lens` uses `clap v4` with the derive macro to expose a modern, intuitive subcommand interface via the `seolens` binary:
+SEO Lens provides **10 purpose-built subcommands** via the `seolens` binary:
 
 ```bash
 seolens
-├── audit <url>       # Run a full or partial website crawl and audit
-├── mcp               # Start the native Model Context Protocol server (stdio for Cursor/Claude)
-├── report <session>  # Re-export or inspect an existing audit from the SQLite database
-└── list              # List all historical audit sessions stored locally
+├── audit <url>       # Run a full website crawl & technical audit
+├── inspect <url>     # Instant X-ray for a single webpage (headers, DOM, schema)
+├── mcp               # Start native Model Context Protocol server (stdio)
+├── report <session>  # Re-export or inspect a past audit without recrawling
+├── list              # List all historical audit sessions stored in SQLite
+├── issues <session>  # Filter and drill down into findings for an audit
+├── check-ai <url>    # Audit AI search readiness (/llms.txt, AI bot policies)
+├── schema <url>      # Validate JSON-LD structured data against Google Rich Results
+├── delete <session>  # Delete a specific crawl session and its records
+└── clean             # Reclaim disk space by cleaning old crawl sessions
 ```
 
-_(Note: The visual dashboard is provided as a dedicated native desktop application via Tauri v2, eliminating browser port conflicts and providing a double-clickable experience for non-technical users and CMS creators.)_
+> [!TIP]
+> Run `seolens <subcommand> --help` anytime to view the built-in documentation and default values directly in your terminal.
 
 ---
 
-## 2. Command Details & Flag Specification
+## 2. Command Details & Practical Examples
 
-### 2.1 `seolens audit <url>`
+### 2.1 `seolens audit <url>` (Full Website Crawl)
 
-The primary command for technical SEO auditing.
+The primary command for technical SEO auditing. It discovers URLs, parses pages with a zero-copy streaming parser, applies AIMD adaptive rate limiting, runs 120 SEO rules, and exports reports.
 
 ```bash
-seolens audit https://example.com [FLAGS] [OPTIONS]
+# Basic crawl (defaults: 500 pages, max depth 5, concurrency 10)
+seolens audit https://example.com
+
+# High-depth crawl with HTML, CSV, and Markdown exports
+seolens audit https://example.com -p 2000 -d 8 -f html,csv,md -o ./my-reports
+
+# High-speed local audit with AIMD throttling disabled
+seolens audit http://localhost:3000 --no-aimd -p 100
+
+# CI/CD check: fail pipeline if any Critical issues are detected
+seolens audit https://staging.example.com --fail-on critical
 ```
 
-#### Arguments & Options:
+#### Flags & Options
 
-| Flag / Option   | Short | Type     | Default            | Description                                                                           |
-| --------------- | ----- | -------- | ------------------ | ------------------------------------------------------------------------------------- |
-| `<url>`         |       | `String` | _(Required)_       | Root URL to crawl (e.g. `https://client.com`).                                        |
-| `--max-pages`   | `-p`  | `u32`    | `500`              | Maximum pages to crawl (`0` = unlimited).                                             |
-| `--max-depth`   | `-d`  | `u16`    | `5`                | Maximum crawl depth from start URL.                                                   |
-| `--concurrency` | `-c`  | `usize`  | `10`               | Number of concurrent fetch tasks.                                                     |
-| `--delay`       |       | `u64`    | `0`                | Delay between requests in milliseconds (0 = auto-AIMD).                               |
-| `--render-js`   |       | `bool`   | `false`            | Enable Headless Chrome CDP for JavaScript rendering.                                  |
-| `--chrome-ws`   |       | `String` | `auto`             | Remote Chrome WebSocket URL (e.g. `ws://127.0.0.1:9222`).                             |
-| `--user-agent`  | `-u`  | `String` | `SEOLens/1.0`      | Custom User-Agent string.                                                             |
-| `--format`      | `-f`  | `String` | `terminal,json,md` | Comma-separated outputs: `terminal,json,md,html,csv,all`.                             |
-| `--output-dir`  | `-o`  | `Path`   | `./reports`        | Directory where export artifacts are saved.                                           |
-| `--fail-on`     |       | `String` | `none`             | CI/CD threshold: `critical`, `alert`, or `warning`. Returns exit code `1` if matched. |
-| `--no-robots`   |       | `bool`   | `false`            | Ignore `/robots.txt` disallow rules.                                                  |
-| `--ephemeral`   |       | `bool`   | `false`            | Do not persist results to SQLite; auto-cleanup on finish.                             |
+| Flag / Option             | Short | Type     | Default              | What It Does                                                      |
+| :------------------------ | :---- | :------- | :------------------- | :---------------------------------------------------------------- |
+| `<url>`                   |       | `String` | _(Required)_         | Root URL to crawl (e.g. `https://example.com`).                   |
+| `--max-pages`             | `-p`  | `u32`    | `500`                | Maximum pages to crawl (`0` = unlimited).                         |
+| `--max-depth`             | `-d`  | `u16`    | `5`                  | Maximum click depth from start URL.                               |
+| `--concurrency`           | `-c`  | `usize`  | `10`                 | Number of concurrent network requests.                            |
+| `--delay`                 |       | `u64`    | `0`                  | Delay between requests in ms (`0` = auto-AIMD).                   |
+| `--no-aimd`               |       | `bool`   | `false`              | Disable adaptive AIMD throttling (ideal for local staging tests). |
+| `--render-js`             |       | `bool`   | `false`              | Enable Headless Chrome CDP for JavaScript SPAs.                   |
+| `--chrome-ws`             |       | `String` | `"auto"`             | Custom Chrome WebSocket URL (e.g. `ws://127.0.0.1:9222`).         |
+| `--user-agent`            | `-u`  | `String` | `"SEOLens/1.0"`      | Custom User-Agent header string.                                  |
+| `--format`                | `-f`  | `String` | `"terminal,json,md"` | Outputs: `terminal`, `json`, `md`, `html`, `csv`, or `all`.       |
+| `--output-dir`            | `-o`  | `Path`   | `"./reports"`        | Directory where export files will be saved.                       |
+| `--fail-on`               |       | `String` | `"none"`             | CI/CD gate: `critical`, `alert`, or `warning`.                    |
+| `--no-robots`             |       | `bool`   | `false`              | Ignore `/robots.txt` disallow rules.                              |
+| `--ephemeral`             |       | `bool`   | `false`              | Ephemeral run: auto-cleans SQLite state on finish.                |
+| `--max-query-params`      |       | `usize`  | `2`                  | Max query parameters allowed before pruning spider traps.         |
+| `--ignore-sorting-facets` |       | `bool`   | `true`               | Prunes faceted sorting parameters (`sort`, `order`, etc.).        |
+| `--db-path`               |       | `Path`   | _(System default)_   | Custom path to SQLite persistence database.                       |
+| `--local`                 | `-L`  | `bool`   | `false`              | Persist database locally to `./.seolens/seolens.db`.              |
 
 ---
 
-### 2.2 `seolens mcp`
+### 2.2 `seolens inspect <url>` (Single-Page X-Ray)
 
-Launches the Model Context Protocol server for AI coding assistants (Claude Desktop, Cursor, Windsurf).
-
-```bash
-seolens mcp [OPTIONS]
-```
-
-#### Options
-
-| Option        | Default | Description                                                         |
-| ------------- | ------- | ------------------------------------------------------------------- |
-| `--transport` | `stdio` | Transport mechanism: `stdio` (local agents) or `sse` (remote HTTP). |
-| `--port`      | `8080`  | Port to bind for HTTP/SSE transport (when `--transport sse`).       |
-
----
-
-### 2.3 `seolens report <session>`
-
-Inspects or re-exports an existing audit session from SQLite.
+Need to quickly inspect a single page without running a site crawl? `inspect` fetches the URL, runs document-level SEO checks, and outputs a complete technical X-ray in under 500 milliseconds.
 
 ```bash
-seolens report <session_id> --format csv,json,md -o ./exports
+# Inspect a live page
+seolens inspect https://example.com/about
+
+# Output as structured JSON for piping into jq
+seolens inspect https://example.com/about -f json | jq '.headings'
 ```
 
 ---
 
-### 2.4 `seolens list`
+### 2.3 `seolens mcp` (Model Context Protocol Server)
 
-Lists all audit sessions currently stored in the local SQLite database.
+Launches the native Model Context Protocol (MCP) server over `stdio`. This allows AI coding agents like **Claude Desktop**, **Cursor**, and **Windsurf** to communicate directly with SEO Lens.
 
 ```bash
+# Start MCP server over stdio
+seolens mcp
+```
+
+_(See [`docs/MCP_SPECIFICATION.md`](file:///mnt/Code/PROJECTS/seo-lens/docs/MCP_SPECIFICATION.md) for tool definitions and agent configuration guides)._
+
+---
+
+### 2.4 `seolens report <session_id>` (Re-Export Existing Audits)
+
+Every crawl is saved in your local SQLite database. If you ran an audit yesterday and now want to generate an interactive HTML report or CSV files, `report` does this instantly without touching the network:
+
+```bash
+# Generate HTML and CSV reports for session crawl_1788718395
+seolens report crawl_1788718395 -f html,csv -o ./exports
+```
+
+---
+
+### 2.5 `seolens list` (Session History)
+
+Lists all audit sessions stored in your local database with target URLs, page counts, durations, and health scores.
+
+```bash
+# List recent sessions
 seolens list
+
+# Show up to 50 sessions in JSON format
+seolens list -n 50 -f json
 ```
 
 ---
 
-## 3. Exit Codes (CI/CD Pipeline Integration)
+### 2.6 `seolens issues <session_id>` (Issue Drill-Down)
 
-`SEO Lens` is designed to run in automated GitHub Actions, GitLab CI, and deployment pipelines:
-
-| Exit Code | Meaning                     | Condition                                                                                                                    |
-| --------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `0`       | **Success / Clean**         | Audit completed successfully with no violations above `--fail-on` threshold.                                                 |
-| `1`       | **SEO Threshold Violation** | Found one or more issues matching the `--fail-on` flag (e.g. `--fail-on critical` failed on broken links or missing titles). |
-| `2`       | **Runtime / Network Error** | Target URL unreachable, DNS resolution failed, invalid flags, or disk full.                                                  |
-| `130`     | **Interrupted**             | Gracefully terminated by user via `SIGINT` (`Ctrl+C`). SQLite state remains intact.                                          |
-
----
-
-## 4. Terminal UI Specification (`indicatif`)
-
-During execution, `seolens audit` renders a live, colored ANSI terminal dashboard:
+Allows you to filter and inspect issues discovered during a crawl directly in your terminal.
 
 ```bash
-🔍 SEO Lens v0.1.0 — Crawling: https://example.com
-────────────────────────────────────────────────────────────────────────
-[00:00:18] [████████████████████░░░░░] 342/500 pages (19.0 p/s)
-Active Delay: 75ms (AIMD) | p95 TTFB: 240ms | Memory: 32MB
+# View only Critical issues for an audit
+seolens issues crawl_1788718395 -s critical
 
-Found Issues: 🚨 2 Critical  |  ⚠️ 8 Alerts  |  ⚡ 24 Warnings
-────────────────────────────────────────────────────────────────────────
-Current: https://example.com/products/wireless-headphones
+# View Security category issues
+seolens issues crawl_1788718395 -c security
 ```
 
-### Post-Crawl Terminal Scorecard
+---
 
-Upon completion, the terminal displays an executive scorecard:
+### 2.7 `seolens check-ai <url>` (AI & GEO Readiness)
+
+Audits whether a website is ready for Generative Engine Optimization (GEO) and AI search engines:
+
+- Checks presence and structure of `/llms.txt` and `/llms-full.txt`.
+- Inspects `/robots.txt` to see if AI Retrieval/Search Bots (e.g. `PerplexityBot`, `OAI-SearchBot`) or AI Training Crawlers (e.g. `GPTBot`, `ClaudeBot`) are blocked.
 
 ```bash
-========================================================================
-                        SEO LENS AUDIT SCORECARD
-========================================================================
-Target:          https://example.com
-Health Score:    84 / 100
-Duration:        24.6s (482 pages crawled, 1,420 internal links)
-Avg TTFB:        185ms (p95: 310ms)
-
-HTTP Status Breakdown:
-  ✔ 200 OK:           468 (97.1%)
-  ℹ 301 Redirect:      10  (2.1%)
-  ✖ 404 Not Found:      4  (0.8%)
-
-Top Priority Issues:
-  🚨 [ERR_CANONICAL_TO_4XX_5XX] (3 pages)
-     Canonical points to dead 404 URL
-  🚨 [ERR_H1_MISSING] (1 page)
-     https://example.com/checkout
-  ⚠️ [ALERT_GEO_AI_RETRIEVAL_BOT_BLOCKED] (Site-wide)
-     robots.txt blocks PerplexityBot
-  ⚡ [WARN_IMG_MISSING_ALT] (14 images)
-     Missing descriptive alt attributes
-
-Exported Artifacts:
-  📄 Markdown:  ./reports/example_com_audit.md
-  📊 JSON:      ./reports/example_com_audit.json
-  🌐 HTML:      ./reports/example_com_audit.html
-  📑 CSVs:      ./reports/csv/ (internal_all.csv, issues_all.csv)
-========================================================================
+seolens check-ai https://example.com
 ```
 
 ---
 
-## 5. Report Exporters Specification
+### 2.8 `seolens schema <url>` (Structured Data Validator)
+
+Extracts all JSON-LD scripts from a URL and validates them against Google Rich Results specifications (Product, Article, FAQ, LocalBusiness, Breadcrumbs, etc.).
+
+```bash
+seolens schema https://example.com/products/headphones
+```
 
 ---
 
-### 5.1 Standalone HTML Report (`report.html`)
+### 2.9 `seolens delete <session_id>` & `seolens clean` (Storage Management)
 
-- **Self-Contained**: CSS and JS are compiled directly into the HTML file using `rust-embed`.
-- **Zero External Dependencies**: Renders completely offline without calling Google Fonts, external CDNs, or third-party trackers.
-- **Interactive Features**:
-  - Live search bar filtering by URL, title, or status code.
-  - Severity filter chips (Critical, Alert, Warning).
-  - Issue accordion with copyable code remediation instructions.
-  - Interactive link equity chart and crawl depth histogram.
+Manage your local SQLite storage footprint:
 
----
+```bash
+# Delete a specific crawl session
+seolens delete crawl_1788718395 -y
 
-### 5.2 Screaming Frog Compatible CSV Suite
+# Preview what sessions would be cleaned (dry run)
+seolens clean --keep 5 --dry-run
 
-To enable immediate compatibility with existing client spreadsheet workflows, `seolens` exports four industry-standard CSVs under `--format csv`:
-
-#### 1. `internal_all.csv`
-
-Columns matching Screaming Frog standard export:
-`Address`, `Status Code`, `Status`, `Content Type`, `Size (Bytes)`, `Word Count`, `Title 1`, `Title 1 Length`, `Meta Description 1`, `Meta Description 1 Length`, `H1-1`, `H1-1 Length`, `Canonical Link Element 1`, `Indexability`, `Indexability Status`, `Inlinks`, `Outlinks`, `Crawl Depth`, `Response Time (ms)`.
-
-#### 2. `issues_all.csv`
-
-Summary of all triggered rules:
-`Issue Code`, `Issue Name`, `Severity`, `Category`, `URL`, `Source URL`, `Details`, `Recommendation`.
-
-#### 3. `response_codes.csv`
-
-URL routing map:
-`URL`, `Status Code`, `Status`, `Redirect URL`, `Redirect Type`, `Inlinks Count`.
-
-#### 4. `external_all.csv`
-
-Outbound link audit:
-`Source URL`, `Destination URL`, `Anchor Text`, `Status Code`, `Is Nofollow`.
+# Reclaim space: keep only the 5 most recent crawls and delete the rest
+seolens clean --keep 5 -y
+```
 
 ---
 
-### 5.3 Machine-Readable JSON (`audit.json`)
+## 3. Exit Codes (CI/CD Pipelines)
 
-The complete, lossless structured schema containing:
+SEO Lens uses standard UNIX exit codes so you can plug audits directly into GitHub Actions, GitLab CI, or pre-deployment hooks:
 
-- `summary`: Crawl statistics, health score, duration, timing percentiles.
-- `crawled_pages`: Array of full `PageReport` objects.
-- `issues`: Grouped issue arrays with occurrence counts and affected URLs.
-- `site_graph`: Nodes (URLs) and edges (links with anchor text and attributes).
-
----
-
-### 5.4 Executive Markdown (`report.md`)
-
-Designed for human executive review and client emails:
-
-- Clean GitHub Flavored Markdown with badge formatting.
-- Organized into: Executive Summary $\rightarrow$ Critical Blockers $\rightarrow$ Optimization Opportunities $\rightarrow$ Technical Action Items.
+| Exit Code | Meaning                     | Condition                                                                               |
+| :-------: | :-------------------------- | :-------------------------------------------------------------------------------------- |
+|  **`0`**  | **Clean / Success**         | Audit finished successfully and no issues violated the `--fail-on` threshold.           |
+|  **`1`**  | **Threshold Violation**     | Found one or more issues matching or exceeding `--fail-on` (e.g. `--fail-on critical`). |
+|  **`2`**  | **Runtime / Network Error** | Target URL unreachable, DNS failure, invalid arguments, or disk error.                  |
+| **`130`** | **Interrupted (`Ctrl+C`)**  | User cancelled the crawl gracefully. Partial results remain saved in SQLite.            |
 
 ---
 
-## 6. Summary
+## 4. Multi-Format Exporters
 
-This specification guarantees:
+SEO Lens supports 5 complementary export formats:
 
-- A polished, developer-friendly CLI with standard UNIX exit codes for CI/CD integration.
-- 100% interoperability with agency client workflows via Screaming Frog compatible CSVs.
-- Self-contained, beautiful offline HTML dashboards that clients can open directly in any browser.
+### 4.1 Standalone Interactive HTML (`report.html`)
+
+- **Self-Contained**: 100% offline. CSS, SVG icons, and JavaScript are bundled directly into the single file. No external CDNs or Google Fonts.
+- **Authentic Workstation Aesthetic**: Features an ASCII branding banner, high-contrast monospace typography, and retro CRT workstation styling.
+- **Interactive Filtering**:
+  - Real-time search bar filtering across URLs, titles, error codes, and issue descriptions.
+  - Severity filter tabs (All, Critical, Alerts, Warnings, Notices).
+  - Expandable issue drawers with direct remediation advice.
+  - Dynamic ASCII-style progress bars and telemetry indicators.
+
+### 4.2 Screaming Frog Compatible CSV Suite (`reports/csv/`)
+
+Designed for agency teams and SEO consultants who work with spreadsheets:
+
+1. `internal_all.csv`: Full crawl inventory matching Screaming Frog columns (URL, Status, Title, Description, H1, Canonical, Inlinks, Outlinks, TTFB, Word Count).
+2. `issues_all.csv`: Complete list of triggered audit findings with severity, categories, affected URLs, and remediation steps.
+3. `response_codes.csv`: HTTP routing breakdown and redirect targets.
+4. `external_all.csv`: External links found, anchor texts, and `rel="nofollow"` attributes.
+
+### 4.3 Executive Markdown (`report.md`)
+
+Formatted using clean GitHub-Flavored Markdown. Perfect for:
+
+- Pasting directly into client audit summaries or PR descriptions.
+- Providing context directly to LLM prompt windows without token bloat.
+
+### 4.4 Machine-Readable JSON (`report.json`)
+
+Lossless structured dump of the entire audit: crawl summary, timing percentiles, every `PageReport`, triggered issues, and site link graph edges.
+
+### 4.5 Live Terminal UI
+
+During execution, `seolens audit` renders a live colored ANSI dashboard showing:
+
+- Real-time crawl rate (pages/sec) and progress bar.
+- Dynamic AIMD delay and p95 server TTFB.
+- Live issue counters (🚨 Critical, ⚠️ Alerts, ⚡ Warnings).
+- Post-crawl executive scorecard with health score (0–100) and status breakdown.
