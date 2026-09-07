@@ -15,10 +15,10 @@ use crate::crawler::engine::{run_crawl_with_options, CrawlResult, ProgressCallba
 use crate::crawler::inspector::inspect_url_with_options;
 use crate::graph::{compute_pagerank, SiteGraph};
 use crate::report::{
-    create_crawl_progress_bar, export_json_report, export_markdown_report, finish_crawl_progress,
-    print_ai_readiness_scorecard, print_audit_banner, print_executive_scorecard,
-    print_historical_sessions, print_issues_matrix, print_page_inspection, print_schema_outcome,
-    update_crawl_progress,
+    create_crawl_progress_bar, export_csv_suite, export_json_report, export_markdown_report,
+    finish_crawl_progress, print_ai_readiness_scorecard, print_audit_banner,
+    print_executive_scorecard, print_historical_sessions, print_issues_matrix,
+    print_page_inspection, print_schema_outcome, update_crawl_progress,
 };
 use crate::rules::page::schema_val::validate_raw_schema;
 use crate::storage::{resolve_db_path, CrawlSessionInit, Database, IssueFilterCriteria};
@@ -158,6 +158,16 @@ async fn handle_audit(args: AuditArgs) -> Result<(), Box<dyn std::error::Error>>
     if formats.contains(&"json") || formats.contains(&"all") {
         if let Ok(path) = export_json_report(&crawl_result, &args.output_dir) {
             exported_artifacts.push(("JSON", path));
+        }
+    }
+
+    if formats.contains(&"csv") || formats.contains(&"all") {
+        if let Ok(paths) = export_csv_suite(&crawl_result, &args.output_dir) {
+            if let Some(first) = paths.first() {
+                if let Some(parent) = first.parent() {
+                    exported_artifacts.push(("CSV Suite", parent.to_path_buf()));
+                }
+            }
         }
     }
 
@@ -354,6 +364,16 @@ async fn handle_report(args: ReportArgs) -> Result<(), Box<dyn std::error::Error
     if formats.contains(&"json") || formats.contains(&"all") {
         if let Ok(path) = export_json_report(&crawl_result, &output_dir) {
             exported_artifacts.push(("JSON", path));
+        }
+    }
+
+    if formats.contains(&"csv") || formats.contains(&"all") {
+        if let Ok(paths) = export_csv_suite(&crawl_result, &output_dir) {
+            if let Some(first) = paths.first() {
+                if let Some(parent) = first.parent() {
+                    exported_artifacts.push(("CSV Suite", parent.to_path_buf()));
+                }
+            }
         }
     }
 
