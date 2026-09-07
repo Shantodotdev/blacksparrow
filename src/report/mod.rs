@@ -7,6 +7,7 @@
 //! - [`score`]: Normalized 0–100 technical SEO Health Score calculation.
 
 pub mod csv;
+pub mod html;
 pub mod inspector;
 pub mod json;
 pub mod markdown;
@@ -14,6 +15,7 @@ pub mod score;
 pub mod terminal;
 
 pub use csv::export_csv_suite;
+pub use html::export_html_report;
 pub use inspector::{format_page_inspection, print_page_inspection};
 pub use json::export_json_report;
 pub use markdown::export_markdown_report;

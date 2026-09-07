@@ -15,9 +15,9 @@ use crate::crawler::engine::{run_crawl_with_options, CrawlResult, ProgressCallba
 use crate::crawler::inspector::inspect_url_with_options;
 use crate::graph::{compute_pagerank, SiteGraph};
 use crate::report::{
-    create_crawl_progress_bar, export_csv_suite, export_json_report, export_markdown_report,
-    finish_crawl_progress, print_ai_readiness_scorecard, print_audit_banner,
-    print_executive_scorecard, print_historical_sessions, print_issues_matrix,
+    create_crawl_progress_bar, export_csv_suite, export_html_report, export_json_report,
+    export_markdown_report, finish_crawl_progress, print_ai_readiness_scorecard,
+    print_audit_banner, print_executive_scorecard, print_historical_sessions, print_issues_matrix,
     print_page_inspection, print_schema_outcome, update_crawl_progress,
 };
 use crate::rules::page::schema_val::validate_raw_schema;
@@ -168,6 +168,12 @@ async fn handle_audit(args: AuditArgs) -> Result<(), Box<dyn std::error::Error>>
                     exported_artifacts.push(("CSV Suite", parent.to_path_buf()));
                 }
             }
+        }
+    }
+
+    if formats.contains(&"html") || formats.contains(&"all") {
+        if let Ok(path) = export_html_report(&crawl_result, &args.output_dir) {
+            exported_artifacts.push(("HTML", path));
         }
     }
 
@@ -374,6 +380,12 @@ async fn handle_report(args: ReportArgs) -> Result<(), Box<dyn std::error::Error
                     exported_artifacts.push(("CSV Suite", parent.to_path_buf()));
                 }
             }
+        }
+    }
+
+    if formats.contains(&"html") || formats.contains(&"all") {
+        if let Ok(path) = export_html_report(&crawl_result, &output_dir) {
+            exported_artifacts.push(("HTML", path));
         }
     }
 
