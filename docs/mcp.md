@@ -35,7 +35,7 @@ You can tell your AI agent to add the mcp server. Just copy and paste this promp
 flowchart TD
     Agent["AI Coding Agent\n(Claude / Cursor / Windsurf)"]
 
-    Agent <-->|JSON-RPC 2.0 over stdio| MCPCore["Native MCP Engine (src/mcp/)\n(Pure Rust + Tokio, zero extra crates)"]
+    Agent <-->|"JSON-RPC 2.0 over stdio"| MCPCore["Native MCP Engine (src/mcp/)\n(Pure Rust + Tokio, zero extra crates)"]
 
     subgraph ToolSuite ["8 Structured Agent Tools"]
         T1["seo_start_audit (Returns session token in < 1s)"]
