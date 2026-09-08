@@ -3,6 +3,7 @@
 //! Handles request routing, protocol handshake, tool invocations, and resource queries
 //! conforming to the Model Context Protocol (2024-11-05).
 
+use crate::error::SeoResult;
 use crate::mcp::resources::{get_resource_definitions, read_resource};
 use crate::mcp::tools::{execute_tool, get_tool_definitions};
 use crate::mcp::types::{
@@ -22,12 +23,13 @@ pub struct McpContext {
 impl McpContext {
     /// Creates a new MCP context with an optional database path.
     ///
-    /// Falls back to default `.seolens/seolens.db` or a system temporary directory
-    /// if creation fails, guaranteeing zero panics.
-    pub fn new(db_path: Option<PathBuf>) -> Self {
+    /// # Errors
+    ///
+    /// Returns [`SeoError::Storage`] if the SQLite database cannot be opened or initialized.
+    pub fn new(db_path: Option<PathBuf>) -> SeoResult<Self> {
         let path = db_path.unwrap_or_else(default_db_path);
-        let db = Database::open(&path).unwrap_or_else(|_| Database::from_path(path));
-        Self { db }
+        let db = Database::open(&path)?;
+        Ok(Self { db })
     }
 
     /// Creates a context with a pre-configured database instance.

@@ -358,3 +358,31 @@ async fn test_cli_report_command_generates_csv_suite() {
     // Cleanup
     let _ = fs::remove_dir_all(&temp_dir);
 }
+
+#[test]
+fn test_csv_formula_injection_neutralization() {
+    let out_dir = unique_test_csv_dir();
+    let mut crawl_result = create_test_crawl_result();
+
+    // Inject malicious formula values into crawled fields
+    crawl_result.pages[0].title = Some("=cmd|'/C calc'!A0".to_string());
+    crawl_result.pages[0].h1_primary = Some("@SUM(1,2)".to_string());
+    crawl_result.pages[0].links[0].anchor_text = "+12345678".to_string();
+
+    let exported = export_csv_suite(&crawl_result, &out_dir).expect("Export CSV");
+    assert_eq!(exported.len(), 4);
+
+    let internal_csv = fs::read_to_string(out_dir.join("csv").join("internal_all.csv"))
+        .expect("Read internal CSV");
+    // Assert formula characters are prefixed with single quote
+    assert!(
+        internal_csv.contains("'=cmd|'/C calc'!A0"),
+        "Title starting with '=' must be neutralized"
+    );
+    assert!(
+        internal_csv.contains("'@SUM(1,2)"),
+        "H1 starting with '@' must be neutralized"
+    );
+
+    let _ = fs::remove_dir_all(&out_dir);
+}

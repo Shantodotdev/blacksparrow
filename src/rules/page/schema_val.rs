@@ -332,23 +332,92 @@ pub struct SchemaValidationOutcome {
     pub error_message: Option<String>,
 }
 
+const SUPPORTED_RICH_RESULT_TYPES: &[&str] = &[
+    "Product",
+    "Article",
+    "NewsArticle",
+    "BlogPosting",
+    "FAQPage",
+    "BreadcrumbList",
+    "Organization",
+    "LocalBusiness",
+    "Recipe",
+    "Course",
+    "JobPosting",
+    "Event",
+    "VideoObject",
+    "SoftwareApplication",
+    "Book",
+    "Movie",
+    "Review",
+    "AggregateRating",
+];
+
+fn extract_json_ld_script_content(html: &str) -> Option<&str> {
+    let lower = html.to_ascii_lowercase();
+    let mut cursor = 0;
+    while let Some(pos) = lower[cursor..].find("<script") {
+        let tag_start = cursor + pos;
+        if let Some(tag_close) = lower[tag_start..].find('>') {
+            let open_tag = &lower[tag_start..tag_start + tag_close];
+            if open_tag.contains("application/ld+json") {
+                let body_start = tag_start + tag_close + 1;
+                if let Some(end_pos) = lower[body_start..].find("</script>") {
+                    return Some(html[body_start..body_start + end_pos].trim());
+                }
+            }
+            cursor = tag_start + tag_close + 1;
+        } else {
+            break;
+        }
+    }
+    None
+}
+
+fn extract_all_types(val: &Value) -> Vec<String> {
+    let mut types = Vec::new();
+    let type_val = val.get("@type").or_else(|| {
+        val.get("@graph")
+            .and_then(|g| g.as_array())
+            .and_then(|arr| arr.first())
+            .and_then(|item| item.get("@type"))
+    });
+    if let Some(tv) = type_val {
+        if let Some(s) = tv.as_str() {
+            types.push(s.to_string());
+        } else if let Some(arr) = tv.as_array() {
+            for item in arr {
+                if let Some(s) = item.as_str() {
+                    types.push(s.to_string());
+                }
+            }
+        }
+    }
+    types
+}
+
 /// Validates a raw JSON-LD snippet or HTML block against Google Rich Results eligibility rules.
 pub fn validate_raw_schema(
     raw: &str,
     expected_type: Option<&str>,
 ) -> SeoResult<SchemaValidationOutcome> {
     let trimmed = raw.trim();
-    let json_text = if let Some(start) = trimmed.find("<script") {
-        if let Some(content_start) = trimmed[start..].find('>') {
-            let rest = &trimmed[start + content_start + 1..];
-            if let Some(end) = rest.find("</script>") {
-                rest[..end].trim()
-            } else {
-                trimmed
-            }
-        } else {
-            trimmed
-        }
+    let json_text = if let Some(content) = extract_json_ld_script_content(trimmed) {
+        content
+    } else if trimmed.starts_with('{') || trimmed.starts_with('[') {
+        trimmed
+    } else if trimmed.to_ascii_lowercase().contains("<script") {
+        return Ok(SchemaValidationOutcome {
+            is_valid_json: false,
+            detected_type: None,
+            is_rich_result_eligible: false,
+            missing_required_fields: Vec::new(),
+            missing_recommended_fields: Vec::new(),
+            error_message: Some(
+                "No JSON-LD script block (<script type=\"application/ld+json\">) found in HTML"
+                    .to_string(),
+            ),
+        });
     } else {
         trimmed
     };
@@ -367,66 +436,91 @@ pub fn validate_raw_schema(
         }
     };
 
-    let detected_type = if let Some(t) = val.get("@type").and_then(|v| v.as_str()) {
-        Some(t.to_string())
-    } else if let Some(Value::Array(graph)) = val.get("@graph") {
-        graph
-            .first()
-            .and_then(|item| item.get("@type"))
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
+    let types = extract_all_types(&val);
+    let detected_type = types.first().cloned();
+
+    let target_type = if let Some(exp) = expected_type {
+        if let Some(matched) = types.iter().find(|t| t.eq_ignore_ascii_case(exp)) {
+            Some(matched.clone())
+        } else {
+            return Ok(SchemaValidationOutcome {
+                is_valid_json: true,
+                detected_type,
+                is_rich_result_eligible: false,
+                missing_required_fields: Vec::new(),
+                missing_recommended_fields: Vec::new(),
+                error_message: Some(format!(
+                    "Expected type '{}' not found in detected schema types: {:?}",
+                    exp, types
+                )),
+            });
+        }
     } else {
-        None
+        types
+            .iter()
+            .find(|t| {
+                SUPPORTED_RICH_RESULT_TYPES
+                    .iter()
+                    .any(|s| s.eq_ignore_ascii_case(t))
+            })
+            .cloned()
     };
 
-    let target = expected_type
-        .map(|s| s.to_string())
-        .or_else(|| detected_type.clone());
+    let Some(ref t) = target_type else {
+        return Ok(SchemaValidationOutcome {
+            is_valid_json: true,
+            detected_type: detected_type.clone(),
+            is_rich_result_eligible: false,
+            missing_required_fields: Vec::new(),
+            missing_recommended_fields: Vec::new(),
+            error_message: Some(format!(
+                "Detected type '{}' is not eligible for Google Rich Results",
+                detected_type.as_deref().unwrap_or("Unknown")
+            )),
+        });
+    };
+
     let mut missing_required = Vec::new();
     let mut missing_recommended = Vec::new();
 
-    if let Some(ref t) = target {
-        if t.eq_ignore_ascii_case("product") {
-            if !json_has_field(&val, "name") {
-                missing_required.push("name".to_string());
-            }
-            if !json_has_field(&val, "image") {
-                missing_recommended.push("image".to_string());
-            }
-            if !json_has_field(&val, "offers") {
-                missing_required.push("offers".to_string());
-            }
-            if !json_has_field(&val, "aggregateRating") && !json_has_field(&val, "review") {
-                missing_recommended.push("aggregateRating".to_string());
-            }
-        } else if t.eq_ignore_ascii_case("article")
-            || t.eq_ignore_ascii_case("newsarticle")
-            || t.eq_ignore_ascii_case("blogposting")
-        {
-            if !json_has_field(&val, "headline") {
-                missing_required.push("headline".to_string());
-            }
-            if !json_has_field(&val, "author") {
-                missing_recommended.push("author".to_string());
-            }
-            if !json_has_field(&val, "datePublished") {
-                missing_recommended.push("datePublished".to_string());
-            }
-            if !json_has_field(&val, "image") {
-                missing_recommended.push("image".to_string());
-            }
-        } else if t.eq_ignore_ascii_case("faqpage") {
-            if !json_has_field(&val, "mainEntity") {
-                missing_required.push("mainEntity".to_string());
-            }
-        } else if t.eq_ignore_ascii_case("breadcrumblist")
-            && !json_has_field(&val, "itemListElement")
-        {
-            missing_required.push("itemListElement".to_string());
+    if t.eq_ignore_ascii_case("product") {
+        if !json_has_field(&val, "name") {
+            missing_required.push("name".to_string());
         }
+        if !json_has_field(&val, "image") {
+            missing_recommended.push("image".to_string());
+        }
+        if !json_has_field(&val, "offers") {
+            missing_required.push("offers".to_string());
+        }
+        if !json_has_field(&val, "aggregateRating") && !json_has_field(&val, "review") {
+            missing_recommended.push("aggregateRating".to_string());
+        }
+    } else if t.eq_ignore_ascii_case("article")
+        || t.eq_ignore_ascii_case("newsarticle")
+        || t.eq_ignore_ascii_case("blogposting")
+    {
+        if !json_has_field(&val, "headline") {
+            missing_required.push("headline".to_string());
+        }
+        if !json_has_field(&val, "author") {
+            missing_recommended.push("author".to_string());
+        }
+        if !json_has_field(&val, "datePublished") {
+            missing_recommended.push("datePublished".to_string());
+        }
+        if !json_has_field(&val, "image") {
+            missing_recommended.push("image".to_string());
+        }
+    } else if t.eq_ignore_ascii_case("faqpage") {
+        if !json_has_field(&val, "mainEntity") {
+            missing_required.push("mainEntity".to_string());
+        }
+    } else if t.eq_ignore_ascii_case("breadcrumblist") && !json_has_field(&val, "itemListElement") {
+        missing_required.push("itemListElement".to_string());
     }
 
-    let is_eligible = detected_type.is_some() && missing_required.is_empty();
+    let is_eligible = missing_required.is_empty();
     let err_msg = if !missing_required.is_empty() {
         Some(format!(
             "Missing required Google Rich Result property '{}'",
@@ -438,7 +532,7 @@ pub fn validate_raw_schema(
 
     Ok(SchemaValidationOutcome {
         is_valid_json: true,
-        detected_type,
+        detected_type: target_type.or(detected_type),
         is_rich_result_eligible: is_eligible,
         missing_required_fields: missing_required,
         missing_recommended_fields: missing_recommended,

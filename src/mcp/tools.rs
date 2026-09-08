@@ -61,11 +61,6 @@ pub fn get_tool_definitions() -> Vec<ToolDefinition> {
                         "type": "boolean",
                         "default": true,
                         "description": "Whether to fetch and obey /robots.txt rules."
-                    },
-                    "ai_geo_audit": {
-                        "type": "boolean",
-                        "default": true,
-                        "description": "Audit /llms.txt and AI bot crawler accessibility."
                     }
                 },
                 "required": ["url"]
@@ -119,11 +114,6 @@ pub fn get_tool_definitions() -> Vec<ToolDefinition> {
                         "type": "string",
                         "format": "uri",
                         "description": "Single URL to fetch and audit."
-                    },
-                    "render_js": {
-                        "type": "boolean",
-                        "default": false,
-                        "description": "Execute JavaScript via headless Chrome."
                     }
                 },
                 "required": ["url"]
@@ -270,7 +260,8 @@ async fn tool_start_audit(args: Option<&Value>, db: &Database) -> SeoResult<Call
     let background_url = target_url.clone();
     let background_session_id = session_id.clone();
     tokio::spawn(async move {
-        if let Ok(mut config) = CrawlConfig::new(&background_url) {
+        let run_result: SeoResult<crate::crawler::engine::CrawlResult> = async {
+            let mut config = CrawlConfig::new(&background_url)?;
             config.session_id = Some(background_session_id.clone());
             config.max_pages = max_pages;
             config.max_depth = max_depth;
@@ -278,41 +269,59 @@ async fn tool_start_audit(args: Option<&Value>, db: &Database) -> SeoResult<Call
             config.render_js = render_js;
             config.quiet = true; // headless background task
 
-            if let Ok((writer_handle, writer_task)) =
-                background_db.spawn_writer(&background_session_id, 20, Duration::from_millis(500))
-            {
-                let crawl_res =
-                    run_crawl_with_options(&config, None, Some(writer_handle), None).await;
-                let _ = writer_task.await;
+            let (writer_handle, writer_task) = background_db.spawn_writer(
+                &background_session_id,
+                20,
+                Duration::from_millis(500),
+            )?;
 
-                if let Ok(res) = crawl_res {
-                    let errors = res
-                        .issues
-                        .iter()
-                        .filter(|i| i.severity == Severity::Critical)
-                        .count() as u32;
-                    let alerts = res
-                        .issues
-                        .iter()
-                        .filter(|i| i.severity == Severity::Alert)
-                        .count() as u32;
-                    let warnings = res
-                        .issues
-                        .iter()
-                        .filter(|i| i.severity == Severity::Warning)
-                        .count() as u32;
+            let crawl_res = run_crawl_with_options(&config, None, Some(writer_handle), None).await;
+            let _ = writer_task.await;
 
-                    let _ = background_db.update_crawl_status(
-                        &background_session_id,
-                        "completed",
-                        None,
-                        res.pages.len() as u32,
-                        errors,
-                        alerts,
-                        warnings,
-                        Some(res.health_score),
-                    );
-                }
+            crawl_res
+        }
+        .await;
+
+        match run_result {
+            Ok(res) if !res.pages.is_empty() => {
+                let errors = res
+                    .issues
+                    .iter()
+                    .filter(|i| i.severity == Severity::Critical)
+                    .count() as u32;
+                let alerts = res
+                    .issues
+                    .iter()
+                    .filter(|i| i.severity == Severity::Alert)
+                    .count() as u32;
+                let warnings = res
+                    .issues
+                    .iter()
+                    .filter(|i| i.severity == Severity::Warning)
+                    .count() as u32;
+
+                let _ = background_db.update_crawl_status(
+                    &background_session_id,
+                    "completed",
+                    None,
+                    res.pages.len() as u32,
+                    errors,
+                    alerts,
+                    warnings,
+                    Some(res.health_score),
+                );
+            }
+            _ => {
+                let _ = background_db.update_crawl_status(
+                    &background_session_id,
+                    "failed",
+                    None,
+                    0,
+                    0,
+                    0,
+                    0,
+                    None,
+                );
             }
         }
     });

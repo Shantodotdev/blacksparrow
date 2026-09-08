@@ -12,6 +12,7 @@ use reqwest::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE, LOCATION
 use reqwest::redirect::Policy;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
+use url::Url;
 
 /// Options for configuring an [`HttpClient`] instance.
 #[derive(Debug, Clone)]
@@ -123,6 +124,7 @@ impl HttpClient {
         let mut redirect_chain = Vec::new();
         let initial_start = Instant::now();
         let mut ttfb_ms = 0u32;
+        let initial_origin = Url::parse(url).ok().map(|u| u.origin());
 
         loop {
             let mut req = self.client.get(&current_url);
@@ -130,12 +132,19 @@ impl HttpClient {
             // Add User-Agent
             req = req.header(USER_AGENT, &self.options.user_agent);
 
-            // Add custom headers
-            for (key, val) in &self.options.custom_headers {
-                if let (Ok(name), Ok(value)) =
-                    (HeaderName::from_str(key), HeaderValue::from_str(val))
-                {
-                    req = req.header(name, value);
+            // Forward custom headers only on same-origin requests to prevent credential leaks across redirects
+            let is_same_origin = match (&initial_origin, Url::parse(&current_url).ok()) {
+                (Some(init), Some(curr)) => *init == curr.origin(),
+                _ => true,
+            };
+
+            if is_same_origin {
+                for (key, val) in &self.options.custom_headers {
+                    if let (Ok(name), Ok(value)) =
+                        (HeaderName::from_str(key), HeaderValue::from_str(val))
+                    {
+                        req = req.header(name, value);
+                    }
                 }
             }
 

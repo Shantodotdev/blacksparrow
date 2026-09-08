@@ -20,7 +20,7 @@ use crate::crawler::client::{FetchOptions, FetchResult, HttpClient};
 use crate::crawler::frontier::{Frontier, FrontierEntry};
 use crate::crawler::robots::RobotsTxt;
 use crate::crawler::sitemap::{parse_sitemap, SitemapDocument};
-use crate::error::SeoResult;
+use crate::error::{SeoError, SeoResult};
 use crate::graph::{compute_pagerank, SiteGraph};
 use crate::parser::{parse_html, ParsedPage};
 use crate::report::score::calculate_health_score;
@@ -513,14 +513,18 @@ pub async fn run_crawl_with_options(
         let _ = writer.save_issues(site_issues.clone()).await;
     }
 
-    let include_re = config
-        .include_regex
-        .as_deref()
-        .and_then(|pat| regex::Regex::new(pat).ok());
-    let exclude_re = config
-        .exclude_regex
-        .as_deref()
-        .and_then(|pat| regex::Regex::new(pat).ok());
+    let include_re = match config.include_regex.as_deref() {
+        Some(pat) => Some(regex::Regex::new(pat).map_err(|e| {
+            SeoError::Config(format!("Invalid include regex pattern '{pat}': {e}"))
+        })?),
+        None => None,
+    };
+    let exclude_re = match config.exclude_regex.as_deref() {
+        Some(pat) => Some(regex::Regex::new(pat).map_err(|e| {
+            SeoError::Config(format!("Invalid exclude regex pattern '{pat}': {e}"))
+        })?),
+        None => None,
+    };
 
     let frontier = Arc::new(Mutex::new(Frontier::new(
         config.max_pages,
@@ -559,7 +563,7 @@ pub async fn run_crawl_with_options(
     let semaphore = Arc::new(Semaphore::new(concurrency));
     let active_workers = Arc::new(AtomicUsize::new(0));
 
-    let (tx, mut rx) = mpsc::channel::<WorkerPageOutcome>(concurrency * 2);
+    let (tx, mut rx) = mpsc::channel::<Option<WorkerPageOutcome>>(concurrency * 2);
 
     let mut crawled_pages = Vec::new();
     let mut all_issues = Vec::new();
@@ -623,7 +627,7 @@ pub async fn run_crawl_with_options(
 
                     tokio::spawn(async move {
                         let _permit = permit;
-                        if let Some(outcome) = fetch_and_audit_page(
+                        let outcome = fetch_and_audit_page(
                             &sess_id,
                             entry,
                             client_clone,
@@ -631,10 +635,8 @@ pub async fn run_crawl_with_options(
                             no_aimd,
                             static_delay,
                         )
-                        .await
-                        {
-                            let _ = tx_clone.send(outcome).await;
-                        }
+                        .await;
+                        let _ = tx_clone.send(outcome).await;
                     });
                 }
                 None => {
@@ -682,102 +684,104 @@ pub async fn run_crawl_with_options(
                 }
             }
 
-            Some(outcome) = rx.recv() => {
+            Some(opt) = rx.recv() => {
                 active_workers.fetch_sub(1, Ordering::SeqCst);
 
-                for issue in &outcome.report.issues {
-                    match issue.severity {
-                        Severity::Critical => critical_count += 1,
-                        Severity::Alert => alert_count += 1,
-                        Severity::Warning => warning_count += 1,
-                        Severity::Notice => {}
+                if let Some(outcome) = opt {
+                    for issue in &outcome.report.issues {
+                        match issue.severity {
+                            Severity::Critical => critical_count += 1,
+                            Severity::Alert => alert_count += 1,
+                            Severity::Warning => warning_count += 1,
+                            Severity::Notice => {}
+                        }
+                        all_issues.push(issue.clone());
                     }
-                    all_issues.push(issue.clone());
-                }
 
-                if let Some(ref writer) = db_writer {
-                    let _ = writer.save_page(outcome.report.clone()).await;
-                }
+                    if let Some(ref writer) = db_writer {
+                        let _ = writer.save_page(outcome.report.clone()).await;
+                    }
 
-                let discovered_count = if config.max_depth == 0 || outcome.depth < config.max_depth {
-                    let mut f = frontier.lock().await;
+                    let discovered_count = if config.max_depth == 0 || outcome.depth < config.max_depth {
+                        let mut f = frontier.lock().await;
 
-                    // Canonical facet pruning:
-                    // If the current page is a parameterized/faceted URL whose canonical URL points
-                    // to a base URL without those parameters (or canonical differs from current page),
-                    // do not enqueue parameterized child links discovered on this page.
-                    let is_canonicalized_away = match outcome.report.canonical_url {
-                        Some(ref canon) => {
-                            outcome.report.url.contains('?') && canon != &outcome.report.url
-                        }
-                        None => false,
-                    };
+                        // Canonical facet pruning:
+                        // If the current page is a parameterized/faceted URL whose canonical URL points
+                        // to a base URL without those parameters (or canonical differs from current page),
+                        // do not enqueue parameterized child links discovered on this page.
+                        let is_canonicalized_away = match outcome.report.canonical_url {
+                            Some(ref canon) => {
+                                outcome.report.url.contains('?') && canon != &outcome.report.url
+                            }
+                            None => false,
+                        };
 
-                    for link in outcome.discovered_links {
-                        if !link.is_internal || is_static_asset_url(&link.target_url) {
-                            continue;
-                        }
-
-                        // Faceted defense 1: Prune sorting & display facets if configured
-                        if config.ignore_sorting_facets && has_sorting_facets(&link.target_url) {
-                            continue;
-                        }
-
-                        // Faceted defense 2: Prune excessive content query parameters
-                        if config.max_query_params > 0
-                            && count_content_facets(&link.target_url) > config.max_query_params
-                        {
-                            continue;
-                        }
-
-                        // Faceted defense 3: Canonical facet pruning (do not crawl deeper parameter variants from a non-canonical facet page)
-                        if is_canonicalized_away && link.target_url.contains('?') {
-                            continue;
-                        }
-
-                        // Path filter: Include regex
-                        if let Some(ref inc) = include_re {
-                            if !inc.is_match(&link.target_url) {
+                        for link in outcome.discovered_links {
+                            if !link.is_internal || is_static_asset_url(&link.target_url) {
                                 continue;
                             }
-                        }
 
-                        // Path filter: Exclude regex
-                        if let Some(ref exc) = exclude_re {
-                            if exc.is_match(&link.target_url) {
+                            // Faceted defense 1: Prune sorting & display facets if configured
+                            if config.ignore_sorting_facets && has_sorting_facets(&link.target_url) {
                                 continue;
                             }
+
+                            // Faceted defense 2: Prune excessive content query parameters
+                            if config.max_query_params > 0
+                                && count_content_facets(&link.target_url) > config.max_query_params
+                            {
+                                continue;
+                            }
+
+                            // Faceted defense 3: Canonical facet pruning (do not crawl deeper parameter variants from a non-canonical facet page)
+                            if is_canonicalized_away && link.target_url.contains('?') {
+                                continue;
+                            }
+
+                            // Path filter: Include regex
+                            if let Some(ref inc) = include_re {
+                                if !inc.is_match(&link.target_url) {
+                                    continue;
+                                }
+                            }
+
+                            // Path filter: Exclude regex
+                            if let Some(ref exc) = exclude_re {
+                                if exc.is_match(&link.target_url) {
+                                    continue;
+                                }
+                            }
+
+                            let _ = f.push(&link.target_url, outcome.depth + 1, Some(&outcome.report.url));
                         }
-
-                        let _ = f.push(&link.target_url, outcome.depth + 1, Some(&outcome.report.url));
-                    }
-                    f.enqueued_count() as usize
-                } else {
-                    let f = frontier.lock().await;
-                    f.enqueued_count() as usize
-                };
-
-                if let Some(ref cb) = progress_cb {
-                    let current_delay_ms = {
-                        let a = aimd.lock().await;
-                        a.current_delay_ms()
+                        f.enqueued_count() as usize
+                    } else {
+                        let f = frontier.lock().await;
+                        f.enqueued_count() as usize
                     };
 
-                    cb(ProgressUpdate {
-                        crawled_pages: crawled_pages.len() + 1,
-                        discovered_pages: discovered_count,
-                        max_pages: config.max_pages,
-                        current_url: outcome.report.url.clone(),
-                        status_code: outcome.report.status_code,
-                        ttfb_ms: outcome.report.ttfb_ms,
-                        aimd_delay_ms: current_delay_ms,
-                        critical_count,
-                        alert_count,
-                        warning_count,
-                    });
-                }
+                    if let Some(ref cb) = progress_cb {
+                        let current_delay_ms = {
+                            let a = aimd.lock().await;
+                            a.current_delay_ms()
+                        };
 
-                crawled_pages.push(outcome.report);
+                        cb(ProgressUpdate {
+                            crawled_pages: crawled_pages.len() + 1,
+                            discovered_pages: discovered_count,
+                            max_pages: config.max_pages,
+                            current_url: outcome.report.url.clone(),
+                            status_code: outcome.report.status_code,
+                            ttfb_ms: outcome.report.ttfb_ms,
+                            aimd_delay_ms: current_delay_ms,
+                            critical_count,
+                            alert_count,
+                            warning_count,
+                        });
+                    }
+
+                    crawled_pages.push(outcome.report);
+                }
             }
             else => {
                 if active == 0 {
@@ -790,15 +794,16 @@ pub async fn run_crawl_with_options(
     if interrupted {
         let drain_deadline = Instant::now() + Duration::from_secs(2);
         while active_workers.load(Ordering::SeqCst) > 0 && Instant::now() < drain_deadline {
-            if let Ok(Some(outcome)) =
-                tokio::time::timeout(Duration::from_millis(200), rx.recv()).await
+            if let Ok(Some(opt)) = tokio::time::timeout(Duration::from_millis(200), rx.recv()).await
             {
                 active_workers.fetch_sub(1, Ordering::SeqCst);
-                all_issues.extend(outcome.report.issues.clone());
-                if let Some(ref writer) = db_writer {
-                    let _ = writer.save_page(outcome.report.clone()).await;
+                if let Some(outcome) = opt {
+                    all_issues.extend(outcome.report.issues.clone());
+                    if let Some(ref writer) = db_writer {
+                        let _ = writer.save_page(outcome.report.clone()).await;
+                    }
+                    crawled_pages.push(outcome.report);
                 }
-                crawled_pages.push(outcome.report);
             } else {
                 break;
             }
@@ -835,6 +840,8 @@ pub async fn run_crawl_with_options(
 
     let final_status = if interrupted {
         "interrupted"
+    } else if crawl_result.pages.is_empty() {
+        "failed"
     } else {
         "completed"
     };

@@ -18,7 +18,7 @@ where
     R: AsyncBufRead + Unpin,
     W: AsyncWrite + Unpin,
 {
-    let ctx = McpContext::new(db_path);
+    let ctx = McpContext::new(db_path)?;
     let mut lines = reader.lines();
 
     while let Some(line) = lines.next_line().await? {
