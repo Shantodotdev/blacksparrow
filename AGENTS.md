@@ -76,7 +76,7 @@ Read the relevant specification in `docs/` before implementing or changing any c
 
 1. **Roadmap & Architecture**: [`docs/architecture.md`](file:///mnt/Code/PROJECTS/seo-lens/docs/architecture.md)
 2. **120 SEO Rules Catalog (Heuristics & Fixes)**: [`docs/SEO_RULES_CATALOG.md`](file:///mnt/Code/PROJECTS/seo-lens/docs/SEO_RULES_CATALOG.md)
-3. **Domain Models & SQLite WAL Schema**: [`docs/DATA_MODELS_AND_SCHEMA.md`](file:///mnt/Code/PROJECTS/seo-lens/docs/DATA_MODELS_AND_SCHEMA.md)
+3. **Storage & SQLite Architecture**: [`docs/storage.md`](file:///mnt/Code/PROJECTS/seo-lens/docs/storage.md)
 4. **Model Context Protocol (MCP) Server**: [`docs/mcp.md`](file:///mnt/Code/PROJECTS/seo-lens/docs/mcp.md)
 5. **CLI Commands, Flags & Exporters**: [`docs/cli.md`](file:///mnt/Code/PROJECTS/seo-lens/docs/cli.md)
 6. **Crawler Architecture & Congestion Control**: [`docs/crawler.md`](file:///mnt/Code/PROJECTS/seo-lens/docs/crawler.md)
