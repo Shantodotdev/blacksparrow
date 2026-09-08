@@ -119,7 +119,7 @@ Auditing is divided cleanly into two phases:
 
 - All audit data is persisted into an embedded SQLite database using **Write-Ahead Logging (`PRAGMA journal_mode = WAL`)** and **`PRAGMA synchronous = NORMAL`**.
 - Writes are batched in atomic chunks of 250 pages to ensure blazing disk throughput.
-- By default, databases are stored in the user's OS data directory (`~/.local/share/seo-lens/data/seolens.db` on Linux), or locally in `./.seolens/seolens.db` when using the `-L` / `--local` flag.
+- By default, databases are stored in the user's OS data directory (`~/.local/share/seolens/seolens.db` on Linux), or locally in `./.seolens/seolens.db` when using the `-L` / `--local` flag.
 
 ### 4.6 Native In-Process MCP Server (`src/mcp/`)
 

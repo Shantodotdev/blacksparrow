@@ -176,7 +176,7 @@ fn build_page_report(
 /// 2. Audits AI search crawler disallows (`GPTBot`, `ClaudeBot`, etc.) per Rule 11.1.
 /// 3. Checks for presence of `/llms.txt` per Rule 11.2.
 /// 4. If no sitemaps are declared in robots.txt, falls back to probing convention paths
-///    (`/sitemap.xml`, `/sitemap_index.xml`, `/wp-sitemap.xml`) per CRAWLER_SPEC §5.2.
+///    (`/sitemap.xml`, `/sitemap_index.xml`, `/wp-sitemap.xml`) per docs/crawler.md §5.2.
 /// 5. Recursively resolves nested sitemap index feeds up to 3 levels deep.
 async fn discover_robots_and_sitemaps(
     client: &HttpClient,
@@ -251,7 +251,7 @@ async fn discover_robots_and_sitemaps(
         site_issues.push(rule.to_finding(&llms_url, Some(&msg)));
     }
 
-    // If robots.txt declared no sitemaps, probe standard conventions per CRAWLER_SPEC §5.2
+    // If robots.txt declared no sitemaps, probe standard conventions per docs/crawler.md §5.2
     if sitemap_feed_seeds.is_empty() {
         sitemap_feed_seeds.push(format!("{}/sitemap.xml", origin));
         sitemap_feed_seeds.push(format!("{}/sitemap_index.xml", origin));

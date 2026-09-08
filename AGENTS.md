@@ -30,7 +30,7 @@ The repository is structured as a **2-Member Cargo Workspace**:
 ## Working Principles
 
 - **Strict Test-Driven Development (TDD)**: Always write failing automated tests in `tests/` before writing minimal implementation code in `src/`.
-- **Architectural Progression**: Follow the architecture and roadmap defined in [`docs/architecture.md`](file:///mnt/Code/PROJECTS/seo-lens/docs/architecture.md). Complete and verify each component before moving to the next.
+- **Architectural Progression**: Follow the architecture and roadmap defined in [`docs/architecture.md`](docs/architecture.md). Complete and verify each component before moving to the next.
 - **Zero Panics in Library Code**: Never use `unwrap()` or `expect()` in `src/` library modules. All fallible operations must return `Result<T, SeoError>` using `thiserror`.
 - **Minimal, Targeted Changes**: Make focused edits. Preserve existing comments, docstrings, and unrelated code.
 - **Empirical Measurement**: Do not make up unverified performance claims or benchmark figures. Profile and measure memory and speed empirically.
@@ -52,7 +52,7 @@ The repository is structured as a **2-Member Cargo Workspace**:
 - **Mandatory Formatting**: After making any code changes and before handing over to the user, **always run `cargo fmt --all`**.
 - **Test Runner Preference**: If `cargo-nextest` is installed on the system (check via `cargo nextest --version`), always prioritize using `cargo nextest run` (or `cargo nextest run --workspace`) for running unit and integration tests because it is faster and provides superior UI output. Fall back to standard `cargo test` if `nextest` is unavailable. Note that doc tests are executed with `cargo test --doc`.
 - **Minor / Trivial Tasks**: Run `cargo fmt --all`, `cargo check`, and `cargo clippy`.
-- **Phase Work & Major Features**: Run `cargo fmt --all`, run the test suite (preferring `cargo nextest run` if installed, otherwise `cargo test`), and verify changes against [`docs/architecture.md`](file:///mnt/Code/PROJECTS/seo-lens/docs/architecture.md).
+- **Phase Work & Major Features**: Run `cargo fmt --all`, run the test suite (preferring `cargo nextest run` if installed, otherwise `cargo test`), and verify changes against [`docs/architecture.md`](docs/architecture.md).
 - **Super Simple Edits** (e.g. typos, comments): Run `cargo fmt --all`.
 
 ---
@@ -74,12 +74,12 @@ The repository is structured as a **2-Member Cargo Workspace**:
 
 Read the relevant specification in `docs/` before implementing or changing any component:
 
-1. **Roadmap & Architecture**: [`docs/architecture.md`](file:///mnt/Code/PROJECTS/seo-lens/docs/architecture.md)
-2. **120 SEO Rules Catalog (Heuristics & Fixes)**: [`docs/rules.md`](file:///mnt/Code/PROJECTS/seo-lens/docs/rules.md)
-3. **Storage & SQLite Architecture**: [`docs/storage.md`](file:///mnt/Code/PROJECTS/seo-lens/docs/storage.md)
-4. **Model Context Protocol (MCP) Server**: [`docs/mcp.md`](file:///mnt/Code/PROJECTS/seo-lens/docs/mcp.md)
-5. **CLI Commands, Flags & Exporters**: [`docs/cli.md`](file:///mnt/Code/PROJECTS/seo-lens/docs/cli.md)
-6. **Crawler Architecture & Congestion Control**: [`docs/crawler.md`](file:///mnt/Code/PROJECTS/seo-lens/docs/crawler.md)
+1. **Roadmap & Architecture**: [`docs/architecture.md`](docs/architecture.md)
+2. **120 SEO Rules Catalog (Heuristics & Fixes)**: [`docs/rules.md`](docs/rules.md)
+3. **Storage & SQLite Architecture**: [`docs/storage.md`](docs/storage.md)
+4. **Model Context Protocol (MCP) Server**: [`docs/mcp.md`](docs/mcp.md)
+5. **CLI Commands, Flags & Exporters**: [`docs/cli.md`](docs/cli.md)
+6. **Crawler Architecture & Congestion Control**: [`docs/crawler.md`](docs/crawler.md)
 
 ---
 

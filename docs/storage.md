@@ -61,7 +61,7 @@ The connection pool initializes SQLite with production-grade WAL parameters:
 
 ## 3. Database Schema Overview
 
-The definitive schema is maintained in [`src/storage/schema.sql`](file:///mnt/Code/PROJECTS/seo-lens/src/storage/schema.sql), and the corresponding Rust domain models are defined in [`src/core/models.rs`](file:///mnt/Code/PROJECTS/seo-lens/src/core/models.rs).
+The definitive schema is maintained in [`../src/storage/schema.sql`](../src/storage/schema.sql), and the corresponding Rust domain models are defined in [`../src/core/models.rs`](../src/core/models.rs).
 
 Here is a summary of the 7 core tables:
 

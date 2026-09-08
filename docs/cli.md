@@ -97,7 +97,7 @@ Launches the native Model Context Protocol (MCP) server over `stdio`. This allow
 seolens mcp
 ```
 
-_(See [`docs/MCP_SPECIFICATION.md`](file:///mnt/Code/PROJECTS/seo-lens/docs/MCP_SPECIFICATION.md) for tool definitions and agent configuration guides)._
+_(See [`mcp.md`](./mcp.md) for tool definitions and agent configuration guides)._
 
 ---
 
