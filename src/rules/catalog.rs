@@ -3,7 +3,7 @@
 //! Authoritative dictionary defining unique error codes, severity ratings,
 //! audit categories, human-readable descriptions, and remediation guidance.
 //!
-//! Complies with the 120-check technical SEO audit specification in `docs/SEO_RULES_CATALOG.md`.
+//! Complies with the 120-check technical SEO audit specification in `docs/rules.md`.
 //!
 //! ## Examples
 //!

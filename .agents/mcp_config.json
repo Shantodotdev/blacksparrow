@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "seolens": {
+      "command": "seolens",
+      "args": [
+        "mcp"
+      ]
+    }
+  }
+}

@@ -6,17 +6,22 @@
 //! - [`json`]: Complete structured JSON export for automated pipelines and data warehouses.
 //! - [`score`]: Normalized 0–100 technical SEO Health Score calculation.
 
+pub mod csv;
+pub mod html;
 pub mod inspector;
 pub mod json;
 pub mod markdown;
 pub mod score;
 pub mod terminal;
 
+pub use csv::export_csv_suite;
+pub use html::export_html_report;
 pub use inspector::{format_page_inspection, print_page_inspection};
 pub use json::export_json_report;
 pub use markdown::export_markdown_report;
 pub use score::calculate_health_score;
 pub use terminal::{
-    create_crawl_progress_bar, finish_crawl_progress, print_audit_banner,
-    print_executive_scorecard, print_historical_sessions, update_crawl_progress,
+    create_crawl_progress_bar, finish_crawl_progress, print_ai_readiness_scorecard,
+    print_audit_banner, print_cli_help, print_executive_scorecard, print_historical_sessions,
+    print_issues_matrix, print_schema_outcome, update_crawl_progress,
 };

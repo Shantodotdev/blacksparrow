@@ -24,12 +24,23 @@ pub async fn inspect_url(
     user_agent: &str,
     timeout: Duration,
 ) -> SeoResult<(ParsedPage, FetchResult, Vec<IssueFinding>)> {
+    inspect_url_with_options(url, user_agent, timeout, Vec::new()).await
+}
+
+/// Fetches and analyzes a single webpage with custom HTTP request headers.
+pub async fn inspect_url_with_options(
+    url: &str,
+    user_agent: &str,
+    timeout: Duration,
+    custom_headers: Vec<(String, String)>,
+) -> SeoResult<(ParsedPage, FetchResult, Vec<IssueFinding>)> {
     let normalized = normalize_url(url)?;
 
     let client = HttpClient::new(FetchOptions {
         user_agent: user_agent.to_string(),
         timeout,
         max_redirects: 10,
+        custom_headers,
         ..Default::default()
     })?;
 

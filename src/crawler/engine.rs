@@ -176,12 +176,13 @@ fn build_page_report(
 /// 2. Audits AI search crawler disallows (`GPTBot`, `ClaudeBot`, etc.) per Rule 11.1.
 /// 3. Checks for presence of `/llms.txt` per Rule 11.2.
 /// 4. If no sitemaps are declared in robots.txt, falls back to probing convention paths
-///    (`/sitemap.xml`, `/sitemap_index.xml`, `/wp-sitemap.xml`) per CRAWLER_SPEC §5.2.
+///    (`/sitemap.xml`, `/sitemap_index.xml`, `/wp-sitemap.xml`) per docs/crawler.md §5.2.
 /// 5. Recursively resolves nested sitemap index feeds up to 3 levels deep.
 async fn discover_robots_and_sitemaps(
     client: &HttpClient,
     seed_url: &str,
     respect_robots: bool,
+    explicit_sitemaps: &[String],
 ) -> (Option<RobotsTxt>, Vec<String>, Vec<IssueFinding>) {
     let Ok(parsed_url) = url::Url::parse(seed_url) else {
         return (None, Vec::new(), Vec::new());
@@ -189,7 +190,7 @@ async fn discover_robots_and_sitemaps(
 
     let origin = format!("{}://{}", parsed_url.scheme(), parsed_url.authority());
     let robots_url = format!("{}/robots.txt", origin);
-    let mut sitemap_feed_seeds = Vec::new();
+    let mut sitemap_feed_seeds = explicit_sitemaps.to_vec();
     let mut site_issues = Vec::new();
 
     let fetched_robots = if let Ok(res) = client.fetch(&robots_url).await {
@@ -250,7 +251,7 @@ async fn discover_robots_and_sitemaps(
         site_issues.push(rule.to_finding(&llms_url, Some(&msg)));
     }
 
-    // If robots.txt declared no sitemaps, probe standard conventions per CRAWLER_SPEC §5.2
+    // If robots.txt declared no sitemaps, probe standard conventions per docs/crawler.md §5.2
     if sitemap_feed_seeds.is_empty() {
         sitemap_feed_seeds.push(format!("{}/sitemap.xml", origin));
         sitemap_feed_seeds.push(format!("{}/sitemap_index.xml", origin));
@@ -495,15 +496,31 @@ pub async fn run_crawl_with_options(
         user_agent: config.user_agent.clone(),
         timeout: Duration::from_secs(30),
         max_redirects: 10,
+        custom_headers: config.headers.clone(),
+        proxy: config.proxy.clone(),
         ..Default::default()
     })?);
 
-    let (robots_txt, sitemap_urls, site_issues) =
-        discover_robots_and_sitemaps(&client, &normalized_start, config.respect_robots).await;
+    let (robots_txt, sitemap_urls, site_issues) = discover_robots_and_sitemaps(
+        &client,
+        &normalized_start,
+        config.respect_robots,
+        &config.explicit_sitemaps,
+    )
+    .await;
 
     if let Some(ref writer) = db_writer {
         let _ = writer.save_issues(site_issues.clone()).await;
     }
+
+    let include_re = config
+        .include_regex
+        .as_deref()
+        .and_then(|pat| regex::Regex::new(pat).ok());
+    let exclude_re = config
+        .exclude_regex
+        .as_deref()
+        .and_then(|pat| regex::Regex::new(pat).ok());
 
     let frontier = Arc::new(Mutex::new(Frontier::new(
         config.max_pages,
@@ -512,7 +529,24 @@ pub async fn run_crawl_with_options(
 
     {
         let mut f = frontier.lock().await;
-        f.register_sitemap_urls(&sitemap_urls);
+        let filtered_sitemaps: Vec<String> = sitemap_urls
+            .iter()
+            .filter(|u| {
+                if let Some(ref inc) = include_re {
+                    if !inc.is_match(u) {
+                        return false;
+                    }
+                }
+                if let Some(ref exc) = exclude_re {
+                    if exc.is_match(u) {
+                        return false;
+                    }
+                }
+                true
+            })
+            .cloned()
+            .collect();
+        f.register_sitemap_urls(&filtered_sitemaps);
         f.push(&normalized_start, 0, None)?;
     }
 
@@ -699,6 +733,20 @@ pub async fn run_crawl_with_options(
                         // Faceted defense 3: Canonical facet pruning (do not crawl deeper parameter variants from a non-canonical facet page)
                         if is_canonicalized_away && link.target_url.contains('?') {
                             continue;
+                        }
+
+                        // Path filter: Include regex
+                        if let Some(ref inc) = include_re {
+                            if !inc.is_match(&link.target_url) {
+                                continue;
+                            }
+                        }
+
+                        // Path filter: Exclude regex
+                        if let Some(ref exc) = exclude_re {
+                            if exc.is_match(&link.target_url) {
+                                continue;
+                            }
                         }
 
                         let _ = f.push(&link.target_url, outcome.depth + 1, Some(&outcome.report.url));

@@ -66,6 +66,22 @@ impl Severity {
     pub const fn as_u8(&self) -> u8 {
         *self as u8
     }
+
+    /// Returns the lowercase string identifier of the severity tier.
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Critical => "critical",
+            Self::Alert => "alert",
+            Self::Warning => "warning",
+            Self::Notice => "notice",
+        }
+    }
+}
+
+impl std::fmt::Display for Severity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
 }
 
 /// Functional categories mapping to the 120-check technical SEO audit catalog.

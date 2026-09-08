@@ -415,6 +415,7 @@ async fn test_cli_commands_list_and_report() {
     let list_cli = Cli {
         command: Commands::List(ListArgs {
             db_path: Some(db_path.clone()),
+            ..Default::default()
         }),
     };
     execute(list_cli).await.expect("List command execution");
@@ -428,6 +429,7 @@ async fn test_cli_commands_list_and_report() {
             format: Some("json".to_string()),
             output_dir: Some(temp_reports.clone()),
             db_path: Some(db_path.clone()),
+            ..Default::default()
         }),
     };
     execute(report_cli).await.expect("Report command execution");
@@ -438,4 +440,44 @@ async fn test_cli_commands_list_and_report() {
     // Cleanup
     let _ = std::fs::remove_dir_all(&temp_reports);
     let _ = std::fs::remove_file(&db_path);
+}
+
+#[test]
+fn test_database_path_resolution() {
+    use seo_lens::storage::{default_db_path, local_db_path, resolve_db_path};
+
+    // 1. local_db_path returns .seolens/seolens.db
+    let local = local_db_path();
+    assert_eq!(local, PathBuf::from(".seolens").join("seolens.db"));
+
+    // 2. Explicit path takes highest precedence
+    let explicit = PathBuf::from("/custom/db/path.sqlite");
+    assert_eq!(resolve_db_path(Some(explicit.clone()), false), explicit);
+    assert_eq!(resolve_db_path(Some(explicit.clone()), true), explicit);
+
+    // 3. Local flag forces local_db_path when no explicit path given
+    assert_eq!(resolve_db_path(None, true), local);
+
+    // 4. SEOLENS_DB_PATH environment variable override
+    let orig_env = std::env::var("SEOLENS_DB_PATH").ok();
+    let temp_env_path = std::env::temp_dir().join("test_env_seolens.db");
+    std::env::set_var("SEOLENS_DB_PATH", temp_env_path.to_str().unwrap());
+
+    assert_eq!(default_db_path(), temp_env_path);
+    assert_eq!(resolve_db_path(None, false), temp_env_path);
+
+    // Restore or unset env var
+    match orig_env {
+        Some(val) => std::env::set_var("SEOLENS_DB_PATH", val),
+        None => std::env::remove_var("SEOLENS_DB_PATH"),
+    }
+
+    // 5. Without env var, standard resolution returns OS data dir (if it exists)
+    if std::env::var("SEOLENS_DB_PATH").is_err() && !local.exists() {
+        if let Some(expected_os_dir) = dirs::data_dir() {
+            let expected = expected_os_dir.join("seolens").join("seolens.db");
+            assert_eq!(default_db_path(), expected);
+            assert_eq!(resolve_db_path(None, false), expected);
+        }
+    }
 }

@@ -12,6 +12,7 @@
 //! - [`robots`]: RFC 9309 compliant `robots.txt` rule evaluator and crawl-delay parser.
 //! - [`sitemap`]: Streaming XML sitemap parser with alternates and gzip decompression.
 
+pub mod ai_check;
 pub mod aimd;
 pub mod client;
 pub mod engine;
@@ -22,13 +23,15 @@ pub mod robots;
 pub mod sitemap;
 pub mod waf;
 
+pub use ai_check::{audit_ai_readiness, AiReadinessReport, AiSearchRisk};
+
 pub use aimd::AimdController;
 pub use client::{FetchOptions, FetchResult, HttpClient};
 pub use engine::{
     run_crawl, run_crawl_with_options, CrawlResult, ProgressCallback, ProgressUpdate,
 };
 pub use frontier::{Frontier, FrontierEntry};
-pub use inspector::inspect_url;
+pub use inspector::{inspect_url, inspect_url_with_options};
 pub use priority::{calculate_url_importance, is_pagination_url, parse_url_segments};
 pub use robots::RobotsTxt;
 pub use sitemap::{parse_sitemap, SitemapDocument, SitemapEntry, SitemapIndexEntry};

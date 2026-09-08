@@ -78,6 +78,16 @@ pub struct CrawlConfig {
     pub session_id: Option<String>,
     /// Optional path override for SQLite persistence database.
     pub db_path: Option<std::path::PathBuf>,
+    /// Optional regex pattern; only URLs matching this pattern will be crawled.
+    pub include_regex: Option<String>,
+    /// Optional regex pattern; URLs matching this pattern will be skipped.
+    pub exclude_regex: Option<String>,
+    /// Explicit sitemap XML URLs to seed or audit.
+    pub explicit_sitemaps: Vec<String>,
+    /// Suppress progress indicators for quiet/CI script execution.
+    pub quiet: bool,
+    /// Optional human-friendly audit name or project label.
+    pub crawl_name: Option<String>,
 }
 
 impl CrawlConfig {
@@ -131,6 +141,11 @@ impl CrawlConfig {
             ignore_sorting_facets: true,
             session_id: None,
             db_path: None,
+            include_regex: None,
+            exclude_regex: None,
+            explicit_sitemaps: Vec::new(),
+            quiet: false,
+            crawl_name: None,
         })
     }
 

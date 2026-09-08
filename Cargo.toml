@@ -12,6 +12,8 @@ edition = "2021"
 authors = ["KR Shanto"]
 description = "High-performance, local-first website crawler and technical SEO audit engine in Rust"
 license = "MIT OR Apache-2.0"
+repository = "https://github.com/Shantodotdev/seo-lens"
+homepage = "https://github.com/Shantodotdev/seo-lens"
 
 [lib]
 name = "seo_lens"
@@ -29,7 +31,7 @@ thiserror = "2.0"
 anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-clap = { version = "4.5", features = ["derive"] }
+clap = { version = "4.5", features = ["derive", "color"] }
 compact_str = { version = "0.8", features = ["serde"] }
 bitflags = { version = "2.8", features = ["serde"] }
 url = "2.5"
@@ -42,6 +44,8 @@ flate2 = "1.0"
 petgraph = "0.8"
 regex = "1.11"
 rusqlite = { version = "0.33", features = ["bundled"] }
+dirs = "6.0"
+csv = "1.3"
 
 
 [dev-dependencies]
