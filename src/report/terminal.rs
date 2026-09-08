@@ -27,8 +27,81 @@ const ANSI_BRIGHT_WHITE: &str = "\x1b[38;5;231m";
 const ANSI_BOLD: &str = "\x1b[1m";
 const ANSI_RESET: &str = "\x1b[0m";
 
+fn format_section_header(title: &str) -> String {
+    let pad = title.chars().count() + 4;
+    let top = format!(
+        "  {ANSI_BOLD}{ANSI_CYAN}┌{}┐{ANSI_RESET}\n",
+        "─".repeat(pad)
+    );
+    let mid = format!(
+        "  {ANSI_BOLD}{ANSI_CYAN}│{ANSI_RESET}  {ANSI_BOLD}{ANSI_BRIGHT_WHITE}{title}{ANSI_RESET}  {ANSI_BOLD}{ANSI_CYAN}│{ANSI_RESET}\n"
+    );
+    let bot = format!(
+        "  {ANSI_BOLD}{ANSI_CYAN}└{}┘{ANSI_RESET}\n",
+        "─".repeat(pad)
+    );
+    format!("{top}{mid}{bot}")
+}
+
+/// Splits `text` into lines where each line does not exceed `max_width`.
+fn wrap_text(text: &str, max_width: usize) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut current_line = String::new();
+
+    for word in text.split_whitespace() {
+        if current_line.is_empty() {
+            current_line.push_str(word);
+        } else if current_line.len() + 1 + word.len() <= max_width {
+            current_line.push(' ');
+            current_line.push_str(word);
+        } else {
+            lines.push(current_line);
+            current_line = word.to_string();
+        }
+    }
+
+    if !current_line.is_empty() {
+        lines.push(current_line);
+    }
+
+    if lines.is_empty() {
+        lines.push(String::new());
+    }
+
+    lines
+}
+
+fn status_text(code: u16) -> &'static str {
+    match code {
+        200 => "OK",
+        201 => "Created",
+        202 => "Accepted",
+        204 => "No Content",
+        301 => "Moved Permanently",
+        302 => "Found",
+        304 => "Not Modified",
+        307 => "Temporary Redirect",
+        308 => "Permanent Redirect",
+        400 => "Bad Request",
+        401 => "Unauthorized",
+        403 => "Forbidden",
+        404 => "Not Found",
+        405 => "Method Not Allowed",
+        410 => "Gone",
+        429 => "Too Many Requests",
+        500 => "Internal Server Error",
+        502 => "Bad Gateway",
+        503 => "Service Unavailable",
+        504 => "Gateway Timeout",
+        _ => "Unknown",
+    }
+}
+
+static BANNER_PRINTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// Prints the cyberpunk startup ASCII banner and mission parameters.
 pub fn print_audit_banner(target_url: &str, max_pages: u32, concurrency: usize, aimd: bool) {
+    BANNER_PRINTED.store(true, Ordering::SeqCst);
     let aimd_status = if aimd {
         format!("{ANSI_GREEN}ACTIVE (AIMD){ANSI_RESET}")
     } else {
@@ -41,8 +114,11 @@ pub fn print_audit_banner(target_url: &str, max_pages: u32, concurrency: usize, 
     };
 
     println!(
-        "\n{ANSI_CYAN}{ANSI_BOLD}  ███████╗███████╗ ██████╗     ██╗     ███████╗███╗   ██╗███████╗\n  ██╔════╝██╔════╝██╔═══██╗    ██║     ██╔════╝████╗  ██║██╔════╝\n  ███████╗█████╗  ██║   ██║    ██║     █████╗  ██╔██╗ ██║███████╗\n  ╚════██║██╔══╝  ██║   ██║    ██║     ██╔══╝  ██║╚██╗██║╚════██║\n  ███████║███████╗╚██████╔╝    ███████╗███████╗██║ ╚████║███████║\n  ╚══════╝╚══════╝ ╚═════╝     ╚══════╝╚══════╝╚═╝  ╚═══╝╚══════╝{ANSI_RESET}\n\n{ANSI_DIM}┌──[{ANSI_RESET} {ANSI_BOLD}TARGET TELEMETRY{ANSI_RESET} {ANSI_DIM}]────────────────────────────────────────────────────────{ANSI_RESET}\n{ANSI_DIM}│{ANSI_RESET}  {ANSI_BOLD}Target URL  {ANSI_RESET} : {ANSI_CYAN}{target_url}{ANSI_RESET}\n{ANSI_DIM}│{ANSI_RESET}  {ANSI_BOLD}Parameters  {ANSI_RESET} : {pages_limit} {ANSI_DIM}│{ANSI_RESET} {concurrency} workers {ANSI_DIM}│{ANSI_RESET} AIMD: {aimd_status}\n{ANSI_DIM}└────────────────────────────────────────────────────────────────────────┘{ANSI_RESET}\n"
+        "\n{ANSI_CYAN}{ANSI_BOLD}  ███████╗███████╗ ██████╗     ██╗     ███████╗███╗   ██╗███████╗\n  ██╔════╝██╔════╝██╔═══██╗    ██║     ██╔════╝████╗  ██║██╔════╝\n  ███████╗█████╗  ██║   ██║    ██║     █████╗  ██╔██╗ ██║███████╗\n  ╚════██║██╔══╝  ██║   ██║    ██║     ██╔══╝  ██║╚██╗██║╚════██║\n  ███████║███████╗╚██████╔╝    ███████╗███████╗██║ ╚████║███████║\n  ╚══════╝╚══════╝ ╚═════╝     ╚══════╝╚══════╝╚═╝  ╚═══╝╚══════╝{ANSI_RESET}\n"
     );
+    print!("{}", format_section_header("SEO LENS // DEEP AUDIT MATRIX"));
+    println!("  {ANSI_BOLD}Target URL  {ANSI_RESET} : {ANSI_CYAN}{target_url}{ANSI_RESET}\n");
+    println!("  {ANSI_BOLD}Parameters  {ANSI_RESET} : {pages_limit} {ANSI_DIM}│{ANSI_RESET} {concurrency} workers {ANSI_DIM}│{ANSI_RESET} AIMD: {aimd_status}\n");
 }
 
 /// Interactive single-line progress indicator for live crawl monitoring.
@@ -150,17 +226,17 @@ pub fn finish_crawl_progress(_pb: &CrawlProgressBar) {
 
 /// Renders the comprehensive post-crawl executive scorecard in the terminal.
 pub fn print_executive_scorecard(result: &CrawlResult, exported_paths: &[(&str, &Path)]) {
-    println!(
-        "\n{ANSI_CYAN}╔══════════════════════════════════════════════════════════════════════════╗"
-    );
-    println!("║                    SEO LENS // DEEP AUDIT MATRIX                         ║");
-    println!(
-        "╚══════════════════════════════════════════════════════════════════════════╝{ANSI_RESET}"
-    );
-    println!(
-        "  {ANSI_BOLD}Target{ANSI_RESET}       : {ANSI_CYAN}{}{ANSI_RESET}",
-        result.target_url
-    );
+    let already_bannered = BANNER_PRINTED.swap(false, Ordering::SeqCst);
+    if !already_bannered {
+        print!(
+            "\n{}",
+            format_section_header("SEO LENS // DEEP AUDIT MATRIX")
+        );
+        println!(
+            "  {ANSI_BOLD}Target URL  {ANSI_RESET} : {ANSI_CYAN}{}{ANSI_RESET}\n",
+            result.target_url
+        );
+    }
 
     // Health Score Visual Gauge
     let filled_bars = (result.health_score as usize * 20) / 100;
@@ -179,7 +255,7 @@ pub fn print_executive_scorecard(result: &CrawlResult, exported_paths: &[(&str, 
     let gauge =
         format!("{score_color}[{filled_str}{ANSI_DIM}{empty_str}{score_color}]{ANSI_RESET}");
     println!(
-        "  {ANSI_BOLD}Health Score{ANSI_RESET} : {gauge} {score_color}{ANSI_BOLD}{}/100 [{rating}]{ANSI_RESET}",
+        "  {ANSI_BOLD}Health Score{ANSI_RESET} : {gauge} {score_color}{ANSI_BOLD}{}/100 [{rating}]{ANSI_RESET}\n",
         result.health_score
     );
 
@@ -203,7 +279,7 @@ pub fn print_executive_scorecard(result: &CrawlResult, exported_paths: &[(&str, 
     };
 
     println!(
-        "  {ANSI_BOLD}Telemetry{ANSI_RESET}    : {ANSI_GREEN}{:.1}s{ANSI_RESET} elapsed {ANSI_DIM}│{ANSI_RESET} {ANSI_GREEN}{}{ANSI_RESET} pages probed {ANSI_DIM}│{ANSI_RESET} {ANSI_GREEN}{}{ANSI_RESET} links indexed {ANSI_DIM}│{ANSI_RESET} TTFB: {ANSI_GREEN}{avg_ttfb}{ANSI_RESET}\n",
+        "  {ANSI_BOLD}Telemetry   {ANSI_RESET} : {ANSI_GREEN}{:.1}s{ANSI_RESET} elapsed {ANSI_DIM}│{ANSI_RESET} {ANSI_GREEN}{}{ANSI_RESET} pages probed {ANSI_DIM}│{ANSI_RESET} {ANSI_GREEN}{}{ANSI_RESET} links indexed {ANSI_DIM}│{ANSI_RESET} TTFB: {ANSI_GREEN}{avg_ttfb}{ANSI_RESET}\n",
         result.duration.as_secs_f64(),
         result.pages.len(),
         result.graph.edge_count()
@@ -215,7 +291,7 @@ pub fn print_executive_scorecard(result: &CrawlResult, exported_paths: &[(&str, 
         *status_counts.entry(page.status_code).or_default() += 1;
     }
 
-    println!("{ANSI_DIM}┌──[{ANSI_RESET} {ANSI_BOLD}PROTOCOL TELEMETRY{ANSI_RESET} {ANSI_DIM}]───────────────────────────────────────────────────{ANSI_RESET}");
+    print!("{}", format_section_header("PROTOCOL TELEMETRY"));
     let mut sorted_statuses: Vec<_> = status_counts.into_iter().collect();
     sorted_statuses.sort_by_key(|k| k.0);
 
@@ -231,17 +307,19 @@ pub fn print_executive_scorecard(result: &CrawlResult, exported_paths: &[(&str, 
             400..=499 => ("✖", ANSI_RED),
             _ => ("✖", ANSI_RED),
         };
+        let reason = status_text(status);
+        let status_desc = format!("{status} {reason}");
         println!(
-            "{ANSI_DIM}│{ANSI_RESET}  {color}{icon} {:<4} OK{ANSI_RESET}         : {:>5} pages {ANSI_DIM}({:.1}%){ANSI_RESET}",
-            status, count, pct
+            "  {color}{icon} {:<18}{ANSI_RESET} : {:>5} pages {ANSI_DIM}({:.1}%){ANSI_RESET}",
+            status_desc, count, pct
         );
     }
-    println!("{ANSI_DIM}└────────────────────────────────────────────────────────────────────────┘{ANSI_RESET}\n");
+    println!();
 
     // Top Priority Issues (Tree Format)
-    println!("{ANSI_DIM}┌──[{ANSI_RESET} {ANSI_BOLD}DEFECT TRIAGE MATRIX{ANSI_RESET} {ANSI_DIM}]─────────────────────────────────────────────────{ANSI_RESET}");
+    print!("{}", format_section_header("DEFECT TRIAGE MATRIX"));
     if result.issues.is_empty() {
-        println!("{ANSI_DIM}│{ANSI_RESET}  {ANSI_GREEN}✔ Zero technical SEO defects detected across all probed nodes.{ANSI_RESET}");
+        println!("  {ANSI_GREEN}✔ Zero technical SEO defects detected across all probed nodes.{ANSI_RESET}\n");
     } else {
         let mut grouped: HashMap<
             crate::core::models::RuleId,
@@ -285,10 +363,41 @@ pub fn print_executive_scorecard(result: &CrawlResult, exported_paths: &[(&str, 
                 findings.len(),
                 if findings.len() == 1 { "" } else { "s" }
             );
-            println!("    {ANSI_DIM}├── Defect  :{ANSI_RESET} {}", title);
-            if !remediation.is_empty() {
-                println!("    {ANSI_DIM}├── Remedy  :{ANSI_RESET} {}", remediation);
+
+            let has_sample = !findings.is_empty();
+            let has_remedy = !remediation.is_empty();
+
+            // Defect line (wrapped at 58 chars to keep total line <= 76 chars)
+            let defect_wrapped = wrap_text(title, 58);
+            let defect_branch = if has_remedy || has_sample {
+                "├──"
+            } else {
+                "└──"
+            };
+            let defect_cont = if has_remedy || has_sample { "│" } else { " " };
+            println!(
+                "    {ANSI_DIM}{defect_branch} Defect  :{ANSI_RESET} {}",
+                defect_wrapped[0]
+            );
+            for cont in &defect_wrapped[1..] {
+                println!("    {ANSI_DIM}{defect_cont}             {ANSI_RESET}{cont}");
             }
+
+            // Remedy line (wrapped at 58 chars)
+            if has_remedy {
+                let remedy_wrapped = wrap_text(remediation, 58);
+                let remedy_branch = if has_sample { "├──" } else { "└──" };
+                let remedy_cont = if has_sample { "│" } else { " " };
+                println!(
+                    "    {ANSI_DIM}{remedy_branch} Remedy  :{ANSI_RESET} {}",
+                    remedy_wrapped[0]
+                );
+                for cont in &remedy_wrapped[1..] {
+                    println!("    {ANSI_DIM}{remedy_cont}             {ANSI_RESET}{cont}");
+                }
+            }
+
+            // Sample line
             if let Some(sample) = findings.first() {
                 println!(
                     "    {ANSI_DIM}└── Sample  :{ANSI_RESET} {ANSI_DIM}{}{ANSI_RESET}",
@@ -300,7 +409,10 @@ pub fn print_executive_scorecard(result: &CrawlResult, exported_paths: &[(&str, 
     }
 
     // Top Authority Hubs // PageRank Distribution Matrix
-    println!("{ANSI_DIM}┌──[{ANSI_RESET} {ANSI_BOLD}TOP AUTHORITY HUBS // PAGERANK DISTRIBUTION{ANSI_RESET} {ANSI_DIM}]─────────────────────────{ANSI_RESET}");
+    print!(
+        "{}",
+        format_section_header("TOP AUTHORITY HUBS // PAGERANK DISTRIBUTION")
+    );
     println!("  {ANSI_DIM}Rank   Equity    Inlinks / Outlinks    Authority Node{ANSI_RESET}");
     println!("  {ANSI_DIM}─────  ──────    ──────────────────    ──────────────{ANSI_RESET}");
 
@@ -329,32 +441,12 @@ pub fn print_executive_scorecard(result: &CrawlResult, exported_paths: &[(&str, 
 
     // Exported Mission Artifacts
     if !exported_paths.is_empty() {
-        println!("{ANSI_DIM}┌──[{ANSI_RESET} {ANSI_BOLD}GENERATED MISSION ARTIFACTS{ANSI_RESET} {ANSI_DIM}]─────────────────────────────────────────{ANSI_RESET}");
+        print!("{}", format_section_header("GENERATED MISSION ARTIFACTS"));
         for (fmt, path) in exported_paths {
-            println!(
-                "{ANSI_DIM}│{ANSI_RESET}  {ANSI_CYAN}◈ {:<9}{ANSI_RESET} : {}",
-                fmt,
-                path.display()
-            );
+            println!("  {ANSI_CYAN}◈ {:<9}{ANSI_RESET} : {}", fmt, path.display());
         }
-        println!("{ANSI_DIM}└────────────────────────────────────────────────────────────────────────┘{ANSI_RESET}\n");
+        println!();
     }
-}
-
-fn format_section_header(title: &str) -> String {
-    let pad = title.chars().count() + 4;
-    let top = format!(
-        "  {ANSI_BOLD}{ANSI_CYAN}┌{}┐{ANSI_RESET}\n",
-        "─".repeat(pad)
-    );
-    let mid = format!(
-        "  {ANSI_BOLD}{ANSI_CYAN}│{ANSI_RESET}  {ANSI_BOLD}{ANSI_BRIGHT_WHITE}{title}{ANSI_RESET}  {ANSI_BOLD}{ANSI_CYAN}│{ANSI_RESET}\n"
-    );
-    let bot = format!(
-        "  {ANSI_BOLD}{ANSI_CYAN}└{}┘{ANSI_RESET}\n",
-        "─".repeat(pad)
-    );
-    format!("{top}{mid}{bot}")
 }
 
 /// Renders the cyberpunk-styled historical crawl sessions in developer inspector aesthetic.
@@ -475,8 +567,13 @@ pub fn print_issues_matrix(
         "\n{ANSI_CYAN}{ANSI_BOLD}  ███████╗███████╗ ██████╗     ██╗███████╗███████╗██╗   ██╗███████╗███████╗\n  ██╔════╝██╔════╝██╔═══██╗    ██║██╔════╝██╔════╝██║   ██║██╔════╝██╔════╝\n  ███████╗█████╗  ██║   ██║    ██║███████╗███████╗██║   ██║█████╗  ███████╗\n  ╚════██║██╔══╝  ██║   ██║    ██║╚════██║╚════██║██║   ██║██╔══╝  ╚════██║\n  ███████║███████╗╚██████╔╝    ██║███████║███████║╚██████╔╝███████╗███████║\n  ╚══════╝╚══════╝ ╚═════╝     ╚═╝╚══════╝╚══════╝ ╚═════╝ ╚══════╝╚══════╝{ANSI_RESET}\n"
     );
 
+    print!(
+        "{}",
+        format_section_header("AUDIT DEFECTS // FILTERED QUERY")
+    );
+    println!("  {ANSI_BOLD}Session ID{ANSI_RESET} : {ANSI_CYAN}{session_id}{ANSI_RESET}");
     println!(
-        "{ANSI_DIM}┌──[{ANSI_RESET} {ANSI_BOLD}AUDIT DEFECTS // FILTERED QUERY{ANSI_RESET} {ANSI_DIM}]───────────────────────────────────────{ANSI_RESET}\n{ANSI_DIM}│{ANSI_RESET}  {ANSI_BOLD}Session ID{ANSI_RESET} : {ANSI_CYAN}{session_id}{ANSI_RESET}\n{ANSI_DIM}│{ANSI_RESET}  {ANSI_BOLD}Matching  {ANSI_RESET} : {total_count} issues found (showing {offset}..{})\n{ANSI_DIM}└────────────────────────────────────────────────────────────────────────┘{ANSI_RESET}\n",
+        "  {ANSI_BOLD}Matching  {ANSI_RESET} : {total_count} issues found (showing {offset}..{})\n",
         (offset + issues.len()).min(total_count)
     );
 
@@ -511,10 +608,14 @@ pub fn print_issues_matrix(
             "       {ANSI_BOLD}Target URL {ANSI_RESET}: {ANSI_CYAN}{}{ANSI_RESET}",
             issue.target_url
         );
+        let diag_wrapped = wrap_text(&issue.message, 58);
         println!(
             "       {ANSI_BOLD}Diagnosis  {ANSI_RESET}: {}",
-            issue.message
+            diag_wrapped[0]
         );
+        for cont in &diag_wrapped[1..] {
+            println!("                  {cont}");
+        }
         if let Some(ref src) = issue.source_page_url {
             println!("       {ANSI_BOLD}Source Page{ANSI_RESET}: {ANSI_DIM}{src}{ANSI_RESET}");
         }
@@ -550,13 +651,15 @@ pub fn print_ai_readiness_scorecard(report: &AiReadinessReport) {
         ),
     };
 
-    println!("{ANSI_DIM}┌──[{ANSI_RESET} {ANSI_BOLD}GENERATIVE ENGINE OPTIMIZATION (GEO){ANSI_RESET} {ANSI_DIM}]─────────────────────────────{ANSI_RESET}");
+    print!(
+        "{}",
+        format_section_header("GENERATIVE ENGINE OPTIMIZATION (GEO)")
+    );
     println!(
-        "{ANSI_DIM}│{ANSI_RESET}  {ANSI_BOLD}Target Domain{ANSI_RESET} : {ANSI_CYAN}{}{ANSI_RESET}",
+        "  {ANSI_BOLD}Target Domain{ANSI_RESET} : {ANSI_CYAN}{}{ANSI_RESET}",
         report.base_url
     );
-    println!("{ANSI_DIM}│{ANSI_RESET}  {ANSI_BOLD}Citation Risk{ANSI_RESET} : {risk_badge} - {risk_desc}");
-    println!("{ANSI_DIM}└────────────────────────────────────────────────────────────────────────┘{ANSI_RESET}\n");
+    println!("  {ANSI_BOLD}Citation Risk{ANSI_RESET} : {risk_badge} - {risk_desc}\n");
 
     // 1. LLMS.TXT Artifacts
     print!("{}", format_section_header("LLMS.TXT PROTOCOL READINESS"));
@@ -642,9 +745,12 @@ pub fn print_schema_outcome(outcome: &SchemaValidationOutcome) {
         )
     };
 
-    println!("{ANSI_DIM}┌──[{ANSI_RESET} {ANSI_BOLD}SCHEMA.ORG STRUCTURED DATA AUDIT{ANSI_RESET} {ANSI_DIM}]────────────────────────────────{ANSI_RESET}");
+    print!(
+        "{}",
+        format_section_header("SCHEMA.ORG STRUCTURED DATA AUDIT")
+    );
     println!(
-        "{ANSI_DIM}│{ANSI_RESET}  {ANSI_BOLD}Syntax Status{ANSI_RESET} : {}",
+        "  {ANSI_BOLD}Syntax Status{ANSI_RESET} : {}",
         if outcome.is_valid_json {
             format!("{ANSI_GREEN}Valid JSON-LD ✔{ANSI_RESET}")
         } else {
@@ -652,11 +758,10 @@ pub fn print_schema_outcome(outcome: &SchemaValidationOutcome) {
         }
     );
     println!(
-        "{ANSI_DIM}│{ANSI_RESET}  {ANSI_BOLD}Detected @type{ANSI_RESET}: {ANSI_CYAN}{}{ANSI_RESET}",
+        "  {ANSI_BOLD}Detected @type{ANSI_RESET}: {ANSI_CYAN}{}{ANSI_RESET}",
         outcome.detected_type.as_deref().unwrap_or("Unknown")
     );
-    println!("{ANSI_DIM}│{ANSI_RESET}  {ANSI_BOLD}Eligibility  {ANSI_RESET} : {badge}");
-    println!("{ANSI_DIM}└────────────────────────────────────────────────────────────────────────┘{ANSI_RESET}\n");
+    println!("  {ANSI_BOLD}Eligibility  {ANSI_RESET} : {badge}\n");
 
     if !outcome.missing_required_fields.is_empty() {
         println!("  {ANSI_RED}{ANSI_BOLD}🚨 Missing Required Properties (Blocks Rich Results):{ANSI_RESET}");
