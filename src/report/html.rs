@@ -1202,16 +1202,16 @@ fn render_html_report(result: &CrawlResult) -> String {
 
             <!-- Multiplexer Navigation Tabs (Tmux / Zellij style) -->
             <nav class="tmux-nav">
-                <button class="tmux-tab active" onclick="switchTab('tab-issues')">
+                <button class="tmux-tab active" onclick="switchTab('tab-issues', event)">
                     <span class="tmux-idx">1:</span> Defect Triage <span class="tmux-badge">[{}]</span>
                 </button>
-                <button class="tmux-tab" onclick="switchTab('tab-pages')">
+                <button class="tmux-tab" onclick="switchTab('tab-pages', event)">
                     <span class="tmux-idx">2:</span> All Pages <span class="tmux-badge">[{}]</span>
                 </button>
-                <button class="tmux-tab" onclick="switchTab('tab-overview')">
+                <button class="tmux-tab" onclick="switchTab('tab-overview', event)">
                     <span class="tmux-idx">3:</span> Status Codes <span class="tmux-badge">[HTTP]</span>
                 </button>
-                <button class="tmux-tab" onclick="switchTab('tab-graph')">
+                <button class="tmux-tab" onclick="switchTab('tab-graph', event)">
                     <span class="tmux-idx">4:</span> Site Architecture <span class="tmux-badge">[Rank]</span>
                 </button>
             </nav>
@@ -1221,11 +1221,11 @@ fn render_html_report(result: &CrawlResult) -> String {
                 <div class="cli-filter-bar">
                     <div class="cli-flags-group">
                         <span class="cli-lead-lbl">Severity:</span>
-                        <button class="cli-flag active" onclick="filterSeverity('all')">All [{}]</button>
-                        <button class="cli-flag flag-crit" onclick="filterSeverity('critical')">Critical [{critical_count}]</button>
-                        <button class="cli-flag flag-alert" onclick="filterSeverity('alert')">Alert [{alert_count}]</button>
-                        <button class="cli-flag flag-warn" onclick="filterSeverity('warning')">Warning [{warning_count}]</button>
-                        <button class="cli-flag flag-notice" onclick="filterSeverity('notice')">Notice [{notice_count}]</button>
+                        <button class="cli-flag active" onclick="filterSeverity('all', event)">All [{}]</button>
+                        <button class="cli-flag flag-crit" onclick="filterSeverity('critical', event)">Critical [{critical_count}]</button>
+                        <button class="cli-flag flag-alert" onclick="filterSeverity('alert', event)">Alert [{alert_count}]</button>
+                        <button class="cli-flag flag-warn" onclick="filterSeverity('warning', event)">Warning [{warning_count}]</button>
+                        <button class="cli-flag flag-notice" onclick="filterSeverity('notice', event)">Notice [{notice_count}]</button>
                     </div>
                     <div class="grep-box">
                         <span class="grep-prompt">grep:</span>
@@ -1338,13 +1338,14 @@ fn render_html_report(result: &CrawlResult) -> String {
     </div>
 
     <script>
-function switchTab(tabId) {{
+        function switchTab(tabId, evt) {{
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.tmux-tab').forEach(el => el.classList.remove('active'));
             const target = document.getElementById(tabId);
             if (target) target.classList.add('active');
-            if (event && event.currentTarget) {{
-                event.currentTarget.classList.add('active');
+            const e = evt || (typeof event !== 'undefined' ? event : null);
+            if (e && e.currentTarget) {{
+                e.currentTarget.classList.add('active');
             }}
         }}
 
@@ -1364,11 +1365,12 @@ function switchTab(tabId) {{
         }}
 
         let currentSeverity = 'all';
-        function filterSeverity(sev) {{
+        function filterSeverity(sev, evt) {{
             currentSeverity = sev;
             document.querySelectorAll('.cli-flag').forEach(c => c.classList.remove('active'));
-            if (event && event.currentTarget) {{
-                event.currentTarget.classList.add('active');
+            const e = evt || (typeof event !== 'undefined' ? event : null);
+            if (e && e.currentTarget) {{
+                e.currentTarget.classList.add('active');
             }}
             searchIssues();
         }}
