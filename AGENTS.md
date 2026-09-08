@@ -75,7 +75,7 @@ The repository is structured as a **2-Member Cargo Workspace**:
 Read the relevant specification in `docs/` before implementing or changing any component:
 
 1. **Roadmap & Architecture**: [`docs/architecture.md`](file:///mnt/Code/PROJECTS/seo-lens/docs/architecture.md)
-2. **120 SEO Rules Catalog (Heuristics & Fixes)**: [`docs/SEO_RULES_CATALOG.md`](file:///mnt/Code/PROJECTS/seo-lens/docs/SEO_RULES_CATALOG.md)
+2. **120 SEO Rules Catalog (Heuristics & Fixes)**: [`docs/rules.md`](file:///mnt/Code/PROJECTS/seo-lens/docs/rules.md)
 3. **Storage & SQLite Architecture**: [`docs/storage.md`](file:///mnt/Code/PROJECTS/seo-lens/docs/storage.md)
 4. **Model Context Protocol (MCP) Server**: [`docs/mcp.md`](file:///mnt/Code/PROJECTS/seo-lens/docs/mcp.md)
 5. **CLI Commands, Flags & Exporters**: [`docs/cli.md`](file:///mnt/Code/PROJECTS/seo-lens/docs/cli.md)

@@ -1,7 +1,6 @@
-# SEO Lens: Technical SEO Rules Catalog (120 Checks)
+# Technical SEO Rules Catalog (120 Checks)
 
-**Document Status**: Permanent Static Reference  
-**Purpose**: Authoritative specification of all 120 automated SEO checks, detection heuristics, severity ratings, and remediation guidelines for the `SEO Lens` engine.
+This catalog is the authoritative specification for all 120 automated SEO checks in the `SEO Lens` engine. It details the detection heuristics, severity classification, search impact, and remediation guidance for each rule.
 
 ---
 
@@ -16,22 +15,38 @@
 
 ## Summary Matrix by Category
 
-| Category                               | Checks  | Phase                        | Focus                                                          |
-| -------------------------------------- | ------- | ---------------------------- | -------------------------------------------------------------- |
-| **1. HTTP & Network Transport**        | 10      | Phase 1 (In-Flight)          | HTTP codes, timeouts, DNS/TLS errors, WAF challenges           |
-| **2. Titles & Basic Metadata**         | 10      | Phase 1 (In-Flight)          | Title/description absence, lengths, multiplicity, keywords     |
-| **3. Headings & Document Structure**   | 10      | Phase 1 (In-Flight)          | H1 presence, hierarchy order, empty tags, DOM depth            |
-| **4. Indexability & Directives**       | 10      | Phase 1 (In-Flight)          | noindex, nofollow, robots.txt, pagination, SPA heuristics      |
-| **5. Canonicalization**                | 10      | Phase 1 (In-Flight)          | Missing, relative, conflicting, cross-domain, chain canonicals |
-| **6. Links & Anchor Quality**          | 10      | Phase 1 & 2                  | Broken links, nofollow mix, empty anchors, bookmarks           |
-| **7. Security & Modern Transport**     | 10      | Phase 1 (In-Flight)          | HTTPS, mixed content, insecure forms, HSTS, CSP, headers       |
-| **8. Mobile, Performance & UX**        | 10      | Phase 1 (In-Flight)          | Viewports, TTFB, page size, image alt/dimensions (CLS)         |
-| **9. Internationalization (Hreflang)** | 8       | Phase 1 & 2                  | Reciprocity graph, self-reference, lang codes, x-default       |
-| **10. Structured Data & Rich Results** | 8       | Phase 1 (In-Flight)          | JSON-LD syntax, Google Rich Result required fields, OpenGraph  |
-| **11. GEO & AI Search Readiness**      | 8       | Phase 1 (In-Flight)          | /llms.txt, AI training vs retrieval bots, soft 404, AI tells   |
-| **12. Site Graph & Architecture**      | 10      | Phase 2 (Post-Crawl)         | Orphan pages, redirect/canonical loops, duplicates, PageRank   |
-| **13. JavaScript SEO Diffing**         | 6       | Phase 1 (with `--render-js`) | Raw HTML vs Rendered DOM discrepancies                         |
-| **Total**                              | **120** |                              | Comprehensive Technical Coverage                               |
+> **Quick Jump**:
+>
+> 1. [HTTP & Network Transport](#category-1-http-status--network-transport-checks-110)
+> 2. [Titles & Basic Metadata](#category-2-titles--basic-metadata-checks-1120)
+> 3. [Headings & Document Structure](#category-3-headings--document-structure-checks-2130)
+> 4. [Indexability & Directives](#category-4-indexability--robots-directives-checks-3140)
+> 5. [Canonicalization](#category-5-canonicalization-checks-4150)
+> 6. [Links & Anchor Quality](#category-6-links--anchor-quality-checks-5160)
+> 7. [Security & Modern Transport](#category-7-security--modern-transport-checks-6170)
+> 8. [Mobile, Performance & UX](#category-8-mobile-performance--ux-signals-checks-7180)
+> 9. [Internationalization (Hreflang)](#category-9-internationalization--hreflang-checks-8188)
+> 10. [Structured Data & Rich Results](#category-10-structured-data--google-rich-results-checks-8996)
+> 11. [GEO & AI Search Readiness](#category-11-geo-generative-engine-optimization--ai-search-checks-97104)
+> 12. [Site Graph & Architecture](#category-12-site-wide-graph--architecture-post-crawl-checks-105114)
+> 13. [JavaScript SEO Diffing](#category-13-javascript-seo-diffing-checks-when---render-js-is-enabled-checks-115120)
+
+| Category | Checks | Phase | Focus |
+| --- | --- | --- | --- |
+| [**1. HTTP & Network Transport**](#category-1-http-status--network-transport-checks-110) | 10 | Phase 1 (In-Flight) | HTTP codes, timeouts, DNS/TLS errors, WAF challenges |
+| [**2. Titles & Basic Metadata**](#category-2-titles--basic-metadata-checks-1120) | 10 | Phase 1 (In-Flight) | Title/description absence, lengths, multiplicity, keywords |
+| [**3. Headings & Document Structure**](#category-3-headings--document-structure-checks-2130) | 10 | Phase 1 (In-Flight) | H1 presence, hierarchy order, empty tags, DOM depth |
+| [**4. Indexability & Directives**](#category-4-indexability--robots-directives-checks-3140) | 10 | Phase 1 (In-Flight) | noindex, nofollow, robots.txt, pagination, SPA heuristics |
+| [**5. Canonicalization**](#category-5-canonicalization-checks-4150) | 10 | Phase 1 (In-Flight) | Missing, relative, conflicting, cross-domain, chain canonicals |
+| [**6. Links & Anchor Quality**](#category-6-links--anchor-quality-checks-5160) | 10 | Phase 1 & 2 | Broken links, nofollow mix, empty anchors, bookmarks |
+| [**7. Security & Modern Transport**](#category-7-security--modern-transport-checks-6170) | 10 | Phase 1 (In-Flight) | HTTPS, mixed content, insecure forms, HSTS, CSP, headers |
+| [**8. Mobile, Performance & UX**](#category-8-mobile-performance--ux-signals-checks-7180) | 10 | Phase 1 (In-Flight) | Viewports, TTFB, page size, image alt/dimensions (CLS) |
+| [**9. Internationalization (Hreflang)**](#category-9-internationalization--hreflang-checks-8188) | 8 | Phase 1 & 2 | Reciprocity graph, self-reference, lang codes, x-default |
+| [**10. Structured Data & Rich Results**](#category-10-structured-data--google-rich-results-checks-8996) | 8 | Phase 1 (In-Flight) | JSON-LD syntax, Google Rich Result required fields, OpenGraph |
+| [**11. GEO & AI Search Readiness**](#category-11-geo-generative-engine-optimization--ai-search-checks-97104) | 8 | Phase 1 (In-Flight) | /llms.txt, AI training vs retrieval bots, soft 404, AI tells |
+| [**12. Site Graph & Architecture**](#category-12-site-wide-graph--architecture-post-crawl-checks-105114) | 10 | Phase 2 (Post-Crawl) | Orphan pages, redirect/canonical loops, duplicates, PageRank |
+| [**13. JavaScript SEO Diffing**](#category-13-javascript-seo-diffing-checks-when---render-js-is-enabled-checks-115120) | 6 | Phase 1 (with `--render-js`) | Raw HTML vs Rendered DOM discrepancies |
+| **Total** | **120** | | Comprehensive Technical Coverage |
 
 ---
 
