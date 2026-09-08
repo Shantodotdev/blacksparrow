@@ -120,7 +120,7 @@ E-commerce and filtered catalog sites often generate infinite calendar loops or 
 After normalization, each URL string is converted into a **64-bit AHash (`u64`)**:
 
 - The `VisitedSet` in `src/crawler/frontier.rs` stores only `u64` values in a SwissTable (`hashbrown::HashSet<u64>`).
-- Storing 50,000 URLs consumes **under 400 KB of RAM** (compared to $>10$ MB for raw string vectors).
+- Storing 50,000 URLs is estimated at **~400–600 KB of RAM** based on SwissTable table overhead (compared to $>10$ MB for raw string vectors).
 
 ---
 

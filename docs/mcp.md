@@ -83,7 +83,6 @@ Starts an asynchronous background website crawl and technical SEO audit.
 - `max_depth` (_integer_, optional, default: `5`): Maximum click depth.
 - `render_js` (_boolean_, optional, default: `false`): Enable headless Chrome CDP for JavaScript SPAs.
 - `respect_robots` (_boolean_, optional, default: `true`): Whether to obey `/robots.txt`.
-- `ai_geo_audit` (_boolean_, optional, default: `true`): Check `/llms.txt` and AI bot crawler rules.
 
 **Sample Response:**
 
@@ -149,7 +148,6 @@ Performs an instant, synchronous audit of a single URL in $< 500\text{ms}$. Grea
 **Input Parameters:**
 
 - `url` (_string_, required): Single URL to fetch and audit.
-- `render_js` (_boolean_, optional, default: `false`): Execute JavaScript via headless Chrome.
 
 **Sample Response:**
 

@@ -18,6 +18,7 @@ use seo_lens::storage::{CrawlSessionInit, Database};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -33,7 +34,7 @@ fn unique_test_db_path() -> PathBuf {
 #[tokio::test]
 async fn test_mcp_initialize_and_ping() {
     let db_path = unique_test_db_path();
-    let ctx = Arc::new(McpContext::new(Some(db_path)));
+    let ctx = Arc::new(McpContext::new(Some(db_path)).expect("McpContext init"));
 
     // 1. Initialize request
     let init_req = serde_json::json!({
@@ -78,7 +79,7 @@ async fn test_mcp_initialize_and_ping() {
 #[tokio::test]
 async fn test_mcp_tools_list_schema() {
     let db_path = unique_test_db_path();
-    let ctx = Arc::new(McpContext::new(Some(db_path)));
+    let ctx = Arc::new(McpContext::new(Some(db_path)).expect("McpContext init"));
 
     let req = serde_json::json!({
         "jsonrpc": "2.0",
@@ -141,7 +142,7 @@ async fn test_mcp_quick_page_check_sync() {
         .await;
 
     let db_path = unique_test_db_path();
-    let ctx = Arc::new(McpContext::new(Some(db_path)));
+    let ctx = Arc::new(McpContext::new(Some(db_path)).expect("McpContext init"));
 
     let test_url = format!("{}/pricing", server.uri());
     let req = serde_json::json!({
@@ -201,7 +202,7 @@ async fn test_mcp_start_audit_non_blocking_and_status() {
         .await;
 
     let db_path = unique_test_db_path();
-    let ctx = Arc::new(McpContext::new(Some(db_path.clone())));
+    let ctx = Arc::new(McpContext::new(Some(db_path.clone())).expect("McpContext init"));
 
     // 1. Start audit
     let start_req = serde_json::json!({
@@ -310,7 +311,7 @@ async fn test_mcp_get_markdown_report_token_efficiency_zero_ansi() {
     ];
     db.save_issue_batch(session, &issues).expect("Save issues");
 
-    let ctx = Arc::new(McpContext::new(Some(db_path)));
+    let ctx = Arc::new(McpContext::new(Some(db_path)).expect("McpContext init"));
 
     let req = serde_json::json!({
         "jsonrpc": "2.0",
@@ -377,7 +378,7 @@ async fn test_mcp_query_issues_and_cleanup() {
     }];
     db.save_issue_batch(session, &issues).expect("Save issues");
 
-    let ctx = Arc::new(McpContext::new(Some(db_path.clone())));
+    let ctx = Arc::new(McpContext::new(Some(db_path.clone())).expect("McpContext init"));
 
     // 1. Query issues
     let query_req = serde_json::json!({
@@ -457,7 +458,7 @@ async fn test_mcp_check_ai_and_validate_schema_tools() {
         .await;
 
     let db_path = unique_test_db_path();
-    let ctx = Arc::new(McpContext::new(Some(db_path)));
+    let ctx = Arc::new(McpContext::new(Some(db_path)).expect("McpContext init"));
 
     // 1. Test seo_check_ai_readiness
     let ai_req = serde_json::json!({
@@ -541,7 +542,7 @@ async fn test_mcp_resources_list_and_read() {
     })
     .expect("Init session");
 
-    let ctx = Arc::new(McpContext::new(Some(db_path)));
+    let ctx = Arc::new(McpContext::new(Some(db_path)).expect("McpContext init"));
 
     // 1. resources/list
     let list_req = serde_json::json!({
@@ -626,4 +627,74 @@ async fn test_mcp_server_io_stream() {
         serde_json::from_str(output_str.trim()).expect("Valid JSON response");
     assert_eq!(resp["id"], 99);
     assert_eq!(resp["result"], serde_json::json!({}));
+}
+
+#[test]
+fn test_mcp_fails_fast_on_invalid_db_path() {
+    let invalid_path = PathBuf::from("/nonexistent_forbidden_dir/xyz/never_allowed.db");
+    let res = McpContext::new(Some(invalid_path));
+    assert!(
+        res.is_err(),
+        "McpContext must fail fast when database path cannot be created/opened"
+    );
+}
+
+#[tokio::test]
+async fn test_mcp_background_crawl_failure_persists_failed_status() {
+    let db_path = unique_test_db_path();
+    let ctx = Arc::new(McpContext::new(Some(db_path.clone())).expect("McpContext init"));
+
+    let start_req = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 88,
+        "method": "tools/call",
+        "params": {
+            "name": "seo_start_audit",
+            "arguments": {
+                "url": "http://127.0.0.1:1"
+            }
+        }
+    });
+
+    let start_resp_str = handle_jsonrpc_request(&start_req.to_string(), &ctx).await;
+    let start_resp: serde_json::Value =
+        serde_json::from_str(&start_resp_str).expect("Valid JSON response");
+    let content_text = start_resp["result"]["content"][0]["text"]
+        .as_str()
+        .expect("Content text");
+    let start_res: serde_json::Value =
+        serde_json::from_str(content_text).expect("Parsed start JSON");
+    let session_id = start_res["session_id"].as_str().expect("Session ID");
+
+    let status_req = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 89,
+        "method": "tools/call",
+        "params": {
+            "name": "seo_audit_status",
+            "arguments": {
+                "session_id": session_id
+            }
+        }
+    });
+
+    for _ in 0..30 {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let status_resp_str = handle_jsonrpc_request(&status_req.to_string(), &ctx).await;
+        let status_resp: serde_json::Value =
+            serde_json::from_str(&status_resp_str).expect("Valid JSON response");
+        let status_text = status_resp["result"]["content"][0]["text"]
+            .as_str()
+            .expect("Content text");
+        let status_res: serde_json::Value =
+            serde_json::from_str(status_text).expect("Parsed status JSON");
+        if status_res["is_complete"].as_bool() == Some(true) {
+            assert_eq!(
+                status_res["status"], "failed",
+                "Terminal state on error must be 'failed'"
+            );
+            return;
+        }
+    }
+    panic!("Audit status did not report complete within timeout");
 }

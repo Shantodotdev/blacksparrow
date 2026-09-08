@@ -2,7 +2,7 @@
 
 SEO Lens is **local-first**. All crawl sessions, discovered URLs, link topology, technical SEO issues, and structured data are persisted directly to a local SQLite database using Write-Ahead Logging (WAL).
 
-No external database servers (like PostgreSQL or MySQL) or cloud accounts are required. Your audit data remains private on your machine and can be queried in microseconds.
+No external database servers (like PostgreSQL or MySQL) or cloud accounts are required. Your audit data remains private on your machine and can be queried with sub-millisecond local latency.
 
 ---
 
