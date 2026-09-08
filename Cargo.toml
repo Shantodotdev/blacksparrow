@@ -15,6 +15,12 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/Shantodotdev/seo-lens"
 homepage = "https://github.com/Shantodotdev/seo-lens"
 
+[package.metadata.wix]
+upgrade-guid = "F61D4D0E-5430-4175-BB7B-BE311E3956C9"
+path-guid = "B2498126-3828-482F-8706-5C530CCAF3EB"
+license = false
+eula = false
+
 [lib]
 name = "seo_lens"
 path = "src/lib.rs"
@@ -58,3 +64,8 @@ lto = true
 codegen-units = 1
 panic = "abort"
 strip = true
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
