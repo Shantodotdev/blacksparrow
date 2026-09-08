@@ -36,9 +36,29 @@ Built from the ground up in Rust, SEO Lens streams HTML responses through Cloudf
 
 ## Quickstart
 
+### Quick Install (Standalone Binary)
+
+Install `seolens` directly without needing Rust or build tools:
+
+**macOS & Linux**:
+```bash
+curl -fsSL https://raw.githubusercontent.com/Shantodotdev/seo-lens/main/install.sh | bash
+```
+
+**Windows (PowerShell)**:
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/Shantodotdev/seo-lens/releases/download/v0.1.0-rc.1/seo-lens-installer.ps1 | iex"
+```
+
+*Windows users can also download the standalone `.msi` installer from [GitHub Releases](https://github.com/Shantodotdev/seo-lens/releases).*
+
+---
+
+### Build from Source
+
 > **Prerequisites**: Requires **Rust 1.80+** ([rustup.rs](https://rustup.rs/)). On Linux, ensure `build-essential`, `pkg-config`, and `libssl-dev` are installed (see [CONTRIBUTING.md](./CONTRIBUTING.md) for OS-specific details).
 
-### 1. Clone the Repository
+#### 1. Clone the Repository
 
 ```bash
 git clone https://github.com/Shantodotdev/seo-lens.git
