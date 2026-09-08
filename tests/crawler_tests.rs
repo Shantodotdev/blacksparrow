@@ -534,3 +534,55 @@ async fn test_partial_crawl_run_crawl_skips_uncrawled_sitemap_orphans() {
         "SiteGraph must have 0 orphan findings"
     );
 }
+
+#[tokio::test]
+async fn test_custom_headers_dropped_on_cross_origin_redirect() {
+    let server_a = MockServer::start().await;
+    let server_b = MockServer::start().await;
+
+    // Server A redirects to Server B (cross-origin)
+    Mock::given(wiremock::matchers::method("GET"))
+        .and(wiremock::matchers::path("/redirect"))
+        .respond_with(
+            ResponseTemplate::new(302)
+                .insert_header("location", format!("{}/target", server_b.uri())),
+        )
+        .mount(&server_a)
+        .await;
+
+    // Server B verifies that sensitive custom header is NOT present
+    Mock::given(wiremock::matchers::method("GET"))
+        .and(wiremock::matchers::path("/target"))
+        .and(wiremock::matchers::header_exists("Authorization"))
+        .respond_with(ResponseTemplate::new(403))
+        .mount(&server_b)
+        .await;
+
+    Mock::given(wiremock::matchers::method("GET"))
+        .and(wiremock::matchers::path("/target"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("<html>Safe</html>"))
+        .mount(&server_b)
+        .await;
+
+    let custom_headers = vec![(
+        "Authorization".to_string(),
+        "Bearer secret-token".to_string(),
+    )];
+
+    let client = HttpClient::new(FetchOptions {
+        custom_headers,
+        max_redirects: 3,
+        ..Default::default()
+    })
+    .expect("Client creation");
+
+    let result = client
+        .fetch(&format!("{}/redirect", server_a.uri()))
+        .await
+        .expect("Fetch should succeed");
+
+    assert_eq!(
+        result.status_code, 200,
+        "Should have received 200 from Server B without leaked header"
+    );
+}

@@ -11,8 +11,27 @@ use crate::core::models::RobotsFlags;
 use crate::crawler::engine::CrawlResult;
 use crate::error::{SeoError, SeoResult};
 use crate::rules::catalog::get_rule;
+use std::borrow::Cow;
 use std::fs;
 use std::path::{Path, PathBuf};
+
+/// Sanitizes text to prevent CSV/formula injection (CWE-1236) when opened in spreadsheet software.
+///
+/// If the text starts with formula triggers (`=`, `+`, `-`, `@`, `\t`, `\r`), prepends `'`.
+pub fn sanitize_csv_cell(value: &str) -> Cow<'_, str> {
+    let trimmed = value.trim_start();
+    if trimmed.starts_with('=')
+        || trimmed.starts_with('+')
+        || trimmed.starts_with('-')
+        || trimmed.starts_with('@')
+        || trimmed.starts_with('\t')
+        || trimmed.starts_with('\r')
+    {
+        Cow::Owned(format!("'{}", value))
+    } else {
+        Cow::Borrowed(value)
+    }
+}
 
 /// Maps standard HTTP status codes to conventional reason phrases.
 pub fn http_status_reason(status_code: u16) -> &'static str {
@@ -160,11 +179,11 @@ fn export_internal_all(result: &CrawlResult, path: &Path) -> SeoResult<()> {
                 page.content_type.as_str(),
                 &page.size_bytes.to_string(),
                 &page.word_count.to_string(),
-                page.title.as_deref().unwrap_or(""),
+                sanitize_csv_cell(page.title.as_deref().unwrap_or("")).as_ref(),
                 &page.title_length.to_string(),
-                page.meta_description.as_deref().unwrap_or(""),
+                sanitize_csv_cell(page.meta_description.as_deref().unwrap_or("")).as_ref(),
                 &page.meta_desc_length.to_string(),
-                page.h1_primary.as_deref().unwrap_or(""),
+                sanitize_csv_cell(page.h1_primary.as_deref().unwrap_or("")).as_ref(),
                 &h1_length.to_string(),
                 page.canonical_url.as_deref().unwrap_or(""),
                 indexability,
@@ -212,13 +231,13 @@ fn export_issues_all(result: &CrawlResult, path: &Path) -> SeoResult<()> {
         writer
             .write_record([
                 issue.code.as_str(),
-                issue.title.as_str(),
+                sanitize_csv_cell(issue.title.as_str()).as_ref(),
                 issue.severity.as_str(),
                 issue.category.as_str(),
                 issue.target_url.as_str(),
                 issue.source_page_url.as_deref().unwrap_or(""),
-                issue.message.as_str(),
-                rule.fix_advice,
+                sanitize_csv_cell(issue.message.as_str()).as_ref(),
+                sanitize_csv_cell(rule.fix_advice).as_ref(),
             ])
             .map_err(|e| {
                 SeoError::Internal(format!("Failed to write row to issues_all.csv: {e}"))
@@ -319,7 +338,7 @@ fn export_external_all(result: &CrawlResult, path: &Path) -> SeoResult<()> {
                     .write_record([
                         link.source_url.as_str(),
                         link.target_url.as_str(),
-                        link.anchor_text.as_str(),
+                        sanitize_csv_cell(link.anchor_text.as_str()).as_ref(),
                         &status_str,
                         if link.is_nofollow { "true" } else { "false" },
                     ])

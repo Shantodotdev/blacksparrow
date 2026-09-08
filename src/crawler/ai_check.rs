@@ -90,7 +90,11 @@ pub async fn audit_ai_readiness(
     let parsed = Url::parse(target_url)
         .map_err(|e| SeoError::Url(format!("Invalid target URL '{target_url}': {e}")))?;
 
-    let origin = format!("{}://{}", parsed.scheme(), parsed.authority());
+    let host = parsed.host_str().unwrap_or("");
+    let origin = match parsed.port() {
+        Some(port) => format!("{}://{}:{}", parsed.scheme(), host, port),
+        None => format!("{}://{}", parsed.scheme(), host),
+    };
     let robots_url = format!("{}/robots.txt", origin);
     let llms_url = format!("{}/llms.txt", origin);
     let llms_full_url = format!("{}/llms-full.txt", origin);
