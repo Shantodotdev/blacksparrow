@@ -1126,7 +1126,7 @@ fn render_html_report(result: &CrawlResult) -> String {
   ╚════██║██╔══╝  ██║   ██║    ██║     ██╔══╝  ██║╚██╗██║╚════██║
   ███████║███████╗╚██████╔╝    ███████╗███████╗██║ ╚████║███████║
   ╚══════╝╚══════╝ ╚═════╝     ╚══════╝╚══════╝╚═╝  ╚═══╝╚══════╝</pre>
-                <div class="brand-tagline">v0.1.0 │ High-Performance Website Crawler &amp; AI-Native Technical SEO Engine</div>
+                <div class="brand-tagline">v0.1.0-rc.1 │ High-Performance Website Crawler &amp; AI-Native Technical SEO Engine</div>
             </div>
             <div class="header-telemetry-card">
                 <div class="target-row">
