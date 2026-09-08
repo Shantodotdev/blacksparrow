@@ -177,6 +177,16 @@ impl CrawlConfig {
         if self.user_agent.trim().is_empty() {
             return Err(SeoError::Config("User-Agent cannot be empty".to_string()));
         }
+        if let Some(ref pat) = self.include_regex {
+            regex::Regex::new(pat).map_err(|e| {
+                SeoError::Config(format!("Invalid --include regex pattern '{pat}': {e}"))
+            })?;
+        }
+        if let Some(ref pat) = self.exclude_regex {
+            regex::Regex::new(pat).map_err(|e| {
+                SeoError::Config(format!("Invalid --exclude regex pattern '{pat}': {e}"))
+            })?;
+        }
         Ok(())
     }
 }

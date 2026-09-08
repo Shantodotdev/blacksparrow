@@ -71,6 +71,8 @@ async fn handle_audit(args: AuditArgs) -> Result<(), Box<dyn std::error::Error>>
         }
     }
 
+    config.validate()?;
+
     let db_path = resolve_db_path(args.db_path.clone(), args.local);
     config.db_path = Some(db_path.clone());
 
@@ -150,31 +152,27 @@ async fn handle_audit(args: AuditArgs) -> Result<(), Box<dyn std::error::Error>>
     let mut exported_artifacts = Vec::new();
 
     if formats.contains(&"md") || formats.contains(&"all") {
-        if let Ok(path) = export_markdown_report(&crawl_result, &args.output_dir) {
-            exported_artifacts.push(("Markdown", path));
-        }
+        let path = export_markdown_report(&crawl_result, &args.output_dir)?;
+        exported_artifacts.push(("Markdown", path));
     }
 
     if formats.contains(&"json") || formats.contains(&"all") {
-        if let Ok(path) = export_json_report(&crawl_result, &args.output_dir) {
-            exported_artifacts.push(("JSON", path));
-        }
+        let path = export_json_report(&crawl_result, &args.output_dir)?;
+        exported_artifacts.push(("JSON", path));
     }
 
     if formats.contains(&"csv") || formats.contains(&"all") {
-        if let Ok(paths) = export_csv_suite(&crawl_result, &args.output_dir) {
-            if let Some(first) = paths.first() {
-                if let Some(parent) = first.parent() {
-                    exported_artifacts.push(("CSV Suite", parent.to_path_buf()));
-                }
+        let paths = export_csv_suite(&crawl_result, &args.output_dir)?;
+        if let Some(first) = paths.first() {
+            if let Some(parent) = first.parent() {
+                exported_artifacts.push(("CSV Suite", parent.to_path_buf()));
             }
         }
     }
 
     if formats.contains(&"html") || formats.contains(&"all") {
-        if let Ok(path) = export_html_report(&crawl_result, &args.output_dir) {
-            exported_artifacts.push(("HTML", path));
-        }
+        let path = export_html_report(&crawl_result, &args.output_dir)?;
+        exported_artifacts.push(("HTML", path));
     }
 
     // Always display executive terminal scorecard if requested and not in quiet mode
@@ -362,31 +360,27 @@ async fn handle_report(args: ReportArgs) -> Result<(), Box<dyn std::error::Error
     let mut exported_artifacts = Vec::new();
 
     if formats.contains(&"md") || formats.contains(&"all") {
-        if let Ok(path) = export_markdown_report(&crawl_result, &output_dir) {
-            exported_artifacts.push(("Markdown", path));
-        }
+        let path = export_markdown_report(&crawl_result, &output_dir)?;
+        exported_artifacts.push(("Markdown", path));
     }
 
     if formats.contains(&"json") || formats.contains(&"all") {
-        if let Ok(path) = export_json_report(&crawl_result, &output_dir) {
-            exported_artifacts.push(("JSON", path));
-        }
+        let path = export_json_report(&crawl_result, &output_dir)?;
+        exported_artifacts.push(("JSON", path));
     }
 
     if formats.contains(&"csv") || formats.contains(&"all") {
-        if let Ok(paths) = export_csv_suite(&crawl_result, &output_dir) {
-            if let Some(first) = paths.first() {
-                if let Some(parent) = first.parent() {
-                    exported_artifacts.push(("CSV Suite", parent.to_path_buf()));
-                }
+        let paths = export_csv_suite(&crawl_result, &output_dir)?;
+        if let Some(first) = paths.first() {
+            if let Some(parent) = first.parent() {
+                exported_artifacts.push(("CSV Suite", parent.to_path_buf()));
             }
         }
     }
 
     if formats.contains(&"html") || formats.contains(&"all") {
-        if let Ok(path) = export_html_report(&crawl_result, &output_dir) {
-            exported_artifacts.push(("HTML", path));
-        }
+        let path = export_html_report(&crawl_result, &output_dir)?;
+        exported_artifacts.push(("HTML", path));
     }
 
     if formats.contains(&"terminal") || formats.contains(&"all") || formats.is_empty() {

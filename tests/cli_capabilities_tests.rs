@@ -16,6 +16,7 @@ use seo_lens::rules::page::schema_val::validate_raw_schema;
 use seo_lens::storage::{CrawlSessionInit, Database, IssueFilterCriteria};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Duration;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -547,6 +548,55 @@ fn test_schema_validator_google_rich_results() {
     assert!(outcome2
         .missing_required_fields
         .contains(&"offers".to_string()));
+
+    // 3. Non-JSON script preceding valid JSON-LD
+    let html_with_js_and_jsonld = r#"
+        <html>
+        <head>
+            <script src="/static/js/bundle.js">console.log("hello");</script>
+            <script type="application/ld+json">
+            {
+                "@context": "https://schema.org",
+                "@type": "Product",
+                "name": "Headphones",
+                "offers": { "price": "99.00" }
+            }
+            </script>
+        </head>
+        </html>
+    "#;
+    let outcome3 = validate_raw_schema(html_with_js_and_jsonld, Some("Product")).unwrap();
+    assert!(
+        outcome3.is_valid_json,
+        "Must find and parse application/ld+json script"
+    );
+    assert_eq!(outcome3.detected_type.as_deref(), Some("Product"));
+    assert!(outcome3.is_rich_result_eligible);
+
+    // 4. Array-valued @type
+    let array_type_schema = r#"{
+        "@context": "https://schema.org",
+        "@type": ["Product", "Item"],
+        "name": "Multi-type Product",
+        "offers": { "price": "19.99" }
+    }"#;
+    let outcome4 = validate_raw_schema(array_type_schema, Some("Product")).unwrap();
+    assert!(outcome4.is_valid_json);
+    assert_eq!(outcome4.detected_type.as_deref(), Some("Product"));
+    assert!(outcome4.is_rich_result_eligible);
+
+    // 5. Unsupported @type
+    let unsupported_schema = r#"{
+        "@context": "https://schema.org",
+        "@type": "Thing",
+        "name": "Generic Object"
+    }"#;
+    let outcome5 = validate_raw_schema(unsupported_schema, None).unwrap();
+    assert!(outcome5.is_valid_json);
+    assert!(
+        !outcome5.is_rich_result_eligible,
+        "Thing is not eligible for Google Rich Results"
+    );
 }
 
 #[test]
@@ -631,4 +681,54 @@ fn test_cli_local_and_db_path_flags() {
     } else {
         panic!("Expected Clean command");
     }
+}
+
+#[tokio::test]
+async fn test_audit_ai_readiness_strips_credentials() {
+    let mock_server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/robots.txt"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_string("User-agent: *\nDisallow: /private"),
+        )
+        .mount(&mock_server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/llms.txt"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("# AI Documentation"))
+        .mount(&mock_server)
+        .await;
+
+    let server_url = mock_server.uri();
+    let auth_url = server_url.replace("http://", "http://myuser:secretpassword@");
+
+    let report = audit_ai_readiness(&auth_url, "SEOLens/1.0", Duration::from_secs(5))
+        .await
+        .expect("Audit AI readiness");
+
+    assert!(
+        !report.base_url.contains("myuser"),
+        "base_url must not contain username"
+    );
+    assert!(
+        !report.base_url.contains("secretpassword"),
+        "base_url must not contain password"
+    );
+}
+
+#[test]
+fn test_invalid_include_exclude_regex_validation() {
+    let mut config = CrawlConfig::new("https://example.com").unwrap();
+    config.include_regex = Some("([unclosed-regex".to_string());
+    assert!(
+        config.validate().is_err(),
+        "Invalid include regex must fail validation"
+    );
+
+    config.include_regex = None;
+    config.exclude_regex = Some("*invalid-glob-as-regex".to_string());
+    assert!(
+        config.validate().is_err(),
+        "Invalid exclude regex must fail validation"
+    );
 }
