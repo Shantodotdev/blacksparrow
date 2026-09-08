@@ -2,10 +2,7 @@
 
 **High-performance, local-first website crawler, 120-rule technical SEO audit engine, and AI-native auditor written in Rust.**
 
-[![License: MIT / Apache-2.0](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](./LICENSE-MIT)
-![Rust 2021](https://img.shields.io/badge/rust-2021_edition-orange.svg)
-![Model Context Protocol](https://img.shields.io/badge/mcp-compliant-green.svg)
-![Local First SQLite WAL](https://img.shields.io/badge/local--first-sqlite_wal-purple.svg)
+[![Release](https://img.shields.io/github/v/release/Shantodotdev/seo-lens?include_prereleases&color=blue&logo=github)](https://github.com/Shantodotdev/seo-lens/releases) [![Downloads](https://img.shields.io/github/downloads/Shantodotdev/seo-lens/total?color=238636&logo=github&label=downloads)](https://github.com/Shantodotdev/seo-lens/releases) [![CI](https://img.shields.io/github/actions/workflow/status/Shantodotdev/seo-lens/ci.yml?branch=main&label=CI&logo=github-actions)](https://github.com/Shantodotdev/seo-lens/actions) [![Rust 2021](https://img.shields.io/badge/rust-2021_edition-orange.svg)](https://www.rust-lang.org/) [![Model Context Protocol](https://img.shields.io/badge/mcp-compliant-green.svg)](./docs/mcp.md) [![License: MIT / Apache-2.0](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](./LICENSE-MIT)
 
 ---
 
@@ -41,16 +38,18 @@ Built from the ground up in Rust, SEO Lens streams HTML responses through Cloudf
 Install `seolens` directly without needing Rust or build tools:
 
 **macOS & Linux**:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Shantodotdev/seo-lens/main/install.sh | bash
 ```
 
 **Windows (PowerShell)**:
+
 ```powershell
 powershell -ExecutionPolicy Bypass -c "irm https://github.com/Shantodotdev/seo-lens/releases/download/v0.1.0-rc.1/seo-lens-installer.ps1 | iex"
 ```
 
-*Windows users can also download the standalone `.msi` installer from [GitHub Releases](https://github.com/Shantodotdev/seo-lens/releases).*
+_Windows users can also download the standalone `.msi` installer from [GitHub Releases](https://github.com/Shantodotdev/seo-lens/releases)._
 
 ---
 
