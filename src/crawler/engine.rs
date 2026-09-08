@@ -193,44 +193,49 @@ async fn discover_robots_and_sitemaps(
     let mut sitemap_feed_seeds = explicit_sitemaps.to_vec();
     let mut site_issues = Vec::new();
 
-    let fetched_robots = if let Ok(res) = client.fetch(&robots_url).await {
-        if res.status_code == 200 {
-            let parsed_robots = RobotsTxt::parse(&res.body);
-            for sm in parsed_robots.sitemaps() {
-                sitemap_feed_seeds.push(sm.to_string());
-            }
-
-            // Inspect for AI search citation bots disallow (Category 11)
-            const AI_SEARCH_BOTS: &[&str] = &[
-                "GPTBot",
-                "ClaudeBot",
-                "PerplexityBot",
-                "CCBot",
-                "OAI-SearchBot",
-            ];
-
-            let mut blocked_ai_bots = Vec::new();
-            for &bot in AI_SEARCH_BOTS {
-                if !parsed_robots.is_allowed(bot, "/") {
-                    blocked_ai_bots.push(bot);
+    let fetched_robots = match client.fetch(&robots_url).await {
+        Ok(res) => {
+            if res.status_code == 200 {
+                let parsed_robots = RobotsTxt::parse(&res.body);
+                for sm in parsed_robots.sitemaps() {
+                    sitemap_feed_seeds.push(sm.to_string());
                 }
-            }
 
-            if !blocked_ai_bots.is_empty() {
-                let rule = get_rule(RuleId::AlertAiSearchBotsBlocked);
-                let msg = format!(
-                    "Robots.txt disallows AI search and citation crawlers ({}), preventing discovery in AI search overviews.",
-                    blocked_ai_bots.join(", ")
-                );
-                site_issues.push(rule.to_finding(&robots_url, Some(&msg)));
-            }
+                // Inspect for AI search citation bots disallow (Category 11)
+                const AI_SEARCH_BOTS: &[&str] = &[
+                    "GPTBot",
+                    "ClaudeBot",
+                    "PerplexityBot",
+                    "CCBot",
+                    "OAI-SearchBot",
+                ];
 
-            Some(parsed_robots)
-        } else {
-            None
+                let mut blocked_ai_bots = Vec::new();
+                for &bot in AI_SEARCH_BOTS {
+                    if !parsed_robots.is_allowed(bot, "/") {
+                        blocked_ai_bots.push(bot);
+                    }
+                }
+
+                if !blocked_ai_bots.is_empty() {
+                    let rule = get_rule(RuleId::AlertAiSearchBotsBlocked);
+                    let msg = format!(
+                        "Robots.txt disallows AI search and citation crawlers ({}), preventing discovery in AI search overviews.",
+                        blocked_ai_bots.join(", ")
+                    );
+                    site_issues.push(rule.to_finding(&robots_url, Some(&msg)));
+                }
+
+                Some(parsed_robots)
+            } else {
+                None
+            }
         }
-    } else {
-        None
+        Err(_) => {
+            // If the host is completely unreachable at the network transport level,
+            // avoid probing secondary feeds (llms.txt, fallback sitemaps) on a dead host.
+            return (None, Vec::new(), site_issues);
+        }
     };
 
     let robots = if respect_robots { fetched_robots } else { None };

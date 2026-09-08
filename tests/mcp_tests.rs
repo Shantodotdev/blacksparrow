@@ -655,7 +655,7 @@ async fn test_mcp_background_crawl_failure_persists_failed_status() {
         "params": {
             "name": "seo_start_audit",
             "arguments": {
-                "url": "http://127.0.0.1:1"
+                "url": "http://this-target-does-not-exist.invalid"
             }
         }
     });
