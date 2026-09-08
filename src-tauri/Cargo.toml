@@ -6,5 +6,8 @@ authors = ["SEO Lens Team"]
 description = "Native cross-platform desktop shell for SEO Lens"
 license = "MIT OR Apache-2.0"
 
+[package.metadata.dist]
+dist = false
+
 [dependencies]
 seo-lens = { path = ".." }
