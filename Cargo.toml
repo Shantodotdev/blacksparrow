@@ -12,6 +12,8 @@ edition = "2021"
 authors = ["KR Shanto"]
 description = "High-performance, local-first website crawler and technical SEO audit engine in Rust"
 license = "MIT OR Apache-2.0"
+repository = "https://github.com/Shantodotdev/seo-lens"
+homepage = "https://github.com/Shantodotdev/seo-lens"
 
 [lib]
 name = "seo_lens"
