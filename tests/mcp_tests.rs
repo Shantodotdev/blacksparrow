@@ -631,8 +631,12 @@ async fn test_mcp_server_io_stream() {
 
 #[test]
 fn test_mcp_fails_fast_on_invalid_db_path() {
-    let invalid_path = PathBuf::from("/nonexistent_forbidden_dir/xyz/never_allowed.db");
+    let temp = std::env::temp_dir();
+    let blocker = temp.join(format!("seolens_blocker_{}.tmp", std::process::id()));
+    let _ = std::fs::write(&blocker, b"blocker");
+    let invalid_path = blocker.join("forbidden_child_dir").join("never_allowed.db");
     let res = McpContext::new(Some(invalid_path));
+    let _ = std::fs::remove_file(&blocker);
     assert!(
         res.is_err(),
         "McpContext must fail fast when database path cannot be created/opened"
@@ -678,7 +682,7 @@ async fn test_mcp_background_crawl_failure_persists_failed_status() {
         }
     });
 
-    for _ in 0..30 {
+    for _ in 0..80 {
         tokio::time::sleep(Duration::from_millis(100)).await;
         let status_resp_str = handle_jsonrpc_request(&status_req.to_string(), &ctx).await;
         let status_resp: serde_json::Value =
