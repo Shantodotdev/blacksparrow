@@ -34,8 +34,8 @@ use crate::core::models::RobotsFlags;
 /// # Examples
 ///
 /// ```rust
-/// use seo_lens::parser::metadata::parse_robots_directives;
-/// use seo_lens::core::models::RobotsFlags;
+/// use blacksparrow::parser::metadata::parse_robots_directives;
+/// use blacksparrow::core::models::RobotsFlags;
 ///
 /// let flags = parse_robots_directives("noindex, nofollow, nosnippet");
 /// assert!(flags.contains(RobotsFlags::NOINDEX));
@@ -77,7 +77,7 @@ pub fn parse_robots_directives(content: &str) -> RobotsFlags {
 /// # Examples
 ///
 /// ```rust
-/// use seo_lens::parser::metadata::decode_html_entities;
+/// use blacksparrow::parser::metadata::decode_html_entities;
 ///
 /// let encoded = "Tips &amp; Tricks: &quot;SEO 101&#39;s Guide&quot; &lt;v2&gt;";
 /// let decoded = decode_html_entities(encoded);
@@ -102,7 +102,7 @@ pub fn decode_html_entities(input: &str) -> String {
 /// # Examples
 ///
 /// ```rust
-/// use seo_lens::parser::metadata::clean_whitespace;
+/// use blacksparrow::parser::metadata::clean_whitespace;
 ///
 /// let raw = "   \n\t Hello \t  world!\n \n";
 /// assert_eq!(clean_whitespace(raw), "Hello world!");

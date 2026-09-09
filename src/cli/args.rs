@@ -7,24 +7,24 @@ use clap::builder::styling::{AnsiColor, Effects, Styles};
 use clap::{Args, Parser, Subcommand};
 use std::path::PathBuf;
 
-/// Terminal styling for clap CLI outputs to match SEO Lens cyberpunk palette.
+/// Terminal styling for clap CLI outputs to match Black Sparrow pink/maroon palette.
 pub fn cli_styles() -> Styles {
     Styles::styled()
-        .header(AnsiColor::BrightCyan.on_default() | Effects::BOLD)
-        .usage(AnsiColor::BrightCyan.on_default() | Effects::BOLD)
-        .literal(AnsiColor::BrightGreen.on_default() | Effects::BOLD)
-        .placeholder(AnsiColor::BrightCyan.on_default())
+        .header(AnsiColor::BrightMagenta.on_default() | Effects::BOLD)
+        .usage(AnsiColor::BrightMagenta.on_default() | Effects::BOLD)
+        .literal(AnsiColor::BrightMagenta.on_default() | Effects::BOLD)
+        .placeholder(AnsiColor::Magenta.on_default())
         .valid(AnsiColor::BrightGreen.on_default())
         .invalid(AnsiColor::BrightRed.on_default())
 }
 
-/// SEO Lens - High-performance website crawler & technical SEO audit engine
+/// Black Sparrow - High-performance website crawler & technical SEO audit engine
 #[derive(Parser, Debug, Clone)]
 #[command(
-    name = "seolens",
+    name = env!("CARGO_PKG_NAME"),
     author,
     version,
-    about = "High-performance website crawler & AI-native technical SEO audit engine",
+    about = concat!(env!("CARGO_PKG_NAME"), " — High-performance website crawler & AI-native technical SEO audit engine"),
     styles = cli_styles()
 )]
 pub struct Cli {
@@ -108,7 +108,7 @@ pub struct AuditArgs {
     pub chrome_ws: String,
 
     /// Custom User-Agent string
-    #[arg(short = 'u', long, default_value = "SEOLens/1.0")]
+    #[arg(short = 'u', long, default_value = "BlackSparrow/1.0")]
     pub user_agent: String,
 
     /// Comma-separated outputs: terminal,json,md,html,csv,all
@@ -183,7 +183,7 @@ pub struct InspectArgs {
     pub url: String,
 
     /// Custom User-Agent string
-    #[arg(short = 'u', long, default_value = "SEOLens/1.0")]
+    #[arg(short = 'u', long, default_value = "BlackSparrow/1.0")]
     pub user_agent: String,
 
     /// Request timeout in seconds
@@ -302,7 +302,7 @@ pub struct CheckAiArgs {
     pub url: String,
 
     /// Custom User-Agent string
-    #[arg(short = 'u', long, default_value = "SEOLens/1.0")]
+    #[arg(short = 'u', long, default_value = "BlackSparrow/1.0")]
     pub user_agent: String,
 
     /// Request timeout in seconds
@@ -369,6 +369,6 @@ pub struct SchemaArgs {
     pub format: String,
 
     /// Custom User-Agent string (when target is a URL)
-    #[arg(short = 'u', long, default_value = "SEOLens/1.0")]
+    #[arg(short = 'u', long, default_value = "BlackSparrow/1.0")]
     pub user_agent: String,
 }

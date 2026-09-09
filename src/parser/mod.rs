@@ -53,8 +53,8 @@
 //! ## Examples
 //!
 //! ```rust
-//! use seo_lens::parser::parse_html;
-//! use seo_lens::core::models::RobotsFlags;
+//! use blacksparrow::parser::parse_html;
+//! use blacksparrow::core::models::RobotsFlags;
 //!
 //! let html = r#"
 //!     <!DOCTYPE html>
@@ -164,7 +164,7 @@ impl ParsedPage {
     /// # Examples
     ///
     /// ```rust
-    /// use seo_lens::parser::ParsedPage;
+    /// use blacksparrow::parser::ParsedPage;
     /// use compact_str::CompactString;
     ///
     /// let mut page = ParsedPage::default();
@@ -185,7 +185,7 @@ impl ParsedPage {
     /// # Examples
     ///
     /// ```rust
-    /// use seo_lens::parser::ParsedPage;
+    /// use blacksparrow::parser::ParsedPage;
     /// use compact_str::CompactString;
     ///
     /// let mut page = ParsedPage::default();

@@ -12,9 +12,9 @@
 //! - Session cleanup (`seo_cleanup_session`).
 //! - MCP Resources (`resources/list`, `resources/read`).
 
-use seo_lens::core::models::{IssueCategory, IssueFinding, RuleId, Severity};
-use seo_lens::mcp::protocol::{handle_jsonrpc_request, McpContext};
-use seo_lens::storage::{CrawlSessionInit, Database};
+use blacksparrow::core::models::{IssueCategory, IssueFinding, RuleId, Severity};
+use blacksparrow::mcp::protocol::{handle_jsonrpc_request, McpContext};
+use blacksparrow::storage::{CrawlSessionInit, Database};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -57,7 +57,7 @@ async fn test_mcp_initialize_and_ping() {
     assert_eq!(resp["jsonrpc"], "2.0");
     assert_eq!(resp["id"], 1);
     assert_eq!(resp["result"]["protocolVersion"], "2024-11-05");
-    assert_eq!(resp["result"]["serverInfo"]["name"], "seolens");
+    assert_eq!(resp["result"]["serverInfo"]["name"], "blacksparrow");
     assert!(resp["result"]["capabilities"]["tools"].is_object());
     assert!(resp["result"]["capabilities"]["resources"].is_object());
 
@@ -618,7 +618,7 @@ async fn test_mcp_server_io_stream() {
     let reader = tokio::io::BufReader::new(input_bytes.as_bytes());
     let mut output_bytes = Vec::new();
 
-    seo_lens::mcp::run_mcp_server_io(reader, &mut output_bytes, Some(db_path))
+    blacksparrow::mcp::run_mcp_server_io(reader, &mut output_bytes, Some(db_path))
         .await
         .expect("Run MCP server IO");
 

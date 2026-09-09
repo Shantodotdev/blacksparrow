@@ -76,7 +76,7 @@ fn deterministic_hasher() -> ahash::AHasher {
 /// # Examples
 ///
 /// ```rust
-/// use seo_lens::parser::content::count_words;
+/// use blacksparrow::parser::content::count_words;
 ///
 /// assert_eq!(count_words("High-performance technical SEO audit engine."), 5);
 /// assert_eq!(count_words("   \t\n  "), 0);
@@ -95,7 +95,7 @@ pub fn count_words(text: &str) -> u32 {
 /// # Examples
 ///
 /// ```rust
-/// use seo_lens::parser::content::compute_content_hash;
+/// use blacksparrow::parser::content::compute_content_hash;
 ///
 /// let text_a = "High-performance technical SEO audit engine in Rust.";
 /// let text_b = "High-performance technical SEO audit engine in Rust.";
@@ -119,7 +119,7 @@ pub fn compute_content_hash(text: &str) -> u64 {
 /// # Examples
 ///
 /// ```rust
-/// use seo_lens::parser::content::{compute_simhash, hamming_distance};
+/// use blacksparrow::parser::content::{compute_simhash, hamming_distance};
 ///
 /// let original = "The quick brown fox jumps over the lazy dog in the sunny park.";
 /// let modified = "The quick brown fox jumps over the sleepy dog in the sunny park.";
@@ -177,7 +177,7 @@ pub fn compute_simhash(text: &str) -> u64 {
 /// # Examples
 ///
 /// ```rust
-/// use seo_lens::parser::content::hamming_distance;
+/// use blacksparrow::parser::content::hamming_distance;
 ///
 /// assert_eq!(hamming_distance(0b1010, 0b1010), 0);
 /// assert_eq!(hamming_distance(0b1010, 0b1001), 2);

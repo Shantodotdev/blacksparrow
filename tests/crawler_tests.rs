@@ -7,9 +7,9 @@
 //! - WAF / Bot challenge screen detection (Cloudflare, Akamai, DataDome, Imperva).
 //! - AIMD congestion controller adaptive rate-tuning and backoff on 429 / 503 / latency spikes.
 
-use seo_lens::crawler::aimd::AimdController;
-use seo_lens::crawler::client::{FetchOptions, HttpClient};
-use seo_lens::crawler::waf::detect_waf;
+use blacksparrow::crawler::aimd::AimdController;
+use blacksparrow::crawler::client::{FetchOptions, HttpClient};
+use blacksparrow::crawler::waf::detect_waf;
 use std::time::Duration;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -248,9 +248,9 @@ fn test_aimd_congestion_controller() {
 
 #[tokio::test]
 async fn test_crawl_sitemap_recursion_and_orphan_detection() {
-    use seo_lens::core::config::CrawlConfig;
-    use seo_lens::core::models::RuleId;
-    use seo_lens::crawler::run_crawl;
+    use blacksparrow::core::config::CrawlConfig;
+    use blacksparrow::core::models::RuleId;
+    use blacksparrow::crawler::run_crawl;
 
     let mock_server = MockServer::start().await;
     let base_uri = mock_server.uri();
@@ -410,9 +410,9 @@ async fn test_crawl_sitemap_recursion_and_orphan_detection() {
 
 #[tokio::test]
 async fn test_partial_crawl_run_crawl_skips_uncrawled_sitemap_orphans() {
-    use seo_lens::core::config::CrawlConfig;
-    use seo_lens::core::models::RuleId;
-    use seo_lens::crawler::run_crawl;
+    use blacksparrow::core::config::CrawlConfig;
+    use blacksparrow::core::models::RuleId;
+    use blacksparrow::crawler::run_crawl;
 
     let mock_server = MockServer::start().await;
     let base_uri = mock_server.uri();

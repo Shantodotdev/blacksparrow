@@ -10,8 +10,8 @@
 //! ## Examples
 //!
 //! ```rust
-//! use seo_lens::rules::catalog::{get_rule, RuleId};
-//! use seo_lens::core::models::Severity;
+//! use blacksparrow::rules::catalog::{get_rule, RuleId};
+//! use blacksparrow::core::models::Severity;
 //!
 //! let rule = get_rule(RuleId::ErrH1Missing);
 //! assert_eq!(rule.severity, Severity::Critical);

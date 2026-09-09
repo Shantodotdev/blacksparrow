@@ -8,8 +8,8 @@
 //! ## Examples
 //!
 //! ```rust
-//! use seo_lens::rules::catalog::{get_rule, RuleId};
-//! use seo_lens::core::models::Severity;
+//! use blacksparrow::rules::catalog::{get_rule, RuleId};
+//! use blacksparrow::core::models::Severity;
 //!
 //! let rule = get_rule(RuleId::ErrTitleMissing);
 //! assert_eq!(rule.severity, Severity::Critical);
@@ -878,8 +878,8 @@ pub static RULE_CATALOG: &[RuleDefinition] = &[
 /// # Examples
 ///
 /// ```rust
-/// use seo_lens::rules::catalog::{get_rule, RuleId};
-/// use seo_lens::core::models::Severity;
+/// use blacksparrow::rules::catalog::{get_rule, RuleId};
+/// use blacksparrow::core::models::Severity;
 ///
 /// let rule = get_rule(RuleId::ErrTitleMissing);
 /// assert_eq!(rule.severity, Severity::Critical);
@@ -904,7 +904,7 @@ pub fn get_rule(id: RuleId) -> &'static RuleDefinition {
 /// # Examples
 ///
 /// ```rust
-/// use seo_lens::rules::catalog::get_rule_by_code;
+/// use blacksparrow::rules::catalog::get_rule_by_code;
 ///
 /// assert!(get_rule_by_code("ERR_TITLE_MISSING").is_some());
 /// assert!(get_rule_by_code("UNKNOWN_CODE").is_none());

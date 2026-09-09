@@ -74,7 +74,7 @@ impl AimdController {
     /// # Examples
     ///
     /// ```rust
-    /// use seo_lens::crawler::aimd::AimdController;
+    /// use blacksparrow::crawler::aimd::AimdController;
     ///
     /// let controller = AimdController::new(10, 0);
     /// assert_eq!(controller.current_concurrency(), 10);

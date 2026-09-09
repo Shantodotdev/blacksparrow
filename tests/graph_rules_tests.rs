@@ -3,16 +3,16 @@
 //! Integration test suite validating `SiteGraph` construction, power-iteration PageRank,
 //! cycle and chain detection, content deduplication, and multi-page technical SEO rules.
 
-use compact_str::CompactString;
-use hashbrown::HashMap;
-use seo_lens::core::models::{
+use blacksparrow::core::models::{
     DiscoveredLink, HreflangTag, IssueCategory, IssueFinding, PageReport, RobotsFlags, RuleId,
     Severity,
 };
-use seo_lens::crawler::sitemap::{parse_sitemap, SitemapDocument};
-use seo_lens::graph::{compute_pagerank, LinkEdgeType, SiteGraph};
-use seo_lens::report::score::calculate_health_score;
-use seo_lens::rules::graph::evaluate_graph_rules;
+use blacksparrow::crawler::sitemap::{parse_sitemap, SitemapDocument};
+use blacksparrow::graph::{compute_pagerank, LinkEdgeType, SiteGraph};
+use blacksparrow::report::score::calculate_health_score;
+use blacksparrow::rules::graph::evaluate_graph_rules;
+use compact_str::CompactString;
+use hashbrown::HashMap;
 
 /// Helper to create a minimal dummy PageReport for graph tests.
 #[allow(clippy::too_many_arguments)]
@@ -32,7 +32,7 @@ fn mock_page(
         id: None,
         crawl_id: CompactString::new("test-session"),
         url: url.to_string(),
-        url_hash: seo_lens::core::url::url_hash(url),
+        url_hash: blacksparrow::core::url::url_hash(url),
         final_url: None,
         status_code,
         content_type: CompactString::new("text/html"),
@@ -78,7 +78,7 @@ fn mock_link(source: &str, target: &str, is_nofollow: bool) -> DiscoveredLink {
     DiscoveredLink {
         source_url: source.to_string(),
         target_url: target.to_string(),
-        target_url_hash: seo_lens::core::url::url_hash(target),
+        target_url_hash: blacksparrow::core::url::url_hash(target),
         anchor_text: "Test Link".to_string(),
         is_internal: true,
         is_nofollow,
@@ -165,15 +165,15 @@ fn test_pagerank_uniform_ring() {
     assert_eq!(pr.len(), 3);
 
     let pr_a = pr
-        .get(&seo_lens::core::url::url_hash("https://example.com/a"))
+        .get(&blacksparrow::core::url::url_hash("https://example.com/a"))
         .copied()
         .unwrap_or(0.0);
     let pr_b = pr
-        .get(&seo_lens::core::url::url_hash("https://example.com/b"))
+        .get(&blacksparrow::core::url::url_hash("https://example.com/b"))
         .copied()
         .unwrap_or(0.0);
     let pr_c = pr
-        .get(&seo_lens::core::url::url_hash("https://example.com/c"))
+        .get(&blacksparrow::core::url::url_hash("https://example.com/c"))
         .copied()
         .unwrap_or(0.0);
 
@@ -232,11 +232,15 @@ fn test_pagerank_star_graph_centrality() {
 
     let pr = compute_pagerank(&graph, 0.85, 100, 1e-7);
     let pr_hub = pr
-        .get(&seo_lens::core::url::url_hash("https://example.com/hub"))
+        .get(&blacksparrow::core::url::url_hash(
+            "https://example.com/hub",
+        ))
         .copied()
         .unwrap_or(0.0);
     let pr_leaf2 = pr
-        .get(&seo_lens::core::url::url_hash("https://example.com/leaf2"))
+        .get(&blacksparrow::core::url::url_hash(
+            "https://example.com/leaf2",
+        ))
         .copied()
         .unwrap_or(0.0);
 

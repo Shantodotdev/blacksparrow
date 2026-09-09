@@ -28,7 +28,7 @@
 //! ## Examples
 //!
 //! ```rust
-//! use seo_lens::crawler::robots::RobotsTxt;
+//! use blacksparrow::crawler::robots::RobotsTxt;
 //!
 //! let robots = RobotsTxt::parse(r#"
 //! User-agent: *
@@ -36,9 +36,9 @@
 //! Allow: /private/open/
 //! "#);
 //!
-//! assert!(robots.is_allowed("SEOLens", "/public/index.html"));
-//! assert!(!robots.is_allowed("SEOLens", "/private/secret.html"));
-//! assert!(robots.is_allowed("SEOLens", "/private/open/readme.txt"));
+//! assert!(robots.is_allowed("BlackSparrow", "/public/index.html"));
+//! assert!(!robots.is_allowed("BlackSparrow", "/private/secret.html"));
+//! assert!(robots.is_allowed("BlackSparrow", "/private/open/readme.txt"));
 //! ```
 
 use std::time::Duration;
@@ -184,7 +184,7 @@ impl RobotsTxt {
     ///
     /// # Arguments
     ///
-    /// * `user_agent` - Name or token of the crawler (e.g. `"SEOLens"`).
+    /// * `user_agent` - Name or token of the crawler (e.g. `"BlackSparrow"`).
     /// * `path_or_url` - Relative path or full URL being checked.
     pub fn is_allowed(&self, user_agent: &str, path_or_url: &str) -> bool {
         let path = extract_path(path_or_url);

@@ -4,8 +4,8 @@
 //! image resource scanning, heading hierarchy, JSON-LD schemas,
 //! and content text extraction using lol_html streaming engine.
 
-use seo_lens::core::models::RobotsFlags;
-use seo_lens::parser::parse_html;
+use blacksparrow::core::models::RobotsFlags;
+use blacksparrow::parser::parse_html;
 
 #[test]
 fn test_parse_sample_fixture_metadata() {

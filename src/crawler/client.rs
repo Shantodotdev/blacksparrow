@@ -34,7 +34,7 @@ pub struct FetchOptions {
 impl Default for FetchOptions {
     fn default() -> Self {
         Self {
-            user_agent: "SEOLens/1.0".to_string(),
+            user_agent: crate::core::branding::DEFAULT_USER_AGENT.to_string(),
             timeout: Duration::from_secs(30),
             connect_timeout: Duration::from_secs(10),
             max_redirects: 10,
@@ -88,7 +88,7 @@ impl HttpClient {
     /// # Examples
     ///
     /// ```rust
-    /// use seo_lens::crawler::client::{HttpClient, FetchOptions};
+    /// use blacksparrow::crawler::client::{HttpClient, FetchOptions};
     ///
     /// let client = HttpClient::new(FetchOptions::default()).unwrap();
     /// ```

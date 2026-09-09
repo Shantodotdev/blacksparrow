@@ -6,14 +6,14 @@
 //! - Category 11: GEO & AI search bot blocking in robots.txt and missing /llms.txt file.
 //! - Category 12: Low internal PageRank hub detection in internal graph topology.
 
+use blacksparrow::core::models::{HreflangTag, PageReport, RuleId, SchemaRecord};
+use blacksparrow::graph::{LinkEdgeType, SiteGraph};
 use compact_str::CompactString;
 use hashbrown::HashMap;
-use seo_lens::core::models::{HreflangTag, PageReport, RuleId, SchemaRecord};
-use seo_lens::graph::{LinkEdgeType, SiteGraph};
 
 #[test]
 fn test_rule_hreflang_invalid_lang_code() {
-    use seo_lens::rules::page::international::check_international;
+    use blacksparrow::rules::page::international::check_international;
 
     let mut issues = Vec::new();
     let hreflangs = vec![
@@ -66,7 +66,7 @@ fn test_rule_hreflang_invalid_lang_code() {
 
 #[test]
 fn test_rule_hreflang_cross_domain_and_self_reference_and_x_default() {
-    use seo_lens::rules::page::international::check_international;
+    use blacksparrow::rules::page::international::check_international;
 
     let mut issues = Vec::new();
     let hreflangs = vec![
@@ -118,7 +118,7 @@ fn test_rule_hreflang_cross_domain_and_self_reference_and_x_default() {
 
 #[test]
 fn test_rule_html_lang_missing() {
-    use seo_lens::rules::page::international::check_international;
+    use blacksparrow::rules::page::international::check_international;
 
     let mut issues = Vec::new();
     let hreflangs = Vec::new();
@@ -149,8 +149,8 @@ fn test_rule_html_lang_missing() {
 
 #[test]
 fn test_rule_schema_multiple_product_entities() {
-    use seo_lens::parser::ParsedPage;
-    use seo_lens::rules::page::schema_val::check_schemas;
+    use blacksparrow::parser::ParsedPage;
+    use blacksparrow::rules::page::schema_val::check_schemas;
 
     let mut issues = Vec::new();
     let mut parsed = ParsedPage::default();
@@ -188,8 +188,8 @@ fn test_rule_schema_multiple_product_entities() {
 
 #[test]
 fn test_rule_schema_invalid_date_format() {
-    use seo_lens::parser::ParsedPage;
-    use seo_lens::rules::page::schema_val::check_schemas;
+    use blacksparrow::parser::ParsedPage;
+    use blacksparrow::rules::page::schema_val::check_schemas;
 
     let mut issues = Vec::new();
     let mut parsed = ParsedPage::default();
@@ -238,7 +238,7 @@ fn test_rule_schema_invalid_date_format() {
 
 #[test]
 fn test_rule_low_internal_pagerank_hub() {
-    use seo_lens::rules::graph::architecture::evaluate_architecture;
+    use blacksparrow::rules::graph::architecture::evaluate_architecture;
 
     let mut graph = SiteGraph::new();
     let mut pages = Vec::new();
@@ -247,7 +247,7 @@ fn test_rule_low_internal_pagerank_hub() {
     // Hub page: out_degree = 55 (high outlinks), in_degree = 1 (isolated), pagerank = 0.00001 (very low)
     let hub_url = "https://example.com/isolated-hub";
     graph.add_node(hub_url, 200, 1, false);
-    pagerank.insert(seo_lens::core::url::url_hash(hub_url), 0.00001);
+    pagerank.insert(blacksparrow::core::url::url_hash(hub_url), 0.00001);
 
     let hub_page = PageReport {
         url: hub_url.to_string(),
@@ -298,8 +298,8 @@ fn test_rule_low_internal_pagerank_hub() {
 
 #[tokio::test]
 async fn test_rule_ai_search_bots_blocked_and_llms_txt_missing() {
-    use seo_lens::core::config::CrawlConfig;
-    use seo_lens::crawler::run_crawl;
+    use blacksparrow::core::config::CrawlConfig;
+    use blacksparrow::crawler::run_crawl;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 

@@ -6,6 +6,7 @@
 //! - Deep audit scorecard with visual health gauges, protocol radar, defect triage trees,
 //!   PageRank authority distribution tables, and artifact links.
 
+use crate::core::branding::{APP_DISPLAY_SPACED, APP_TAGLINE, BINARY_ALIAS, BINARY_NAME, VERSION};
 use crate::core::models::{CrawlSummary, IssueFinding, Severity};
 use crate::crawler::ai_check::{AiReadinessReport, AiSearchRisk};
 use crate::crawler::engine::{CrawlResult, ProgressUpdate};
@@ -17,8 +18,10 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
-// Cyberpunk / Hacker 256-Color & ANSI escape codes
-const ANSI_CYAN: &str = "\x1b[38;5;51m";
+// Cyberpunk Pink & Maroon Palette (Black Sparrow)
+const ANSI_PINK: &str = "\x1b[38;5;198m";
+const ANSI_MAROON: &str = "\x1b[38;5;161m";
+const ANSI_CYAN: &str = ANSI_PINK;
 const ANSI_GREEN: &str = "\x1b[38;5;48m";
 const ANSI_RED: &str = "\x1b[38;5;196m";
 const ANSI_YELLOW: &str = "\x1b[38;5;220m";
@@ -27,17 +30,25 @@ const ANSI_BRIGHT_WHITE: &str = "\x1b[38;5;231m";
 const ANSI_BOLD: &str = "\x1b[1m";
 const ANSI_RESET: &str = "\x1b[0m";
 
+const BANNER_SPARROW: &str = "\
+  ███████╗██████╗  █████╗ ██████╗ ██████╗  ██████╗ ██╗    ██╗\n\
+  ██╔════╝██╔══██╗██╔══██╗██╔══██╗██╔══██╗██╔═══██╗██║    ██║\n\
+  ███████╗██████╔╝███████║██████╔╝██████╔╝██║   ██║██║ █╗ ██║\n\
+  ╚════██║██╔═══╝ ██╔══██║██╔══██╗██╔══██╗██║   ██║██║███╗██║\n\
+  ███████║██║     ██║  ██║██║  ██║██║  ██║╚██████╔╝╚███╔███╔╝\n\
+  ╚══════╝╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝  ╚══╝╚══╝";
+
 fn format_section_header(title: &str) -> String {
     let pad = title.chars().count() + 4;
     let top = format!(
-        "  {ANSI_BOLD}{ANSI_CYAN}┌{}┐{ANSI_RESET}\n",
+        "  {ANSI_BOLD}{ANSI_MAROON}┌{}┐{ANSI_RESET}\n",
         "─".repeat(pad)
     );
     let mid = format!(
-        "  {ANSI_BOLD}{ANSI_CYAN}│{ANSI_RESET}  {ANSI_BOLD}{ANSI_BRIGHT_WHITE}{title}{ANSI_RESET}  {ANSI_BOLD}{ANSI_CYAN}│{ANSI_RESET}\n"
+        "  {ANSI_BOLD}{ANSI_MAROON}│{ANSI_RESET}  {ANSI_BOLD}{ANSI_BRIGHT_WHITE}{title}{ANSI_RESET}  {ANSI_BOLD}{ANSI_MAROON}│{ANSI_RESET}\n"
     );
     let bot = format!(
-        "  {ANSI_BOLD}{ANSI_CYAN}└{}┘{ANSI_RESET}\n",
+        "  {ANSI_BOLD}{ANSI_MAROON}└{}┘{ANSI_RESET}\n",
         "─".repeat(pad)
     );
     format!("{top}{mid}{bot}")
@@ -114,9 +125,12 @@ pub fn print_audit_banner(target_url: &str, max_pages: u32, concurrency: usize, 
     };
 
     println!(
-        "\n{ANSI_CYAN}{ANSI_BOLD}  ███████╗███████╗ ██████╗     ██╗     ███████╗███╗   ██╗███████╗\n  ██╔════╝██╔════╝██╔═══██╗    ██║     ██╔════╝████╗  ██║██╔════╝\n  ███████╗█████╗  ██║   ██║    ██║     █████╗  ██╔██╗ ██║███████╗\n  ╚════██║██╔══╝  ██║   ██║    ██║     ██╔══╝  ██║╚██╗██║╚════██║\n  ███████║███████╗╚██████╔╝    ███████╗███████╗██║ ╚████║███████║\n  ╚══════╝╚══════╝ ╚═════╝     ╚══════╝╚══════╝╚═╝  ╚═══╝╚══════╝{ANSI_RESET}\n"
+        "\n{ANSI_PINK}{ANSI_BOLD}{BANNER_SPARROW}{ANSI_RESET}\n  {ANSI_MAROON}{ANSI_BOLD}{APP_DISPLAY_SPACED}{ANSI_RESET}\n"
     );
-    print!("{}", format_section_header("SEO LENS // DEEP AUDIT MATRIX"));
+    print!(
+        "{}",
+        format_section_header("BLACK SPARROW // DEEP AUDIT MATRIX")
+    );
     println!("  {ANSI_BOLD}Target URL  {ANSI_RESET} : {ANSI_CYAN}{target_url}{ANSI_RESET}\n");
     println!("  {ANSI_BOLD}Parameters  {ANSI_RESET} : {pages_limit} {ANSI_DIM}│{ANSI_RESET} {concurrency} workers {ANSI_DIM}│{ANSI_RESET} AIMD: {aimd_status}\n");
 }
@@ -453,7 +467,7 @@ pub fn print_executive_scorecard(result: &CrawlResult, exported_paths: &[(&str, 
 pub fn print_historical_sessions(db_path: &Path, crawls: &[CrawlSummary]) {
     // 1. Big Cyberpunk ASCII Header (matching inspect command)
     println!(
-        "\n{ANSI_CYAN}{ANSI_BOLD}  ███████╗███████╗ ██████╗     ██╗     ███████╗███╗   ██╗███████╗\n  ██╔════╝██╔════╝██╔═══██╗    ██║     ██╔════╝████╗  ██║██╔════╝\n  ███████╗█████╗  ██║   ██║    ██║     █████╗  ██╔██╗ ██║███████╗\n  ╚════██║██╔══╝  ██║   ██║    ██║     ██╔══╝  ██║╚██╗██║╚════██║\n  ███████║███████╗╚██████╔╝    ███████╗███████╗██║ ╚████║███████║\n  ╚══════╝╚══════╝ ╚═════╝     ╚══════╝╚══════╝╚═╝  ╚═══╝╚══════╝{ANSI_RESET}\n"
+        "\n{ANSI_PINK}{ANSI_BOLD}{BANNER_SPARROW}{ANSI_RESET}\n  {ANSI_MAROON}{ANSI_BOLD}{APP_DISPLAY_SPACED}{ANSI_RESET}\n"
     );
 
     // 2. Persistence Repository
@@ -473,7 +487,7 @@ pub fn print_historical_sessions(db_path: &Path, crawls: &[CrawlSummary]) {
 
     if crawls.is_empty() {
         println!("  {ANSI_YELLOW}⚡ No crawl sessions found in persistence.{ANSI_RESET}");
-        println!("  Run {ANSI_CYAN}{ANSI_BOLD}seolens audit <URL>{ANSI_RESET} to start your first technical SEO crawl.\n");
+        println!("  Run {ANSI_CYAN}{ANSI_BOLD}{BINARY_NAME} audit <URL>{ANSI_RESET} to start your first technical SEO crawl.\n");
         return;
     }
 
@@ -550,9 +564,9 @@ pub fn print_historical_sessions(db_path: &Path, crawls: &[CrawlSummary]) {
         "{}",
         format_section_header("ACTION DISPATCH // QUICK COMMANDS")
     );
-    println!("  {ANSI_CYAN}◈ Re-inspect session {ANSI_RESET} : seolens report <SESSION_ID>");
-    println!("  {ANSI_CYAN}◈ Re-export artifacts{ANSI_RESET} : seolens report <SESSION_ID> --format md,json");
-    println!("  {ANSI_CYAN}◈ Start fresh crawl  {ANSI_RESET} : seolens audit <URL>\n");
+    println!("  {ANSI_CYAN}◈ Re-inspect session {ANSI_RESET} : {BINARY_NAME} report <SESSION_ID>");
+    println!("  {ANSI_CYAN}◈ Re-export artifacts{ANSI_RESET} : {BINARY_NAME} report <SESSION_ID> --format md,json");
+    println!("  {ANSI_CYAN}◈ Start fresh crawl  {ANSI_RESET} : {BINARY_NAME} audit <URL>\n");
 }
 
 /// Formats and prints a filtered issues matrix in the terminal.
@@ -564,7 +578,7 @@ pub fn print_issues_matrix(
     limit: usize,
 ) {
     println!(
-        "\n{ANSI_CYAN}{ANSI_BOLD}  ███████╗███████╗ ██████╗     ██╗███████╗███████╗██╗   ██╗███████╗███████╗\n  ██╔════╝██╔════╝██╔═══██╗    ██║██╔════╝██╔════╝██║   ██║██╔════╝██╔════╝\n  ███████╗█████╗  ██║   ██║    ██║███████╗███████╗██║   ██║█████╗  ███████╗\n  ╚════██║██╔══╝  ██║   ██║    ██║╚════██║╚════██║██║   ██║██╔══╝  ╚════██║\n  ███████║███████╗╚██████╔╝    ██║███████║███████║╚██████╔╝███████╗███████║\n  ╚══════╝╚══════╝ ╚═════╝     ╚═╝╚══════╝╚══════╝ ╚═════╝ ╚══════╝╚══════╝{ANSI_RESET}\n"
+        "\n{ANSI_PINK}{ANSI_BOLD}{BANNER_SPARROW}{ANSI_RESET}\n  {ANSI_MAROON}{ANSI_BOLD}{APP_DISPLAY_SPACED}{ANSI_RESET}\n"
     );
 
     print!(
@@ -625,7 +639,7 @@ pub fn print_issues_matrix(
     if total_count > offset + issues.len() {
         let next_offset = offset + limit;
         println!(
-            "  {ANSI_DIM}◈ To view more: seolens issues {session_id} --offset {next_offset} --limit {limit}{ANSI_RESET}\n"
+            "  {ANSI_DIM}◈ To view more: {BINARY_NAME} issues {session_id} --offset {next_offset} --limit {limit}{ANSI_RESET}\n"
         );
     }
 }
@@ -633,7 +647,7 @@ pub fn print_issues_matrix(
 /// Prints a cyberpunk AI search & GEO readiness assessment scorecard.
 pub fn print_ai_readiness_scorecard(report: &AiReadinessReport) {
     println!(
-        "\n{ANSI_CYAN}{ANSI_BOLD}  ███████╗███████╗ ██████╗      █████╗ ██╗    ███████╗███████╗ ██████╗ \n  ██╔════╝██╔════╝██╔═══██╗    ██╔══██╗██║    ██╔════╝██╔════╝██╔═══██╗\n  ███████╗█████╗  ██║   ██║    ███████║██║    ███████╗█████╗  ██║   ██║\n  ╚════██║██╔══╝  ██║   ██║    ██╔══██║██║    ╚════██║██╔══╝  ██║   ██║\n  ███████║███████╗╚██████╔╝    ██║  ██║██║    ███████║███████╗╚██████╔╝\n  ╚══════╝╚══════╝ ╚═════╝     ╚═╝  ╚═╝╚═╝    ╚══════╝╚══════╝ ╚═════╝ {ANSI_RESET}\n"
+        "\n{ANSI_PINK}{ANSI_BOLD}{BANNER_SPARROW}{ANSI_RESET}\n  {ANSI_MAROON}{ANSI_BOLD}{APP_DISPLAY_SPACED}{ANSI_RESET}\n"
     );
 
     let (risk_badge, risk_desc) = match report.citation_search_risk {
@@ -730,7 +744,7 @@ pub fn print_ai_readiness_scorecard(report: &AiReadinessReport) {
 /// Prints a schema validation assessment in the terminal.
 pub fn print_schema_outcome(outcome: &SchemaValidationOutcome) {
     println!(
-        "\n{ANSI_CYAN}{ANSI_BOLD}  ███████╗███████╗ ██████╗     ███████╗ ██████╗██╗  ██╗███████╗███╗   ███╗ █████╗ \n  ██╔════╝██╔════╝██╔═══██╗    ██╔════╝██╔════╝██║  ██║██╔════╝████╗ ████║██╔══██╗\n  ███████╗█████╗  ██║   ██║    ███████╗██║     ███████║█████╗  ██╔████╔██║███████║\n  ╚════██║██╔══╝  ██║   ██║    ╚════██║██║     ██╔══██║██╔══╝  ██║╚██╔╝██║██╔══██║\n  ███████║███████╗╚██████╔╝    ███████║╚██████╗██║  ██║███████╗██║ ╚═╝ ██║██║  ██║\n  ╚══════╝╚══════╝ ╚═════╝     ╚══════╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝╚═╝  ╚═╝{ANSI_RESET}\n"
+        "\n{ANSI_PINK}{ANSI_BOLD}{BANNER_SPARROW}{ANSI_RESET}\n  {ANSI_MAROON}{ANSI_BOLD}{APP_DISPLAY_SPACED}{ANSI_RESET}\n"
     );
 
     let (badge, color) = if outcome.is_rich_result_eligible {
@@ -784,22 +798,27 @@ pub fn print_schema_outcome(outcome: &SchemaValidationOutcome) {
     }
 }
 
-/// Prints the Cyberpunk / Matrix-style help and home screen for SEO Lens CLI.
+/// Prints the Cyberpunk / Matrix-style help and home screen for Black Sparrow CLI.
 pub fn print_cli_help() {
     println!(
-        "\n{ANSI_CYAN}{ANSI_BOLD}  ███████╗███████╗ ██████╗     ██╗     ███████╗███╗   ██╗███████╗\n  ██╔════╝██╔════╝██╔═══██╗    ██║     ██╔════╝████╗  ██║██╔════╝\n  ███████╗█████╗  ██║   ██║    ██║     █████╗  ██╔██╗ ██║███████╗\n  ╚════██║██╔══╝  ██║   ██║    ██║     ██╔══╝  ██║╚██╗██║╚════██║\n  ███████║███████╗╚██████╔╝    ███████╗███████╗██║ ╚████║███████║\n  ╚══════╝╚══════╝ ╚═════╝     ╚══════╝╚══════╝╚═╝  ╚═══╝╚══════╝{ANSI_RESET}\n  {ANSI_DIM}v{} │ High-Performance Website Crawler & AI-Native Technical SEO Engine{ANSI_RESET}\n",
-        env!("CARGO_PKG_VERSION")
+        "\n{ANSI_PINK}{ANSI_BOLD}{BANNER_SPARROW}{ANSI_RESET}\n  {ANSI_MAROON}{ANSI_BOLD}{APP_DISPLAY_SPACED}{ANSI_RESET} {ANSI_DIM}│{ANSI_RESET} {ANSI_BRIGHT_WHITE}v{VERSION} │ {APP_TAGLINE}{ANSI_RESET}\n"
     );
 
     let print_badge = |title: &str| {
         let pad = title.chars().count() + 4;
-        println!("  {ANSI_BOLD}{ANSI_CYAN}┌{}┐{ANSI_RESET}", "─".repeat(pad));
-        println!("  {ANSI_BOLD}{ANSI_CYAN}│{ANSI_RESET}  {ANSI_BOLD}{ANSI_BRIGHT_WHITE}{title}{ANSI_RESET}  {ANSI_BOLD}{ANSI_CYAN}│{ANSI_RESET}");
-        println!("  {ANSI_BOLD}{ANSI_CYAN}└{}┘{ANSI_RESET}", "─".repeat(pad));
+        println!(
+            "  {ANSI_BOLD}{ANSI_MAROON}┌{}┐{ANSI_RESET}",
+            "─".repeat(pad)
+        );
+        println!("  {ANSI_BOLD}{ANSI_MAROON}│{ANSI_RESET}  {ANSI_BOLD}{ANSI_BRIGHT_WHITE}{title}{ANSI_RESET}  {ANSI_BOLD}{ANSI_MAROON}│{ANSI_RESET}");
+        println!(
+            "  {ANSI_BOLD}{ANSI_MAROON}└{}┘{ANSI_RESET}",
+            "─".repeat(pad)
+        );
     };
 
     print_badge("USAGE");
-    println!("  {ANSI_BOLD}seolens{ANSI_RESET} {ANSI_CYAN}<COMMAND>{ANSI_RESET} {ANSI_YELLOW}[FLAGS]{ANSI_RESET} {ANSI_DIM}[OPTIONS]{ANSI_RESET}\n");
+    println!("  {ANSI_BOLD}{BINARY_NAME}{ANSI_RESET} {ANSI_CYAN}<COMMAND>{ANSI_RESET} {ANSI_YELLOW}[FLAGS]{ANSI_RESET} {ANSI_DIM}[OPTIONS]{ANSI_RESET}  {ANSI_DIM}(or alias: {BINARY_ALIAS} <COMMAND>){ANSI_RESET}\n");
 
     print_badge("AUDIT & CRAWL COMMANDS");
     println!("  {ANSI_GREEN}{ANSI_BOLD}audit{ANSI_RESET} {ANSI_CYAN}<URL>{ANSI_RESET}          Run full website crawl with AIMD adaptive congestion control");
@@ -818,22 +837,22 @@ pub fn print_cli_help() {
     println!("  {ANSI_GREEN}{ANSI_BOLD}mcp{ANSI_RESET}                  Start native Model Context Protocol server (stdio for AI agents)\n");
 
     print_badge("GLOBAL FLAGS");
-    println!("  {ANSI_YELLOW}-h, --help{ANSI_RESET}           Print this help guide (or use: seolens <cmd> --help)");
+    println!("  {ANSI_YELLOW}-h, --help{ANSI_RESET}           Print this help guide (or use: {BINARY_NAME} <cmd> --help)");
     println!("  {ANSI_YELLOW}-V, --version{ANSI_RESET}        Print version information\n");
 
     print_badge("QUICKSTART EXAMPLES");
     println!(
         "  {ANSI_DIM}# Audit whole website with 500 pages limit & AIMD rate limiting:{ANSI_RESET}"
     );
-    println!("  seolens audit https://example.com --max-pages 500\n");
+    println!("  {BINARY_NAME} audit https://example.com --max-pages 500\n");
     println!("  {ANSI_DIM}# Fast single-page inspection with JSON output:{ANSI_RESET}");
-    println!("  seolens inspect https://example.com/pricing --format json\n");
+    println!("  {BINARY_ALIAS} inspect https://example.com/pricing --format json\n");
     println!(
         "  {ANSI_DIM}# Check whether AI bots (Perplexity, ChatGPT) can cite your site:{ANSI_RESET}"
     );
-    println!("  seolens check-ai https://example.com\n");
+    println!("  {BINARY_ALIAS} check-ai https://example.com\n");
     println!("  {ANSI_DIM}# Filter critical issues from a previous crawl session:{ANSI_RESET}");
-    println!("  seolens issues <SESSION_ID> --severity critical\n");
+    println!("  {BINARY_NAME} issues <SESSION_ID> --severity critical\n");
     println!("  {ANSI_DIM}# Start MCP server for AI coding agents:{ANSI_RESET}");
-    println!("  seolens mcp\n");
+    println!("  {BINARY_NAME} mcp\n");
 }

@@ -3,8 +3,8 @@
 //! Validates the Intelligent Priority Frontier (`PriorityFrontier`), URL importance
 //! scoring heuristics, dynamic in-degree authority accumulation, and pagination suppression.
 
-use seo_lens::crawler::frontier::Frontier;
-use seo_lens::crawler::priority::{
+use blacksparrow::crawler::frontier::Frontier;
+use blacksparrow::crawler::priority::{
     calculate_url_importance, is_pagination_url, parse_url_segments,
 };
 

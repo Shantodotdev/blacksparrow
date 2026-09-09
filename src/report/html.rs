@@ -330,6 +330,9 @@ fn render_html_report(result: &CrawlResult) -> String {
         ));
     }
 
+    let app_name = crate::core::branding::APP_DISPLAY_NAME;
+    let version = crate::core::branding::VERSION;
+
     // Assemble complete self-contained HTML
     format!(
         r#"<!DOCTYPE html>
@@ -337,23 +340,23 @@ fn render_html_report(result: &CrawlResult) -> String {
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SEO Lens Audit Report — {target_esc}</title>
+    <title>{app_name} Audit Report — {target_esc}</title>
     <style>
 :root {{
-            --bg-canvas: #090c10;
-            --bg-term: #0d1117;
-            --bg-panel: #161b22;
-            --bg-header: #12171f;
-            --bg-subtle: #21262d;
-            --bg-hover: #1c2128;
-            --bg-code: #0b0e14;
-            --border-muted: #21262d;
-            --border-panel: #30363d;
-            --border-bright: #484f58;
-            --text-main: #c9d1d9;
-            --text-bright: #f0f6fc;
-            --text-muted: #8b949e;
-            --text-dim: #6e7681;
+            --bg-canvas: #0d070f;
+            --bg-term: #120914;
+            --bg-panel: #1a0c1e;
+            --bg-header: #150a18;
+            --bg-subtle: #241028;
+            --bg-hover: #2e1434;
+            --bg-code: #0a050c;
+            --border-muted: #2d1222;
+            --border-panel: #4a1532;
+            --border-bright: #6e2048;
+            --text-main: #f3e8f0;
+            --text-bright: #ffffff;
+            --text-muted: #b894ad;
+            --text-dim: #825a77;
             --ansi-red: #f85149;
             --ansi-red-dim: #da3633;
             --ansi-red-bg: rgba(248, 81, 73, 0.12);
@@ -363,11 +366,13 @@ fn render_html_report(result: &CrawlResult) -> String {
             --ansi-yellow: #d29922;
             --ansi-yellow-dim: #9e6a03;
             --ansi-yellow-bg: rgba(210, 153, 34, 0.12);
-            --ansi-blue: #58a6ff;
-            --ansi-blue-dim: #1f6feb;
-            --ansi-blue-bg: rgba(88, 166, 255, 0.12);
-            --ansi-cyan: #39c5cf;
-            --ansi-cyan-bg: rgba(57, 197, 207, 0.12);
+            --ansi-blue: #ff2a85;
+            --ansi-blue-dim: #831843;
+            --ansi-blue-bg: rgba(255, 42, 133, 0.12);
+            --ansi-cyan: #ff2a85;
+            --ansi-cyan-bg: rgba(255, 42, 133, 0.14);
+            --ansi-pink: #ff2a85;
+            --ansi-maroon: #831843;
             --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", "Fira Code", Menlo, Monaco, Consolas, monospace;
         }}
 
@@ -1120,13 +1125,13 @@ fn render_html_report(result: &CrawlResult) -> String {
         <!-- TUI Branding Header -->
         <header class="tui-header">
             <div class="brand-block">
-                <pre class="ascii-logo">  ███████╗███████╗ ██████╗     ██╗     ███████╗███╗   ██╗███████╗
-  ██╔════╝██╔════╝██╔═══██╗    ██║     ██╔════╝████╗  ██║██╔════╝
-  ███████╗█████╗  ██║   ██║    ██║     █████╗  ██╔██╗ ██║███████╗
-  ╚════██║██╔══╝  ██║   ██║    ██║     ██╔══╝  ██║╚██╗██║╚════██║
-  ███████║███████╗╚██████╔╝    ███████╗███████╗██║ ╚████║███████║
-  ╚══════╝╚══════╝ ╚═════╝     ╚══════╝╚══════╝╚═╝  ╚═══╝╚══════╝</pre>
-                <div class="brand-tagline">v0.1.0-rc.1 │ High-Performance Website Crawler &amp; AI-Native Technical SEO Engine</div>
+                <pre class="ascii-logo">  ███████╗██████╗  █████╗ ██████╗ ██████╗  ██████╗ ██╗    ██╗
+  ██╔════╝██╔══██╗██╔══██╗██╔══██╗██╔══██╗██╔═══██╗██║    ██║
+  ███████╗██████╔╝███████║██████╔╝██████╔╝██║   ██║██║ █╗ ██║
+  ╚════██║██╔═══╝ ██╔══██║██╔══██╗██╔══██╗██║   ██║██║███╗██║
+  ███████║██║     ██║  ██║██║  ██║██║  ██║╚██████╔╝╚███╔███╔╝
+  ╚══════╝╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝  ╚══╝╚══╝ </pre>
+                <div class="brand-tagline">v{version} │ {app_name} — High-Performance Website Crawler &amp; AI-Native Technical SEO Engine</div>
             </div>
             <div class="header-telemetry-card">
                 <div class="target-row">

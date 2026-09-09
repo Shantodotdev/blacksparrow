@@ -3,10 +3,10 @@
 //! Comprehensive tests for 8-stage URL normalization, relative resolution,
 //! hashing, and link scope checking.
 
-use seo_lens::core::url::{
+use blacksparrow::core::url::{
     is_internal, is_static_asset_url, normalize_url, resolve_relative, url_hash,
 };
-use seo_lens::SeoError;
+use blacksparrow::SeoError;
 
 // =========================================================================
 // 1. SCHEME NORMALIZATION TESTS

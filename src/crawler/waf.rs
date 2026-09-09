@@ -78,7 +78,7 @@ pub const WAF_SIGNATURES: &[WafProbe] = &[
 /// # Examples
 ///
 /// ```rust
-/// use seo_lens::crawler::waf::detect_waf;
+/// use blacksparrow::crawler::waf::detect_waf;
 /// use reqwest::header::HeaderMap;
 ///
 /// let headers = HeaderMap::new();

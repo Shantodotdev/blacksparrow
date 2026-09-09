@@ -1,6 +1,6 @@
-//! # SEO Lens CLI Entry Point
+//! # Black Sparrow CLI Entry Point
 //!
-//! Command-line interface for the `seolens` binary.
+//! Command-line interface for the `blacksparrow` binary.
 
 use tracing_subscriber::EnvFilter;
 
@@ -13,5 +13,5 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .init();
 
-    seo_lens::cli::run().await
+    blacksparrow::cli::run().await
 }

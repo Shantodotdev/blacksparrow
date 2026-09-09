@@ -59,7 +59,7 @@ const GOOGLE_ELIGIBLE_TYPES: &[&str] = &[
 /// # Examples
 ///
 /// ```rust
-/// use seo_lens::parser::schema::parse_json_ld;
+/// use blacksparrow::parser::schema::parse_json_ld;
 ///
 /// // Example 1: Standard Article schema
 /// let json_ld = r#"

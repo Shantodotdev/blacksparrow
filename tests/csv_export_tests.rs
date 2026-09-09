@@ -6,13 +6,13 @@
 //! 3. `response_codes.csv` (URL routing & redirect map)
 //! 4. `external_all.csv` (Outbound link audit)
 
-use hashbrown::HashMap;
-use seo_lens::core::models::{
+use blacksparrow::core::models::{
     DiscoveredLink, IssueCategory, IssueFinding, PageReport, RobotsFlags, RuleId, Severity,
 };
-use seo_lens::crawler::engine::CrawlResult;
-use seo_lens::graph::SiteGraph;
-use seo_lens::report::csv::export_csv_suite;
+use blacksparrow::crawler::engine::CrawlResult;
+use blacksparrow::graph::SiteGraph;
+use blacksparrow::report::csv::export_csv_suite;
+use hashbrown::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -44,14 +44,14 @@ fn create_test_crawl_result() -> CrawlResult {
     graph.add_edge(
         &url_home,
         &url_about,
-        seo_lens::graph::LinkEdgeType::InternalHyperlink,
+        blacksparrow::graph::LinkEdgeType::InternalHyperlink,
         false,
         "About Us",
     );
     graph.add_edge(
         &url_home,
         &url_redirect,
-        seo_lens::graph::LinkEdgeType::Redirect,
+        blacksparrow::graph::LinkEdgeType::Redirect,
         false,
         "Old Page",
     );
@@ -276,9 +276,9 @@ fn test_export_csv_suite_generates_all_four_files() {
 
 #[tokio::test]
 async fn test_cli_report_command_generates_csv_suite() {
-    use seo_lens::cli::args::{Cli, Commands, ReportArgs};
-    use seo_lens::cli::commands::execute;
-    use seo_lens::storage::{CrawlSessionInit, Database};
+    use blacksparrow::cli::args::{Cli, Commands, ReportArgs};
+    use blacksparrow::cli::commands::execute;
+    use blacksparrow::storage::{CrawlSessionInit, Database};
 
     let temp_dir = unique_test_csv_dir();
     let db_path = temp_dir.join("test.db");

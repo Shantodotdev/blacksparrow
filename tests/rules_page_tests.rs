@@ -4,13 +4,15 @@
 //! Verifies positive detections, negative non-detections, exact boundary conditions,
 //! real-world production fixtures, and adversarial malformed inputs.
 
+use blacksparrow::core::models::{
+    ImageResource, IssueCategory, RobotsFlags, SchemaRecord, Severity,
+};
+use blacksparrow::crawler::client::FetchResult;
+use blacksparrow::parser::{parse_html, ParsedPage};
+use blacksparrow::rules::catalog::{get_rule, RuleId};
+use blacksparrow::rules::evaluate_page;
 use compact_str::CompactString;
 use reqwest::header::{HeaderMap, HeaderValue};
-use seo_lens::core::models::{ImageResource, IssueCategory, RobotsFlags, SchemaRecord, Severity};
-use seo_lens::crawler::client::FetchResult;
-use seo_lens::parser::{parse_html, ParsedPage};
-use seo_lens::rules::catalog::{get_rule, RuleId};
-use seo_lens::rules::evaluate_page;
 
 /// Creates a populated [`FetchResult`] with customizable status, headers, and latency.
 fn make_mock_fetch_result(
@@ -90,8 +92,8 @@ fn test_rules_catalog_integrity() {
     assert_eq!(h1_multiple.category, IssueCategory::Headings);
 
     // String code resolution
-    assert!(seo_lens::rules::catalog::get_rule_by_code("ERR_TITLE_MISSING").is_some());
-    assert!(seo_lens::rules::catalog::get_rule_by_code("INVALID_CODE").is_none());
+    assert!(blacksparrow::rules::catalog::get_rule_by_code("ERR_TITLE_MISSING").is_some());
+    assert!(blacksparrow::rules::catalog::get_rule_by_code("INVALID_CODE").is_none());
 
     // Enum from_code resolution
     assert_eq!(

@@ -1,4 +1,4 @@
-use seo_lens::{SeoError, SeoResult};
+use blacksparrow::{SeoError, SeoResult};
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -31,7 +31,7 @@ fn test_fixtures_exist_and_readable() {
 
 #[test]
 fn test_all_fixtures_parse_cleanly() {
-    use seo_lens::parser::parse_html;
+    use blacksparrow::parser::parse_html;
 
     let fixtures = [
         include_str!("fixtures/sample_page.html"),

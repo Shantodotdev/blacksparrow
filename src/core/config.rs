@@ -22,8 +22,8 @@ use crate::core::url::normalize_url;
 use crate::error::{SeoError, SeoResult};
 use serde::{Deserialize, Serialize};
 
-/// Default User-Agent string used by SEO Lens.
-pub const DEFAULT_USER_AGENT: &str = "SEOLens/1.0";
+/// Default User-Agent string used by the crawler (defined in branding module).
+pub use crate::core::branding::DEFAULT_USER_AGENT;
 
 /// Configuration parameters governing a crawl session.
 ///
@@ -33,7 +33,7 @@ pub const DEFAULT_USER_AGENT: &str = "SEOLens/1.0";
 /// # Examples
 ///
 /// ```rust
-/// use seo_lens::core::config::CrawlConfig;
+/// use blacksparrow::core::config::CrawlConfig;
 ///
 /// let mut config = CrawlConfig::new("https://example.com").unwrap();
 /// config.max_pages = 1000;
@@ -98,7 +98,7 @@ impl CrawlConfig {
     /// - `max_depth`: 5
     /// - `concurrency`: 10
     /// - `delay_ms`: 0 (dynamic AIMD politeness)
-    /// - `user_agent`: "SEOLens/1.0"
+    /// - `user_agent`: "BlackSparrow/1.0"
     /// - `respect_robots`: true
     /// - `max_query_params`: 2
     /// - `ignore_sorting_facets`: true
@@ -112,7 +112,7 @@ impl CrawlConfig {
     /// # Examples
     ///
     /// ```rust
-    /// use seo_lens::core::config::CrawlConfig;
+    /// use blacksparrow::core::config::CrawlConfig;
     ///
     /// let config = CrawlConfig::new("HTTPS://EXAMPLE.COM/").unwrap();
     /// assert_eq!(config.start_url, "https://example.com/");
@@ -160,7 +160,7 @@ impl CrawlConfig {
     /// # Examples
     ///
     /// ```rust
-    /// use seo_lens::core::config::CrawlConfig;
+    /// use blacksparrow::core::config::CrawlConfig;
     ///
     /// let mut config = CrawlConfig::new("https://example.com").unwrap();
     /// assert!(config.validate().is_ok());

@@ -16,7 +16,7 @@
 //! ## Examples
 //!
 //! ```rust
-//! use seo_lens::crawler::sitemap::{parse_sitemap, SitemapDocument};
+//! use blacksparrow::crawler::sitemap::{parse_sitemap, SitemapDocument};
 //!
 //! let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
 //! <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">

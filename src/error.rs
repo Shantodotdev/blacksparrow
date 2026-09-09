@@ -18,7 +18,7 @@ use thiserror::Error;
 /// # Examples
 ///
 /// ```rust
-/// use seo_lens::error::SeoError;
+/// use blacksparrow::error::SeoError;
 ///
 /// let err = SeoError::Url("Unsupported scheme: ftp".to_string());
 /// assert_eq!(err.to_string(), "URL parsing error: Unsupported scheme: ftp");

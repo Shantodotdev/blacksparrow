@@ -7,16 +7,16 @@
 //! 4. Sorting facet pruning and parameter threshold enforcement in crawler engine.
 //! 5. Canonical facet pruning defense against spider traps.
 
-use seo_lens::core::config::CrawlConfig;
-use seo_lens::core::models::{IssueCategory, RuleId, Severity};
-use seo_lens::core::url::{
+use blacksparrow::core::config::CrawlConfig;
+use blacksparrow::core::models::{IssueCategory, RuleId, Severity};
+use blacksparrow::core::url::{
     classify_parameter, count_content_facets, has_sorting_facets, normalize_url, QueryParamCategory,
 };
-use seo_lens::crawler::client::FetchResult;
-use seo_lens::crawler::engine::run_crawl;
-use seo_lens::crawler::priority::calculate_url_importance;
-use seo_lens::parser::streaming::parse_html;
-use seo_lens::rules::page::evaluate_page_rules;
+use blacksparrow::crawler::client::FetchResult;
+use blacksparrow::crawler::engine::run_crawl;
+use blacksparrow::crawler::priority::calculate_url_importance;
+use blacksparrow::parser::streaming::parse_html;
+use blacksparrow::rules::page::evaluate_page_rules;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 

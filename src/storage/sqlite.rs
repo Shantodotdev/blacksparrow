@@ -3,6 +3,10 @@
 //! Configures SQLite WAL mode, foreign keys, cache size, busy timeouts,
 //! and runs migrations from embedded SQL schema definitions.
 
+use crate::core::branding::{
+    DATA_DIR_NAME, DB_FILE_NAME, ENV_DB_PATH, LEGACY_DB_FILE_NAME, LEGACY_ENV_DB_PATH,
+    LEGACY_LOCAL_DB_DIR_NAME, LOCAL_DB_DIR_NAME,
+};
 use crate::error::{SeoError, SeoResult};
 use rusqlite::Connection;
 use std::path::{Path, PathBuf};
@@ -10,40 +14,49 @@ use std::path::{Path, PathBuf};
 /// Embedded authoritative SQLite DDL schema.
 pub const SCHEMA: &str = include_str!("schema.sql");
 
-/// Returns the local database path in the current working directory: `.seolens/seolens.db`.
+/// Returns the local database path in the current working directory: `.blacksparrow/blacksparrow.db` (or legacy `.seolens/seolens.db`).
 pub fn local_db_path() -> PathBuf {
-    PathBuf::from(".seolens").join("seolens.db")
+    let legacy = PathBuf::from(LEGACY_LOCAL_DB_DIR_NAME).join(LEGACY_DB_FILE_NAME);
+    if legacy.exists() {
+        return legacy;
+    }
+    PathBuf::from(LOCAL_DB_DIR_NAME).join(DB_FILE_NAME)
 }
 
 /// Returns the standard default path for the SQLite persistence database.
 ///
 /// Resolution precedence:
-/// 1. `SEOLENS_DB_PATH` environment variable (if set and non-empty).
-/// 2. Local `./.seolens/seolens.db` in current working directory if it already exists.
+/// 1. `BLACKSPARROW_DB_PATH` or legacy `SEOLENS_DB_PATH` environment variable.
+/// 2. Local `./.blacksparrow/blacksparrow.db` or legacy `./.seolens/seolens.db` if existing.
 /// 3. OS standard user data directory:
-///    - Linux: `$XDG_DATA_HOME/seolens/seolens.db` (defaults to `~/.local/share/seolens/seolens.db`)
-///    - macOS: `~/Library/Application Support/seolens/seolens.db`
-///    - Windows: `%LOCALAPPDATA%\seolens\seolens.db`
-/// 4. Fallback to `./.seolens/seolens.db` if the OS data directory cannot be determined.
+///    - Linux: `$XDG_DATA_HOME/blacksparrow/blacksparrow.db` (defaults to `~/.local/share/blacksparrow/blacksparrow.db`)
+///    - macOS: `~/Library/Application Support/blacksparrow/blacksparrow.db`
+///    - Windows: `%LOCALAPPDATA%\blacksparrow\blacksparrow.db`
+/// 4. Fallback to `./.blacksparrow/blacksparrow.db` if the OS data directory cannot be determined.
 pub fn default_db_path() -> PathBuf {
-    // 1. Environment variable override
-    if let Ok(env_path) = std::env::var("SEOLENS_DB_PATH") {
+    // 1. Environment variable override (check ENV_DB_PATH, then legacy LEGACY_ENV_DB_PATH)
+    if let Ok(env_path) = std::env::var(ENV_DB_PATH).or_else(|_| std::env::var(LEGACY_ENV_DB_PATH))
+    {
         let trimmed = env_path.trim();
         if !trimmed.is_empty() {
             return PathBuf::from(trimmed);
         }
     }
 
-    // 2. Existing local .seolens/seolens.db in current working directory
+    // 2. Existing local directory in current working directory
     let local = local_db_path();
     if local.exists() {
         return local;
     }
 
-    // 3. Standard modern OS user data directory (XDG on Linux, App Support on macOS, AppData on Windows)
+    // 3. Standard modern OS user data directory
     if let Some(mut data_dir) = dirs::data_dir() {
-        data_dir.push("seolens");
-        data_dir.push("seolens.db");
+        let legacy_path = data_dir.join("seolens").join(LEGACY_DB_FILE_NAME);
+        if legacy_path.exists() {
+            return legacy_path;
+        }
+        data_dir.push(DATA_DIR_NAME);
+        data_dir.push(DB_FILE_NAME);
         return data_dir;
     }
 
@@ -55,12 +68,12 @@ pub fn default_db_path() -> PathBuf {
 ///
 /// Precedence:
 /// 1. Explicit path (`--db-path <PATH>`) if provided.
-/// 2. `local` (`-L, --local`) flag if true: returns `./.seolens/seolens.db`.
+/// 2. `local` (`-L, --local`) flag if true: returns `./.blacksparrow/blacksparrow.db`.
 /// 3. Standard resolution via [`default_db_path`]:
-///    - `SEOLENS_DB_PATH` environment variable
-///    - Local `./.seolens/seolens.db` if it already exists
-///    - Standard OS user data directory (`~/.local/share/seolens/seolens.db` on Linux, etc.)
-///    - Fallback `./.seolens/seolens.db`
+///    - `BLACKSPARROW_DB_PATH` / `SEOLENS_DB_PATH` environment variable
+///    - Local `./.blacksparrow/blacksparrow.db` if it already exists
+///    - Standard OS user data directory (`~/.local/share/blacksparrow/blacksparrow.db` on Linux, etc.)
+///    - Fallback `./.blacksparrow/blacksparrow.db`
 pub fn resolve_db_path(explicit: Option<PathBuf>, local: bool) -> PathBuf {
     if let Some(p) = explicit {
         return p;

@@ -420,17 +420,21 @@ async fn tool_quick_page_check(args: Option<&Value>) -> SeoResult<CallToolResult
         _ => return Ok(CallToolResult::error("Missing required parameter 'url'")),
     };
 
-    let (parsed_page, fetch_result, issues) =
-        match inspect_url_with_options(raw_url, "SEOLensBot/1.0", Duration::from_secs(15), vec![])
-            .await
-        {
-            Ok(t) => t,
-            Err(e) => {
-                return Ok(CallToolResult::error(format!(
-                    "Failed to fetch '{raw_url}': {e}"
-                )))
-            }
-        };
+    let (parsed_page, fetch_result, issues) = match inspect_url_with_options(
+        raw_url,
+        crate::core::branding::MCP_BOT_USER_AGENT,
+        Duration::from_secs(15),
+        vec![],
+    )
+    .await
+    {
+        Ok(t) => t,
+        Err(e) => {
+            return Ok(CallToolResult::error(format!(
+                "Failed to fetch '{raw_url}': {e}"
+            )))
+        }
+    };
 
     let issues_json: Vec<Value> = issues
         .iter()
@@ -532,7 +536,12 @@ async fn tool_check_ai_readiness(args: Option<&Value>) -> SeoResult<CallToolResu
         _ => return Ok(CallToolResult::error("Missing required parameter 'url'")),
     };
 
-    let report = match audit_ai_readiness(raw_url, "SEOLensBot/1.0", Duration::from_secs(15)).await
+    let report = match audit_ai_readiness(
+        raw_url,
+        crate::core::branding::MCP_BOT_USER_AGENT,
+        Duration::from_secs(15),
+    )
+    .await
     {
         Ok(r) => r,
         Err(e) => {

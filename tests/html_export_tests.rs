@@ -6,13 +6,13 @@
 //! 3. Interactive components: live search bar, severity filter chips, issue accordions, pages table.
 //! 4. CLI report command integration (`--format html`).
 
-use hashbrown::HashMap;
-use seo_lens::core::models::{
+use blacksparrow::core::models::{
     DiscoveredLink, IssueCategory, IssueFinding, PageReport, RobotsFlags, RuleId, Severity,
 };
-use seo_lens::crawler::engine::CrawlResult;
-use seo_lens::graph::SiteGraph;
-use seo_lens::report::html::export_html_report;
+use blacksparrow::crawler::engine::CrawlResult;
+use blacksparrow::graph::SiteGraph;
+use blacksparrow::report::html::export_html_report;
+use hashbrown::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -41,14 +41,14 @@ fn create_test_crawl_result() -> CrawlResult {
     graph.add_edge(
         &url_home,
         &url_about,
-        seo_lens::graph::LinkEdgeType::InternalHyperlink,
+        blacksparrow::graph::LinkEdgeType::InternalHyperlink,
         false,
         "About Us",
     );
     graph.add_edge(
         &url_home,
         &url_broken,
-        seo_lens::graph::LinkEdgeType::InternalHyperlink,
+        blacksparrow::graph::LinkEdgeType::InternalHyperlink,
         false,
         "Broken Page",
     );
@@ -236,9 +236,9 @@ fn test_export_html_report_creates_standalone_offline_report() {
 
 #[tokio::test]
 async fn test_cli_report_command_generates_html_report() {
-    use seo_lens::cli::args::{Cli, Commands, ReportArgs};
-    use seo_lens::cli::commands::execute;
-    use seo_lens::storage::{CrawlSessionInit, Database};
+    use blacksparrow::cli::args::{Cli, Commands, ReportArgs};
+    use blacksparrow::cli::commands::execute;
+    use blacksparrow::storage::{CrawlSessionInit, Database};
 
     let temp_dir = unique_test_html_dir();
     let db_path = temp_dir.join("test.db");

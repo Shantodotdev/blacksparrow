@@ -30,7 +30,7 @@ use serde::{Deserialize, Serialize};
 /// # Examples
 ///
 /// ```rust
-/// use seo_lens::core::models::Severity;
+/// use blacksparrow::core::models::Severity;
 ///
 /// // Severities can be compared by urgency (lower value = higher urgency)
 /// assert!(Severity::Critical < Severity::Alert);
@@ -91,7 +91,7 @@ impl std::fmt::Display for Severity {
 /// # Examples
 ///
 /// ```rust
-/// use seo_lens::core::models::IssueCategory;
+/// use blacksparrow::core::models::IssueCategory;
 ///
 /// let category = IssueCategory::Indexability;
 /// assert_eq!(format!("{category:?}"), "Indexability");
@@ -423,7 +423,7 @@ bitflags::bitflags! {
     /// # Examples
     ///
     /// ```rust
-    /// use seo_lens::core::models::RobotsFlags;
+    /// use blacksparrow::core::models::RobotsFlags;
     ///
     /// let mut flags = RobotsFlags::NONE;
     /// flags.insert(RobotsFlags::NOINDEX);

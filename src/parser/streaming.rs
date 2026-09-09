@@ -89,7 +89,7 @@ struct PendingLink {
 /// # Examples
 ///
 /// ```rust
-/// use seo_lens::parser::parse_html;
+/// use blacksparrow::parser::parse_html;
 ///
 /// let html = r#"
 ///     <!DOCTYPE html>

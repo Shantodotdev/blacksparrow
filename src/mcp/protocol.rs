@@ -68,7 +68,7 @@ pub async fn handle_jsonrpc_request(raw_json: &str, ctx: &McpContext) -> String 
                         "resources": {}
                     },
                     "serverInfo": {
-                        "name": "seolens",
+                        "name": crate::core::branding::MCP_SERVER_NAME,
                         "version": server_version
                     }
                 }),

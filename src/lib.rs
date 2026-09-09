@@ -1,11 +1,11 @@
-//! # SEO Lens
+//! # Black Sparrow
 //!
 //! High-performance, local-first website crawler, technical SEO audit engine,
 //! and AI-native auditor written in Rust.
 //!
 //! ## Repository Architecture
 //!
-//! SEO Lens is designed as an embeddable engine library (`seo_lens`) and a headless CLI (`seolens`).
+//! Black Sparrow is designed as an embeddable engine library (`blacksparrow`) and a headless CLI (`blacksparrow`).
 //!
 //! ### Core Engine Modules
 //!
@@ -31,14 +31,13 @@
 //!   - [`rules::page`]: Single-page in-flight rules engine ([`rules::evaluate_page`]).
 //!   - [`rules::graph`]: Multi-page post-crawl graph rules engine ([`rules::evaluate_graph`]).
 //! - [`error`]: Zero-panic error handling taxonomy ([`SeoError`], [`SeoResult`]).
-
 //!
 //! ## Quickstart Example
 //!
 //! ```rust
-//! use seo_lens::core::url::normalize_url;
-//! use seo_lens::parser::parse_html;
-//! use seo_lens::core::models::RobotsFlags;
+//! use blacksparrow::core::url::normalize_url;
+//! use blacksparrow::parser::parse_html;
+//! use blacksparrow::core::models::RobotsFlags;
 //!
 //! // 1. Normalize a messy incoming URL
 //! let raw_url = "HTTPS://EXAMPLE.COM/blog//article?utm_source=twitter&b=2&a=1#section";

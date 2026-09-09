@@ -12,11 +12,11 @@
 //!    - `WARN_ORG_MISSING_LOCAL_SCHEMA`
 //! 7. Live internet verification.
 
-use seo_lens::core::models::{PageArchetype, RuleId};
-use seo_lens::crawler::client::FetchResult;
-use seo_lens::parser::intent::{classify_intent, CdpIntentSignals};
-use seo_lens::parser::parse_html;
-use seo_lens::rules::evaluate_page;
+use blacksparrow::core::models::{PageArchetype, RuleId};
+use blacksparrow::crawler::client::FetchResult;
+use blacksparrow::parser::intent::{classify_intent, CdpIntentSignals};
+use blacksparrow::parser::parse_html;
+use blacksparrow::rules::evaluate_page;
 
 #[test]
 fn test_archetype_enum_and_display() {

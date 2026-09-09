@@ -38,7 +38,7 @@
 //! ## Examples
 //!
 //! ```rust
-//! use seo_lens::core::url::{is_internal, normalize_url, resolve_relative, url_hash};
+//! use blacksparrow::core::url::{is_internal, normalize_url, resolve_relative, url_hash};
 //!
 //! // Example 1: Normalizing messy marketing URLs into a canonical identifier
 //! let dirty_url = "HTTPS://EXAMPLE.COM:443/blog//post?utm_source=fb&b=2&a=1#comments";
@@ -112,7 +112,7 @@ pub const SORTING_DISPLAY_PARAMS: &[&str] = &[
 ///
 /// # Examples
 /// ```
-/// use seo_lens::core::url::normalize_url;
+/// use blacksparrow::core::url::normalize_url;
 ///
 /// // Strips tracking parameters, sorts queries, collapses slashes, and strips fragments
 /// let raw = "HTTPS://Example.COM:443/products//shoes/?utm_source=ad&color=red&size=10#reviews";
@@ -230,7 +230,7 @@ pub fn normalize_url(raw: &str) -> SeoResult<String> {
 ///
 /// # Examples
 /// ```
-/// use seo_lens::core::url::resolve_relative;
+/// use blacksparrow::core::url::resolve_relative;
 ///
 /// let base = "https://example.com/articles/2026/";
 ///
@@ -268,7 +268,7 @@ pub fn resolve_relative(base: &str, relative: &str) -> SeoResult<String> {
 ///
 /// # Examples
 /// ```
-/// use seo_lens::core::url::{normalize_url, url_hash};
+/// use blacksparrow::core::url::{normalize_url, url_hash};
 ///
 /// let url_a = normalize_url("https://example.com/page?b=2&a=1").unwrap();
 /// let url_b = normalize_url("https://example.com/page?a=1&b=2").unwrap();
@@ -291,7 +291,7 @@ pub fn url_hash(normalized_url: &str) -> u64 {
 ///
 /// # Examples
 /// ```
-/// use seo_lens::core::url::is_internal;
+/// use blacksparrow::core::url::is_internal;
 ///
 /// let base = "https://example.com/home";
 ///

@@ -1,13 +1,13 @@
 [package]
-name = "seo-lens-desktop"
+name = "blacksparrow-desktop"
 version = "0.1.0-rc.1"
 edition = "2021"
-authors = ["SEO Lens Team"]
-description = "Native cross-platform desktop shell for SEO Lens"
+authors = ["Black Sparrow Team"]
+description = "Native cross-platform desktop shell for Black Sparrow"
 license = "MIT OR Apache-2.0"
 
 [package.metadata.dist]
 dist = false
 
 [dependencies]
-seo-lens = { path = ".." }
+blacksparrow = { path = ".." }

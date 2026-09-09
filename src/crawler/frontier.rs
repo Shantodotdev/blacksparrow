@@ -27,7 +27,7 @@
 //! ## Examples
 //!
 //! ```rust
-//! use seo_lens::crawler::frontier::Frontier;
+//! use blacksparrow::crawler::frontier::Frontier;
 //!
 //! let mut frontier = Frontier::new(500, 3);
 //!
@@ -126,7 +126,7 @@ impl Frontier {
     /// # Examples
     ///
     /// ```rust
-    /// use seo_lens::crawler::frontier::Frontier;
+    /// use blacksparrow::crawler::frontier::Frontier;
     ///
     /// let frontier = Frontier::new(1000, 5);
     /// assert_eq!(frontier.len(), 0);
@@ -174,7 +174,7 @@ impl Frontier {
     /// # Examples
     ///
     /// ```rust
-    /// use seo_lens::crawler::frontier::Frontier;
+    /// use blacksparrow::crawler::frontier::Frontier;
     ///
     /// let mut frontier = Frontier::new(2, 1);
     /// assert!(frontier.push("https://example.com/page1", 1, None).unwrap());

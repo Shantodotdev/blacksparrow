@@ -4,16 +4,16 @@
 //! enriched flags (`--include`, `--exclude`, `--header`, `--quiet`, `--format`),
 //! database cascade deletions, and AI readiness auditing.
 
-use clap::Parser;
-use seo_lens::cli::args::{Cli, Commands};
-use seo_lens::core::config::CrawlConfig;
-use seo_lens::core::models::{
+use blacksparrow::cli::args::{Cli, Commands};
+use blacksparrow::core::config::CrawlConfig;
+use blacksparrow::core::models::{
     IssueCategory, IssueFinding, PageReport, RobotsFlags, RuleId, Severity,
 };
-use seo_lens::crawler::ai_check::{audit_ai_readiness, AiSearchRisk};
-use seo_lens::crawler::engine::run_crawl;
-use seo_lens::rules::page::schema_val::validate_raw_schema;
-use seo_lens::storage::{CrawlSessionInit, Database, IssueFilterCriteria};
+use blacksparrow::crawler::ai_check::{audit_ai_readiness, AiSearchRisk};
+use blacksparrow::crawler::engine::run_crawl;
+use blacksparrow::rules::page::schema_val::validate_raw_schema;
+use blacksparrow::storage::{CrawlSessionInit, Database, IssueFilterCriteria};
+use clap::Parser;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
@@ -33,7 +33,7 @@ fn mock_page_report(crawl_id: &str, url: &str, status_code: u16) -> PageReport {
     PageReport {
         crawl_id: crawl_id.into(),
         url: url.to_string(),
-        url_hash: seo_lens::core::url::url_hash(url),
+        url_hash: blacksparrow::core::url::url_hash(url),
         final_url: Some(url.to_string()),
         status_code,
         content_type: "text/html; charset=utf-8".into(),

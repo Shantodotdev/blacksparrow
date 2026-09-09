@@ -8,16 +8,16 @@
 //! - Link and asset counts (internal, external, images, missing alt).
 //! - Single-page audit defect reporting with code, title, and remedy.
 
-use compact_str::CompactString;
-use reqwest::header::HeaderMap;
-use seo_lens::core::models::{
+use blacksparrow::core::models::{
     DiscoveredLink, ImageResource, IssueCategory, IssueFinding, RobotsFlags, RuleId, SchemaRecord,
     Severity,
 };
-use seo_lens::crawler::client::FetchResult;
-use seo_lens::crawler::inspector::inspect_url;
-use seo_lens::parser::ParsedPage;
-use seo_lens::report::inspector::format_page_inspection;
+use blacksparrow::crawler::client::FetchResult;
+use blacksparrow::crawler::inspector::inspect_url;
+use blacksparrow::parser::ParsedPage;
+use blacksparrow::report::inspector::format_page_inspection;
+use compact_str::CompactString;
+use reqwest::header::HeaderMap;
 use std::time::Duration;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};

@@ -3,11 +3,11 @@
 //! Validates SQLite database initialization, WAL mode enforcement, schema migrations,
 //! real-time asynchronous batch writing, transactional flushes, and historical session queries.
 
-use seo_lens::core::models::{
+use blacksparrow::core::models::{
     DiscoveredLink, HreflangTag, ImageResource, IssueCategory, IssueFinding, PageReport,
     RobotsFlags, RuleId, SchemaRecord, Severity,
 };
-use seo_lens::storage::{CrawlSessionInit, Database};
+use blacksparrow::storage::{CrawlSessionInit, Database};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -271,8 +271,8 @@ async fn test_interrupted_session_preservation() {
 
 #[tokio::test]
 async fn test_crawl_with_live_sqlite_persistence_and_cancellation() {
-    use seo_lens::core::config::CrawlConfig;
-    use seo_lens::crawler::run_crawl_with_options;
+    use blacksparrow::core::config::CrawlConfig;
+    use blacksparrow::crawler::run_crawl_with_options;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -329,7 +329,7 @@ async fn test_crawl_with_live_sqlite_persistence_and_cancellation() {
     let cancel_tx = Arc::new(std::sync::Mutex::new(Some(cancel_tx)));
 
     // Cancel crawl as soon as 2 pages have been crawled
-    let progress_cb = Arc::new(move |update: seo_lens::crawler::ProgressUpdate| {
+    let progress_cb = Arc::new(move |update: blacksparrow::crawler::ProgressUpdate| {
         if update.crawled_pages >= 2 {
             if let Ok(mut lock) = cancel_tx.lock() {
                 if let Some(tx) = lock.take() {
@@ -371,8 +371,8 @@ async fn test_crawl_with_live_sqlite_persistence_and_cancellation() {
 
 #[tokio::test]
 async fn test_cli_commands_list_and_report() {
-    use seo_lens::cli::args::{Cli, Commands, ListArgs, ReportArgs};
-    use seo_lens::cli::commands::execute;
+    use blacksparrow::cli::args::{Cli, Commands, ListArgs, ReportArgs};
+    use blacksparrow::cli::commands::execute;
 
     let db_path = unique_test_db_path();
     let db = Database::open(&db_path).expect("DB open");
@@ -444,11 +444,14 @@ async fn test_cli_commands_list_and_report() {
 
 #[test]
 fn test_database_path_resolution() {
-    use seo_lens::storage::{default_db_path, local_db_path, resolve_db_path};
+    use blacksparrow::storage::{default_db_path, local_db_path, resolve_db_path};
 
-    // 1. local_db_path returns .seolens/seolens.db
+    // 1. local_db_path returns .blacksparrow/blacksparrow.db (or legacy .seolens/seolens.db)
     let local = local_db_path();
-    assert_eq!(local, PathBuf::from(".seolens").join("seolens.db"));
+    assert!(
+        local == PathBuf::from(".blacksparrow").join("blacksparrow.db")
+            || local == PathBuf::from(".seolens").join("seolens.db")
+    );
 
     // 2. Explicit path takes highest precedence
     let explicit = PathBuf::from("/custom/db/path.sqlite");
@@ -458,26 +461,27 @@ fn test_database_path_resolution() {
     // 3. Local flag forces local_db_path when no explicit path given
     assert_eq!(resolve_db_path(None, true), local);
 
-    // 4. SEOLENS_DB_PATH environment variable override
-    let orig_env = std::env::var("SEOLENS_DB_PATH").ok();
-    let temp_env_path = std::env::temp_dir().join("test_env_seolens.db");
-    std::env::set_var("SEOLENS_DB_PATH", temp_env_path.to_str().unwrap());
+    // 4. BLACKSPARROW_DB_PATH environment variable override
+    let orig_env = std::env::var("BLACKSPARROW_DB_PATH").ok();
+    let temp_env_path = std::env::temp_dir().join("test_env_blacksparrow.db");
+    std::env::set_var("BLACKSPARROW_DB_PATH", temp_env_path.to_str().unwrap());
 
     assert_eq!(default_db_path(), temp_env_path);
     assert_eq!(resolve_db_path(None, false), temp_env_path);
 
     // Restore or unset env var
     match orig_env {
-        Some(val) => std::env::set_var("SEOLENS_DB_PATH", val),
-        None => std::env::remove_var("SEOLENS_DB_PATH"),
+        Some(val) => std::env::set_var("BLACKSPARROW_DB_PATH", val),
+        None => std::env::remove_var("BLACKSPARROW_DB_PATH"),
     }
 
     // 5. Without env var, standard resolution returns OS data dir (if it exists)
-    if std::env::var("SEOLENS_DB_PATH").is_err() && !local.exists() {
+    if std::env::var("BLACKSPARROW_DB_PATH").is_err() && !local.exists() {
         if let Some(expected_os_dir) = dirs::data_dir() {
-            let expected = expected_os_dir.join("seolens").join("seolens.db");
-            assert_eq!(default_db_path(), expected);
-            assert_eq!(resolve_db_path(None, false), expected);
+            let expected_new = expected_os_dir.join("blacksparrow").join("blacksparrow.db");
+            let expected_legacy = expected_os_dir.join("seolens").join("seolens.db");
+            let actual = default_db_path();
+            assert!(actual == expected_new || actual == expected_legacy);
         }
     }
 }

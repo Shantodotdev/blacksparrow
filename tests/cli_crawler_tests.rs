@@ -3,12 +3,12 @@
 //! Validates concurrent multi-page BFS crawl loops, depth limits, robots exclusion,
 //! site graph generation, health score calculation, and file export formatting.
 
-use seo_lens::core::config::CrawlConfig;
-use seo_lens::core::models::RuleId;
-use seo_lens::crawler::engine::run_crawl;
-use seo_lens::report::json::export_json_report;
-use seo_lens::report::markdown::export_markdown_report;
-use seo_lens::report::score::calculate_health_score;
+use blacksparrow::core::config::CrawlConfig;
+use blacksparrow::core::models::RuleId;
+use blacksparrow::crawler::engine::run_crawl;
+use blacksparrow::report::json::export_json_report;
+use blacksparrow::report::markdown::export_markdown_report;
+use blacksparrow::report::score::calculate_health_score;
 use std::fs;
 
 use wiremock::matchers::{method, path};
@@ -234,8 +234,8 @@ async fn test_multi_page_site_graph_and_pagerank() {
 
 #[test]
 fn test_health_score_calculation() {
+    use blacksparrow::core::models::{IssueCategory, IssueFinding, Severity};
     use compact_str::CompactString;
-    use seo_lens::core::models::{IssueCategory, IssueFinding, Severity};
 
     // Clean crawl with 10 pages and 0 issues = 100/100
     let clean_score = calculate_health_score(10, &[]);
@@ -268,10 +268,10 @@ fn test_health_score_calculation() {
 
 #[test]
 fn test_markdown_and_json_report_exporters() {
+    use blacksparrow::core::models::{PageReport, RobotsFlags};
+    use blacksparrow::crawler::engine::CrawlResult;
+    use blacksparrow::graph::SiteGraph;
     use compact_str::CompactString;
-    use seo_lens::core::models::{PageReport, RobotsFlags};
-    use seo_lens::crawler::engine::CrawlResult;
-    use seo_lens::graph::SiteGraph;
     use std::time::Duration;
 
     let temp_dir = std::env::temp_dir().join(format!("seolens_test_{}", std::process::id()));
@@ -446,10 +446,10 @@ async fn test_crawl_ignores_non_html_assets_and_content_type() {
 
 #[test]
 fn test_json_report_export_compact_link_metrics() {
+    use blacksparrow::core::models::{DiscoveredLink, PageReport};
+    use blacksparrow::crawler::engine::CrawlResult;
+    use blacksparrow::graph::SiteGraph;
     use hashbrown::HashMap;
-    use seo_lens::core::models::{DiscoveredLink, PageReport};
-    use seo_lens::crawler::engine::CrawlResult;
-    use seo_lens::graph::SiteGraph;
     use std::time::Duration;
 
     let temp_dir = std::env::temp_dir().join(format!(

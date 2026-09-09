@@ -10,12 +10,12 @@
 //! 7. Category 7: WARN_SECURITY_MISSING_REFERRER_POLICY, WARN_SECURITY_TARGET_BLANK_NO_OPENER, WARN_SECURITY_INSECURE_FORM
 //! 8. Category 8: WARN_PERF_LARGE_HTML_PAYLOAD, ERR_PERF_EXCESSIVE_HTML_PAYLOAD, WARN_IMG_ALT_TOO_LONG
 
+use blacksparrow::core::models::{DiscoveredLink, ImageResource, RobotsFlags, RuleId};
+use blacksparrow::crawler::client::FetchResult;
+use blacksparrow::parser::{parse_html, ParsedPage};
+use blacksparrow::rules::evaluate_page;
 use compact_str::CompactString;
 use reqwest::header::{HeaderMap, HeaderValue};
-use seo_lens::core::models::{DiscoveredLink, ImageResource, RobotsFlags, RuleId};
-use seo_lens::crawler::client::FetchResult;
-use seo_lens::parser::{parse_html, ParsedPage};
-use seo_lens::rules::evaluate_page;
 
 fn make_test_fetch(
     url: &str,

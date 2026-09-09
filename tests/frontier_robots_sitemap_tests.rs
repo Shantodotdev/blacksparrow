@@ -5,11 +5,11 @@
 //! - Strict RFC 9309 robots.txt compliance (longest match, precedence, wildcards, crawl-delay).
 //! - Zero-copy streaming XML sitemap parser with alternates and gzip decompression.
 
+use blacksparrow::crawler::frontier::Frontier;
+use blacksparrow::crawler::robots::RobotsTxt;
+use blacksparrow::crawler::sitemap::{parse_sitemap, SitemapDocument};
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use seo_lens::crawler::frontier::Frontier;
-use seo_lens::crawler::robots::RobotsTxt;
-use seo_lens::crawler::sitemap::{parse_sitemap, SitemapDocument};
 use std::io::Write;
 use std::time::Duration;
 
