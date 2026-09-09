@@ -60,7 +60,7 @@
 
     <Product
         Id='*'
-        Name='seo-lens'
+        Name='blacksparrow'
         UpgradeCode='F61D4D0E-5430-4175-BB7B-BE311E3956C9'
         Manufacturer='KR Shanto'
         Language='1033'
@@ -83,11 +83,11 @@
             DowngradeErrorMessage='A newer version of [ProductName] is already installed. Setup will now exit.'/>
 
         <Media Id='1' Cabinet='media1.cab' EmbedCab='yes' DiskPrompt='CD-ROM #1'/>
-        <Property Id='DiskPrompt' Value='seo-lens Installation'/>
+        <Property Id='DiskPrompt' Value='Black Sparrow Installation'/>
 
         <Directory Id='TARGETDIR' Name='SourceDir'>
             <Directory Id='$(var.PlatformProgramFilesFolder)' Name='PFiles'>
-                <Directory Id='APPLICATIONFOLDER' Name='seo-lens'>
+                <Directory Id='APPLICATIONFOLDER' Name='Black Sparrow'>
                     
                     <!--
                       Enabling the license sidecar file in the installer is a four step process:
@@ -123,9 +123,9 @@
                         <Component Id='binary0' Guid='*'>
                             <File
                                 Id='exe0'
-                                Name='seolens.exe'
+                                Name='blacksparrow.exe'
                                 DiskId='1'
-                                Source='$(var.CargoTargetBinDir)\seolens.exe'
+                                Source='$(var.CargoTargetBinDir)\blacksparrow.exe'
                                 KeyPath='yes'/>
                         </Component>
                     </Directory>
@@ -173,7 +173,7 @@
         <!--<Icon Id='ProductICO' SourceFile='wix\Product.ico'/>-->
         <!--<Property Id='ARPPRODUCTICON' Value='ProductICO' />-->
 
-        <Property Id='ARPHELPLINK' Value='https://github.com/Shantodotdev/seo-lens'/>
+        <Property Id='ARPHELPLINK' Value='https://github.com/Shantodotdev/blacksparrow'/>
         
         <UI>
             <UIRef Id='WixUI_FeatureTree'/>

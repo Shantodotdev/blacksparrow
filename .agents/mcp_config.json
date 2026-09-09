@@ -1,7 +1,7 @@
 {
   "mcpServers": {
-    "seolens": {
-      "command": "seolens",
+    "blacksparrow": {
+      "command": "blacksparrow",
       "args": [
         "mcp"
       ]

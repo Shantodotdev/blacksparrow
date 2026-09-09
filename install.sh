@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# SEO LENS // OFFICIAL STANDALONE INSTALLER PIPELINE
+# BLACK SPARROW // OFFICIAL STANDALONE INSTALLER PIPELINE
 # High-Performance Website Crawler & AI-Native Technical SEO Engine in Rust
-# Repository: https://github.com/Shantodotdev/seo-lens
+# Repository: https://github.com/Shantodotdev/blacksparrow
 # ==============================================================================
 
 set -euo pipefail
 
 # ------------------------------------------------------------------------------
-# 1. Terminal Styling & Exact 256-Color Cyberpunk Palette (matches terminal.rs)
+# 1. Terminal Styling & Exact 256-Color Pink/Maroon Palette (matches terminal.rs)
 # ------------------------------------------------------------------------------
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
-  C_CYAN="\033[38;5;51m"
+  C_PINK="\033[38;5;198m"
+  C_MAROON="\033[38;5;161m"
+  C_CYAN="$C_PINK"
   C_GREEN="\033[38;5;48m"
   C_YELLOW="\033[38;5;220m"
   C_RED="\033[38;5;196m"
@@ -20,6 +22,8 @@ if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
   C_BOLD="\033[1m"
   C_RESET="\033[0m"
 else
+  C_PINK=""
+  C_MAROON=""
   C_CYAN=""
   C_GREEN=""
   C_YELLOW=""
@@ -30,7 +34,7 @@ else
   C_RESET=""
 fi
 
-REPO="Shantodotdev/seo-lens"
+REPO="Shantodotdev/blacksparrow"
 DEFAULT_TAG="v0.1.0-rc.1"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 VERSION="${VERSION:-$DEFAULT_TAG}"
@@ -44,16 +48,16 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 print_banner() {
-  printf "\n%b%b" "$C_BOLD" "$C_CYAN"
+  printf "\n%b%b" "$C_BOLD" "$C_PINK"
   cat << 'EOF'
-  ███████╗███████╗ ██████╗     ██╗     ███████╗███╗   ██╗███████╗
-  ██╔════╝██╔════╝██╔═══██╗    ██║     ██╔════╝████╗  ██║██╔════╝
-  ███████╗█████╗  ██║   ██║    ██║     █████╗  ██╔██╗ ██║███████╗
-  ╚════██║██╔══╝  ██║   ██║    ██║     ██╔══╝  ██║╚██╗██║╚════██║
-  ███████║███████╗╚██████╔╝    ███████╗███████╗██║ ╚████║███████║
-  ╚══════╝╚══════╝ ╚═════╝     ╚══════╝╚══════╝╚═╝  ╚═══╝╚══════╝
+  ███████╗██████╗  █████╗ ██████╗ ██████╗  ██████╗ ██╗    ██╗
+  ██╔════╝██╔══██╗██╔══██╗██╔══██╗██╔══██╗██╔═══██╗██║    ██║
+  ███████╗██████╔╝███████║██████╔╝██████╔╝██║   ██║██║ █╗ ██║
+  ╚════██║██╔═══╝ ██╔══██║██╔══██╗██╔══██╗██║   ██║██║███╗██║
+  ███████║██║     ██║  ██║██║  ██║██║  ██║╚██████╔╝╚███╔███╔╝
+  ╚══════╝╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝  ╚══╝╚══╝ 
 EOF
-  printf "%b\n" "$C_RESET"
+  printf "%b  %b%bB L A C K   S P A R R O W%b\n\n" "$C_RESET" "$C_BOLD" "$C_MAROON" "$C_RESET"
 }
 
 # Matches exactly `format_section_header` in src/report/terminal.rs
@@ -62,9 +66,9 @@ print_header() {
   local pad=$((${#title} + 4))
   local border=$(printf '─%.0s' $(seq 1 "$pad"))
 
-  printf "  %b%b┌%s┐%b\n" "$C_BOLD" "$C_CYAN" "$border" "$C_RESET"
-  printf "  %b%b│%b  %b%b%s%b  %b%b│%b\n" "$C_BOLD" "$C_CYAN" "$C_RESET" "$C_BOLD" "$C_WHITE" "$title" "$C_RESET" "$C_BOLD" "$C_CYAN" "$C_RESET"
-  printf "  %b%b└%s┘%b\n" "$C_BOLD" "$C_CYAN" "$border" "$C_RESET"
+  printf "  %b%b┌%s┐%b\n" "$C_BOLD" "$C_MAROON" "$border" "$C_RESET"
+  printf "  %b%b│%b  %b%b%s%b  %b%b│%b\n" "$C_BOLD" "$C_MAROON" "$C_RESET" "$C_BOLD" "$C_WHITE" "$title" "$C_RESET" "$C_BOLD" "$C_MAROON" "$C_RESET"
+  printf "  %b%b└%s┘%b\n" "$C_BOLD" "$C_MAROON" "$border" "$C_RESET"
 }
 
 print_step() {
@@ -147,12 +151,12 @@ main() {
   detect_target
 
   print_banner
-  print_header "SEO LENS // NATIVE INSTALLER PIPELINE"
+  print_header "BLACK SPARROW // NATIVE INSTALLER PIPELINE"
 
   printf "  %b├─%b Platform       : %b%s (%s)%b\n" "$C_CYAN" "$C_RESET" "$C_BOLD" "$(uname -s)" "$(uname -m)" "$C_RESET"
   printf "  %b├─%b Target Triple  : %b%s%b\n" "$C_CYAN" "$C_RESET" "$C_DIM" "$TARGET" "$C_RESET"
   printf "  %b├─%b Target Version : %b%s%b\n" "$C_CYAN" "$C_RESET" "$C_GREEN" "$VERSION" "$C_RESET"
-  printf "  %b└─%b Destination    : %b%s/seolens%b\n\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$INSTALL_DIR" "$C_RESET"
+  printf "  %b└─%b Destination    : %b%s/blacksparrow%b\n\n" "$C_CYAN" "$C_RESET" "$C_CYAN" "$INSTALL_DIR" "$C_RESET"
 
   # Dependencies check
   if ! command -v curl >/dev/null 2>&1; then
@@ -162,19 +166,26 @@ main() {
     print_error "'tar' is required but not installed."
   fi
 
-  local tarball="seo-lens-${TARGET}.tar.xz"
+  local tarball="blacksparrow-${TARGET}.tar.xz"
   local url="https://github.com/${REPO}/releases/download/${VERSION}/${tarball}"
   local checksum_url="${url}.sha256"
 
-  TMP_DIR="$(mktemp -d 2>/dev/null || mktemp -d -t 'seolens')"
+  TMP_DIR="$(mktemp -d 2>/dev/null || mktemp -d -t 'blacksparrow')"
 
   print_header "DOWNLOAD & ARTIFACT EXTRACTION"
   print_step "•" "Connecting to GitHub Releases..."
 
-  if ! curl -fsSL "$url" -o "${TMP_DIR}/${tarball}"; then
-    print_error "Failed to download $url. Check release tag or network connection."
+  # Download tarball (attempt blacksparrow, fallback to seo-lens for legacy tags)
+  if ! curl -fsSL "$url" -o "${TMP_DIR}/${tarball}" 2>/dev/null; then
+    local legacy_tarball="seo-lens-${TARGET}.tar.xz"
+    local legacy_url="https://github.com/${REPO}/releases/download/${VERSION}/${legacy_tarball}"
+    if curl -fsSL "$legacy_url" -o "${TMP_DIR}/${tarball}"; then
+      checksum_url="${legacy_url}.sha256"
+    else
+      print_error "Failed to download $url or $legacy_url. Check release tag or network."
+    fi
   fi
-  print_success_step "Downloaded ${tarball}"
+  print_success_step "Downloaded release payload"
 
   # Verify SHA-256 if available
   if curl -fsSL "$checksum_url" -o "${TMP_DIR}/${tarball}.sha256" 2>/dev/null; then
@@ -200,13 +211,13 @@ main() {
   print_step "•" "Extracting executable payload..."
   tar -xf "${TMP_DIR}/${tarball}" -C "$TMP_DIR"
 
-  local bin_source="${TMP_DIR}/seolens"
+  local bin_source="${TMP_DIR}/blacksparrow"
   if [ ! -f "$bin_source" ]; then
-    bin_source="$(find "$TMP_DIR" -type f -name seolens | head -n 1)"
+    bin_source="$(find "$TMP_DIR" -type f \( -name blacksparrow -o -name seolens \) | head -n 1)"
   fi
 
   if [ -z "$bin_source" ] || [ ! -f "$bin_source" ]; then
-    print_error "Could not find 'seolens' executable in unpacked archive."
+    print_error "Could not find 'blacksparrow' executable in unpacked archive."
   fi
 
   # Require sudo if writing to system directory without permissions
@@ -222,8 +233,8 @@ main() {
     mkdir -p "$INSTALL_DIR"
   fi
 
-  # Install binary
-  local dest_bin="${INSTALL_DIR}/seolens"
+  # Install primary binary: blacksparrow
+  local dest_bin="${INSTALL_DIR}/blacksparrow"
   if [ -n "$use_sudo" ]; then
     $use_sudo cp -f "$bin_source" "$dest_bin"
     $use_sudo chmod 755 "$dest_bin"
@@ -232,7 +243,16 @@ main() {
     chmod 755 "$dest_bin"
   fi
 
-  print_success_step "Installed seolens binary to ${dest_bin}"
+  print_success_step "Installed primary binary: ${dest_bin}"
+
+  # Create terminal alias symlink: sparrow -> blacksparrow (Option 1)
+  local dest_alias="${INSTALL_DIR}/sparrow"
+  if [ -n "$use_sudo" ]; then
+    $use_sudo ln -sf "$dest_bin" "$dest_alias"
+  else
+    ln -sf "$dest_bin" "$dest_alias"
+  fi
+  print_success_step "Created terminal alias: ${dest_alias} -> ${dest_bin}"
 
   # Verification test
   local version_output
@@ -264,11 +284,11 @@ main() {
     print_success_step "'${INSTALL_DIR}' is already in your active PATH."
     printf "\n"
     print_header "INSTALLATION COMPLETE // READY TO RUN"
-    printf "  %bRun SEO Lens from anywhere:%b\n\n" "$C_GREEN$C_BOLD" "$C_RESET"
-    printf "    %bseolens --help%b\n" "$C_CYAN$C_BOLD" "$C_RESET"
-    printf "    %bseolens inspect https://example.com%b\n" "$C_CYAN" "$C_RESET"
-    printf "    %bseolens audit https://example.com --format html%b\n" "$C_CYAN" "$C_RESET"
-    printf "    %bseolens mcp%b\n\n" "$C_CYAN" "$C_RESET"
+    printf "  %bRun Black Sparrow from anywhere:%b\n\n" "$C_GREEN$C_BOLD" "$C_RESET"
+    printf "    %bblacksparrow --help%b  %b(or: sparrow --help)%b\n" "$C_CYAN$C_BOLD" "$C_RESET" "$C_DIM" "$C_RESET"
+    printf "    %bsparrow inspect https://example.com%b\n" "$C_CYAN" "$C_RESET"
+    printf "    %bblacksparrow audit https://example.com --format html%b\n" "$C_CYAN" "$C_RESET"
+    printf "    %bblacksparrow mcp%b\n\n" "$C_CYAN" "$C_RESET"
   else
     print_warn_step "'${INSTALL_DIR}' is not yet in your current \$PATH."
 
@@ -308,7 +328,7 @@ main() {
     local added=0
     if [ -n "$rc_file" ]; then
       if [ ! -f "$rc_file" ] || ! grep -qF "$INSTALL_DIR" "$rc_file"; then
-        printf "\n# Added by SEO Lens installer\n%s\n" "$export_line" >> "$rc_file"
+        printf "\n# Added by Black Sparrow installer\n%s\n" "$export_line" >> "$rc_file"
         print_success_step "Automatically configured ${rc_file}"
         added=1
       else
@@ -318,7 +338,7 @@ main() {
 
     printf "\n"
     print_header "ACTION REQUIRED // ACTIVATE YOUR SHELL"
-    printf "  %bTo run 'seolens' in your current terminal session, run:%b\n\n" "$C_BOLD" "$C_RESET"
+    printf "  %bTo run 'blacksparrow' (or 'sparrow') in your current terminal session, run:%b\n\n" "$C_BOLD" "$C_RESET"
     if [ "$added" -eq 1 ] && [ -n "$rc_file" ]; then
       printf "    %bsource %s%b\n\n" "$C_CYAN$C_BOLD" "$rc_file" "$C_RESET"
     else
