@@ -7,7 +7,7 @@ resolver = "2"
 
 [package]
 name = "blacksparrow"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 edition = "2021"
 authors = ["KR Shanto"]
 description = "High-performance, local-first website crawler and technical SEO audit engine in Rust"

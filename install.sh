@@ -35,7 +35,7 @@ else
 fi
 
 REPO="Shantodotdev/blacksparrow"
-DEFAULT_TAG="v0.1.0-rc.1"
+DEFAULT_TAG="v0.1.0-rc.2"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 VERSION="${VERSION:-$DEFAULT_TAG}"
 TMP_DIR=""

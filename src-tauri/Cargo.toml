@@ -1,6 +1,6 @@
 [package]
 name = "blacksparrow-desktop"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 edition = "2021"
 authors = ["Black Sparrow Team"]
 description = "Native cross-platform desktop shell for Black Sparrow"
