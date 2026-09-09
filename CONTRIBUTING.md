@@ -1,6 +1,6 @@
-# Contributing to SEO Lens
+# Contributing to Black Sparrow
 
-Thank you for your interest in contributing to **SEO Lens**! We welcome bug reports, feature requests, documentation improvements, and code contributions from developers of all experience levels.
+Thank you for your interest in contributing to **Black Sparrow**! We welcome bug reports, feature requests, documentation improvements, and code contributions from developers of all experience levels.
 
 ---
 
@@ -65,8 +65,8 @@ We are committed to providing a welcoming, inclusive, and harassment-free enviro
 
 ```bash
 # 1. Fork and clone the repository
-git clone https://github.com/Shantodotdev/seo-lens.git
-cd seo-lens
+git clone https://github.com/Shantodotdev/blacksparrow.git
+cd blacksparrow
 
 # 2. Verify that everything builds and tests pass
 cargo check
@@ -112,7 +112,7 @@ cargo nextest run    # or 'cargo test'
 
 ## 4. How to Add a New SEO Rule
 
-SEO Lens has a modular rules engine. Adding a new rule takes just 4 steps:
+Black Sparrow has a modular rules engine. Adding a new rule takes just 4 steps:
 
 ### Step 1: Register the Rule in the Catalog (`src/rules/catalog.rs`)
 

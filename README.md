@@ -1,20 +1,20 @@
-# SEO Lens
+# Black Sparrow
 
 **High-performance, local-first website crawler, 120-rule technical SEO audit engine, and AI-native auditor written in Rust.**
 
-[![Release](https://img.shields.io/github/v/release/Shantodotdev/seo-lens?include_prereleases&color=blue&logo=github)](https://github.com/Shantodotdev/seo-lens/releases) [![Downloads](https://img.shields.io/github/downloads/Shantodotdev/seo-lens/total?color=238636&logo=github&label=downloads)](https://github.com/Shantodotdev/seo-lens/releases) [![CI](https://img.shields.io/github/actions/workflow/status/Shantodotdev/seo-lens/ci.yml?branch=main&label=CI&logo=github-actions)](https://github.com/Shantodotdev/seo-lens/actions) [![Rust 2021](https://img.shields.io/badge/rust-2021_edition-orange.svg)](https://www.rust-lang.org/) [![Model Context Protocol](https://img.shields.io/badge/mcp-compliant-green.svg)](./docs/mcp.md) [![License: MIT / Apache-2.0](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](./LICENSE-MIT)
+[![Release](https://img.shields.io/github/v/release/Shantodotdev/blacksparrow?include_prereleases&color=e11d48&logo=github)](https://github.com/Shantodotdev/blacksparrow/releases) [![Downloads](https://img.shields.io/github/downloads/Shantodotdev/blacksparrow/total?color=ec4899&logo=github&label=downloads)](https://github.com/Shantodotdev/blacksparrow/releases) [![CI](https://img.shields.io/github/actions/workflow/status/Shantodotdev/blacksparrow/ci.yml?branch=main&label=CI&logo=github-actions)](https://github.com/Shantodotdev/blacksparrow/actions) [![Rust 2021](https://img.shields.io/badge/rust-2021_edition-f97316.svg)](https://www.rust-lang.org/) [![Model Context Protocol](https://img.shields.io/badge/mcp-compliant-be185d.svg)](./docs/mcp.md) [![License: MIT / Apache-2.0](https://img.shields.io/badge/license-MIT%2FApache--2.0-831843.svg)](./LICENSE-MIT)
 
 ---
 
 ## Overview
 
-**SEO Lens** is a lightweight, blazing-fast website crawler and technical SEO auditor designed as a modern, local-first alternative to heavy legacy tools like Screaming Frog and expensive cloud crawlers.
+**Black Sparrow** is a lightweight, blazing-fast website crawler and technical SEO auditor designed as a modern, local-first alternative to heavy legacy tools like Screaming Frog and expensive cloud crawlers.
 
-Built from the ground up in Rust, SEO Lens streams HTML responses through Cloudflare's zero-copy `lol_html` parser, dynamically adjusts crawl speed using network congestion algorithms (AIMD), persists audit history in an embedded SQLite database, and exposes a native **Model Context Protocol (MCP)** server for autonomous AI coding agents.
+Built from the ground up in Rust, Black Sparrow streams HTML responses through Cloudflare's zero-copy `lol_html` parser, dynamically adjusts crawl speed using network congestion algorithms (AIMD), persists audit history in an embedded SQLite database, and exposes a native **Model Context Protocol (MCP)** server for autonomous AI coding agents.
 
-![SEO Lens CLI Audit in Terminal](./docs/assets/cli_terminal_audit.png)
+![Black Sparrow CLI Audit in Terminal](./docs/assets/cli_terminal_audit.png)
 
-![SEO Lens Interactive HTML Report](./docs/assets/html_report_dashboard.png)
+![Black Sparrow Interactive HTML Report](./docs/assets/html_report_dashboard.png)
 
 ---
 
@@ -35,21 +35,21 @@ Built from the ground up in Rust, SEO Lens streams HTML responses through Cloudf
 
 ### Quick Install (Standalone Binary)
 
-Install `seolens` directly without needing Rust or build tools:
+Install `blacksparrow` (with `sparrow` alias) directly without needing Rust or build tools:
 
 **macOS & Linux**:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Shantodotdev/seo-lens/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Shantodotdev/blacksparrow/main/install.sh | bash
 ```
 
 **Windows (PowerShell)**:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://github.com/Shantodotdev/seo-lens/releases/download/v0.1.0-rc.1/seo-lens-installer.ps1 | iex"
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/Shantodotdev/blacksparrow/releases/latest/download/blacksparrow-installer.ps1 | iex"
 ```
 
-_Windows users can also download the standalone `.msi` installer from [GitHub Releases](https://github.com/Shantodotdev/seo-lens/releases)._
+_Windows users can also download the standalone `.msi` installer from [GitHub Releases](https://github.com/Shantodotdev/blacksparrow/releases)._
 
 ---
 
@@ -60,8 +60,8 @@ _Windows users can also download the standalone `.msi` installer from [GitHub Re
 #### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/Shantodotdev/seo-lens.git
-cd seo-lens
+git clone https://github.com/Shantodotdev/blacksparrow.git
+cd blacksparrow
 ```
 
 ### 2. Choose How to Run
@@ -73,84 +73,86 @@ You have three flexible options depending on your workflow:
 Run audits immediately without installing anything to your system PATH:
 
 ```bash
-# Cargo compiles and runs seolens on the fly
+# Cargo compiles and runs blacksparrow on the fly
 cargo run -- audit https://example.com --max-pages 100
 ```
 
 #### Option B: Build the Standalone Binary (Best for production & scripts)
 
-Build a self-contained, optimized release binary into `./target/release/seolens`:
+Build a self-contained, optimized release binary into `./target/release/blacksparrow`:
 
 ```bash
 # Compile optimized release binary
 cargo build --release
 
 # Run the binary directly
-./target/release/seolens audit https://example.com --max-pages 500
+./target/release/blacksparrow audit https://example.com --max-pages 500
 ```
 
 #### Option C: Install Globally as a System Command (Best for daily use)
 
-`cargo install --path .` compiles the release binary and copies it to your global Cargo binary directory (`~/.cargo/bin`). This makes `seolens` available from **any folder** in your terminal like any standard Unix tool:
+`cargo install --path .` compiles the release binary and copies it to your global Cargo binary directory (`~/.cargo/bin`). This makes `blacksparrow` available from **any folder** in your terminal like any standard Unix tool:
 
 ```bash
-# Install to ~/.cargo/bin/seolens
+# Install to ~/.cargo/bin/blacksparrow
 cargo install --path .
 
-# Now available globally from any terminal folder
-seolens audit https://example.com --max-pages 500
+# Now available globally from any terminal folder (or use 'sparrow' alias via install.sh)
+blacksparrow audit https://example.com --max-pages 500
 ```
 
 ---
 
 ### Basic Usage
 
+You can use either `blacksparrow` or its alias `sparrow`:
+
 #### 1. Audit a Website
 
 ```bash
 # Run a 500-page crawl with concurrency limit of 10
-seolens audit https://example.com --max-pages 500 -c 10
+sparrow audit https://example.com --max-pages 500 -c 10
 ```
 
 #### 2. Quick Single-Page Inspection
 
 ```bash
 # Inspect a single URL instantly without crawling the whole site
-seolens inspect https://example.com/blog/post-1
+sparrow inspect https://example.com/blog/post-1
 ```
 
 #### 3. Inspect Issues by Severity
 
 ```bash
 # List all critical and alert issues from the latest session
-seolens issues <SESSION_ID> --severity critical,alert
+sparrow issues <SESSION_ID> --severity critical,alert
 ```
 
 #### 4. Export Reports
 
 ```bash
 # Export an interactive HTML dashboard and Screaming Frog-compatible CSVs
-seolens report <SESSION_ID> -f html,csv -o ./reports
+sparrow report <SESSION_ID> -f html,csv -o ./reports
 ```
 
 #### 5. Check AI Search Readiness
 
 ```bash
 # Check /llms.txt and AI bot permissions in robots.txt
-seolens check-ai https://example.com
+sparrow check-ai https://example.com
 ```
 
 ---
 
 ## Use with AI Agents (MCP)
 
-SEO Lens includes a built-in Model Context Protocol (MCP) server running pure-Rust JSON-RPC 2.0 over `stdio`.
+Black Sparrow includes a built-in Model Context Protocol (MCP) server running pure-Rust JSON-RPC 2.0 over `stdio`.
 
 ### Quick Setup
 
-Tell your AI coding agent (Claude, Cursor, Windsurf) to register SEO Lens:
+Tell your AI coding agent (Claude, Cursor, Windsurf) to register Black Sparrow:
 
-> _"Add an MCP server named `seolens` with the command `seolens` and args `['mcp']`."_
+> _"Add an MCP server named `blacksparrow` with the command `blacksparrow` and args `['mcp']`."_
 
 ### What Agents Can Do
 
@@ -187,7 +189,7 @@ We welcome contributions! Please review [CONTRIBUTING.md](./CONTRIBUTING.md) for
 
 ## License
 
-SEO Lens is dual-licensed under either:
+Black Sparrow is dual-licensed under either:
 
 - **MIT License** ([LICENSE-MIT](./LICENSE-MIT))
 - **Apache License, Version 2.0** ([LICENSE-APACHE](./LICENSE-APACHE))
