@@ -46,7 +46,16 @@ pub async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
 async fn handle_audit(args: AuditArgs) -> Result<(), Box<dyn std::error::Error>> {
     let mut config = CrawlConfig::new(&args.url)?;
     config.max_pages = args.max_pages;
-    config.max_depth = args.max_depth;
+    config.max_depth = match args.max_depth {
+        Some(d) => d,
+        None => {
+            if args.max_pages == 0 || args.max_pages > 500 {
+                0
+            } else {
+                5
+            }
+        }
+    };
     config.concurrency = args.concurrency;
     config.delay_ms = args.delay;
     config.user_agent = args.user_agent;

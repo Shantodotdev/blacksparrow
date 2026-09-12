@@ -87,9 +87,9 @@ pub struct AuditArgs {
     #[arg(short = 'p', long, default_value_t = 500)]
     pub max_pages: u32,
 
-    /// Maximum crawl depth from start URL
-    #[arg(short = 'd', long, default_value_t = 5)]
-    pub max_depth: u16,
+    /// Maximum crawl depth from start URL (0 = unlimited)
+    #[arg(short = 'd', long)]
+    pub max_depth: Option<u16>,
 
     /// Number of concurrent fetch tasks
     #[arg(short = 'c', long, default_value_t = 10)]
