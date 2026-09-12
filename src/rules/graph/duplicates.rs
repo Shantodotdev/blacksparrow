@@ -36,18 +36,45 @@ pub fn evaluate_duplicates(pages: &[PageReport]) -> Vec<IssueFinding> {
         }
     }
 
-    // 2. Near-Duplicate Content (SimHash Hamming distance <= 3)
+    // 2. Near-Duplicate Content (Charikar's 4-table indexing, SimHash Hamming distance <= 3)
+    // By the Pigeonhole Principle: 64 bits split into 4 16-bit chunks with <= 3 bit differences
+    // must have at least one 16-bit chunk that is strictly identical.
     let mut flagged_near_pairs = HashSet::new();
-    for i in 0..pages.len() {
-        let p1 = &pages[i];
-        if p1.simhash == 0 || p1.word_count < 50 || exact_dup_urls.contains(&p1.url) {
+    let mut table_0: HashMap<u16, Vec<usize>> = HashMap::new();
+    let mut table_1: HashMap<u16, Vec<usize>> = HashMap::new();
+    let mut table_2: HashMap<u16, Vec<usize>> = HashMap::new();
+    let mut table_3: HashMap<u16, Vec<usize>> = HashMap::new();
+
+    for (i, p2) in pages.iter().enumerate() {
+        if p2.simhash == 0 || p2.word_count < 50 || exact_dup_urls.contains(&p2.url) {
             continue;
         }
 
-        for p2 in pages.iter().skip(i + 1) {
-            if p2.simhash == 0 || p2.word_count < 50 || exact_dup_urls.contains(&p2.url) {
-                continue;
-            }
+        let c0 = (p2.simhash >> 48) as u16;
+        let c1 = ((p2.simhash >> 32) & 0xFFFF) as u16;
+        let c2 = ((p2.simhash >> 16) & 0xFFFF) as u16;
+        let c3 = (p2.simhash & 0xFFFF) as u16;
+
+        let mut candidate_indices: Vec<usize> = Vec::new();
+        if let Some(list) = table_0.get(&c0) {
+            candidate_indices.extend(list);
+        }
+        if let Some(list) = table_1.get(&c1) {
+            candidate_indices.extend(list);
+        }
+        if let Some(list) = table_2.get(&c2) {
+            candidate_indices.extend(list);
+        }
+        if let Some(list) = table_3.get(&c3) {
+            candidate_indices.extend(list);
+        }
+
+        // Deduplicate candidate indices since a pair might match on multiple chunks
+        candidate_indices.sort_unstable();
+        candidate_indices.dedup();
+
+        for prev_idx in candidate_indices {
+            let p1 = &pages[prev_idx];
 
             // Exclude identical content hashes already flagged as exact duplicate
             if p1.content_hash != 0 && p1.content_hash == p2.content_hash {
@@ -73,6 +100,11 @@ pub fn evaluate_duplicates(pages: &[PageReport]) -> Vec<IssueFinding> {
                 }
             }
         }
+
+        table_0.entry(c0).or_default().push(i);
+        table_1.entry(c1).or_default().push(i);
+        table_2.entry(c2).or_default().push(i);
+        table_3.entry(c3).or_default().push(i);
     }
 
     // 3. Duplicate Titles

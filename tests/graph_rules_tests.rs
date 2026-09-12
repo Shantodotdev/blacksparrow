@@ -1040,3 +1040,110 @@ fn test_health_score_category_penalty_ceiling() {
     assert_eq!(calculate_health_score(0, &[]), 100);
     assert_eq!(calculate_health_score(0, &multi_category_issues), 100);
 }
+
+#[test]
+fn test_charikar_simhash_multi_page_near_duplicate_detection() {
+    // Base 64-bit SimHash
+    let base_hash: u64 = 0xAAAA_BBBB_CCCC_DDDD;
+
+    // p1: base hash
+    let p1 = mock_page(
+        "https://example.com/base",
+        200,
+        1,
+        Some("Base Page"),
+        Some("Base description"),
+        None,
+        1001,
+        base_hash,
+        vec![],
+        vec![],
+    );
+
+    // p2: differs by 1 bit in chunk 0 (distance 1 <= 3)
+    let p2 = mock_page(
+        "https://example.com/near-1",
+        200,
+        1,
+        Some("Near 1"),
+        Some("Near 1 desc"),
+        None,
+        1002,
+        base_hash ^ 0x0000_0000_0000_0001, // distance 1 from base (chunk 3 differs by 1 bit)
+        vec![],
+        vec![],
+    );
+
+    // p3: differs by 2 bits from base (chunk 2 differs by 2 bits, distance 2 <= 3)
+    let p3 = mock_page(
+        "https://example.com/near-2",
+        200,
+        1,
+        Some("Near 2"),
+        Some("Near 2 desc"),
+        None,
+        1003,
+        base_hash ^ 0x0000_0000_0003_0000,
+        vec![],
+        vec![],
+    );
+
+    // p4: differs by 3 bits from base (chunk 1 differs by 3 bits, distance 3 <= 3)
+    let p4 = mock_page(
+        "https://example.com/near-3",
+        200,
+        1,
+        Some("Near 3"),
+        Some("Near 3 desc"),
+        None,
+        1004,
+        base_hash ^ 0x0000_0007_0000_0000,
+        vec![],
+        vec![],
+    );
+
+    // p5: differs by 16 bits (distance > 3 from all other pages, should NEVER be flagged)
+    let p5 = mock_page(
+        "https://example.com/distant",
+        200,
+        1,
+        Some("Distant Page"),
+        Some("Distant desc"),
+        None,
+        1005,
+        base_hash ^ 0xFFFF_0000_0000_0000,
+        vec![],
+        vec![],
+    );
+
+    let pages = vec![p1, p2, p3, p4, p5];
+    let graph = SiteGraph::from_pages(&pages, &[]);
+    let issues = evaluate_graph_rules(&pages, &graph, &[], true, &HashMap::new());
+
+    let near_dups: Vec<_> = issues
+        .iter()
+        .filter(|i| i.code == RuleId::WarnGraphNearDuplicateContent)
+        .collect();
+
+    assert!(!near_dups.is_empty(), "Near duplicates must be detected");
+
+    let flagged_urls: Vec<_> = near_dups.iter().map(|i| i.target_url.as_str()).collect();
+    assert!(flagged_urls.contains(&"https://example.com/near-1"));
+    assert!(flagged_urls.contains(&"https://example.com/near-2"));
+    assert!(flagged_urls.contains(&"https://example.com/near-3"));
+    assert!(
+        !flagged_urls.contains(&"https://example.com/distant"),
+        "Distant page with Hamming distance > 3 must never be flagged"
+    );
+
+    // Verify each finding only reports Hamming distances 1, 2, or 3
+    for finding in &near_dups {
+        assert!(
+            finding.message.contains("Hamming distance 1")
+                || finding.message.contains("Hamming distance 2")
+                || finding.message.contains("Hamming distance 3"),
+            "Finding message should report valid distance <= 3: {}",
+            finding.message
+        );
+    }
+}
