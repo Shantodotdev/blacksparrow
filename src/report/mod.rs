@@ -21,7 +21,8 @@ pub use json::export_json_report;
 pub use markdown::export_markdown_report;
 pub use score::calculate_health_score;
 pub use terminal::{
-    create_crawl_progress_bar, finish_crawl_progress, print_ai_readiness_scorecard,
-    print_audit_banner, print_cli_help, print_executive_scorecard, print_historical_sessions,
-    print_issues_matrix, print_schema_outcome, update_crawl_progress,
+    create_crawl_progress_bar, finish_crawl_progress, format_crawl_progress, get_terminal_width,
+    print_ai_readiness_scorecard, print_audit_banner, print_cli_help, print_executive_scorecard,
+    print_historical_sessions, print_issues_matrix, print_schema_outcome, render_crawl_init_status,
+    truncate_to_visible_width, update_crawl_progress, visible_width,
 };

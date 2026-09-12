@@ -14,9 +14,9 @@ use crate::rules::page::schema_val::SchemaValidationOutcome;
 use hashbrown::HashMap;
 use std::io::{self, Write};
 use std::path::Path;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::sync::Arc;
-use std::time::Instant;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 // Cyberpunk Pink & Maroon Palette (Black Sparrow)
 const ANSI_PINK: &str = "\x1b[38;5;198m";
@@ -141,98 +141,315 @@ pub struct CrawlProgressBar {
     max_pages: u32,
     start_time: Instant,
     tick_count: Arc<AtomicUsize>,
-    last_draw_ms: Arc<AtomicU64>,
+    is_running: Arc<AtomicBool>,
+    latest_update: Arc<Mutex<ProgressUpdate>>,
 }
 
 /// Creates a styled, single-line progress indicator for live crawl monitoring.
+///
+/// Immediately renders the initial zero-state progress bar and begins smoothly animating
+/// the Braille spinner and elapsed timer in a background Tokio green task (if inside a runtime).
 pub fn create_crawl_progress_bar(max_pages: u32) -> CrawlProgressBar {
-    CrawlProgressBar {
+    let start_time = Instant::now();
+    let tick_count = Arc::new(AtomicUsize::new(0));
+    let is_running = Arc::new(AtomicBool::new(true));
+    let initial_update = ProgressUpdate {
+        crawled_pages: 0,
+        discovered_pages: 0,
         max_pages,
-        start_time: Instant::now(),
-        tick_count: Arc::new(AtomicUsize::new(0)),
-        last_draw_ms: Arc::new(AtomicU64::new(0)),
-    }
-}
+        current_url: String::new(),
+        status_code: 0,
+        ttfb_ms: 0,
+        aimd_delay_ms: 0,
+        critical_count: 0,
+        alert_count: 0,
+        warning_count: 0,
+    };
+    let latest_update = Arc::new(Mutex::new(initial_update));
 
-/// Updates the active progress bar with incoming telemetry strictly in-place on one line.
-pub fn update_crawl_progress(pb: &CrawlProgressBar, update: &ProgressUpdate) {
-    let now_ms = pb.start_time.elapsed().as_millis() as u64;
-    let last = pb.last_draw_ms.load(Ordering::Relaxed);
-
-    // Throttle redraws to at most once every 50ms, unless final page
-    if pb.max_pages > 0
-        && update.crawled_pages < pb.max_pages as usize
-        && now_ms.saturating_sub(last) < 50
-    {
-        return;
-    }
-    pb.last_draw_ms.store(now_ms, Ordering::Relaxed);
-
-    let elapsed_secs = pb.start_time.elapsed().as_secs();
-    let mins = elapsed_secs / 60;
-    let secs = elapsed_secs % 60;
-    let elapsed_str = format!("{mins:02}:{secs:02}");
-
-    let elapsed_f64 = pb.start_time.elapsed().as_secs_f64();
-    let speed = if elapsed_f64 > 0.05 {
-        (update.crawled_pages as f64 / elapsed_f64).round() as u64
-    } else {
-        0
+    let pb = CrawlProgressBar {
+        max_pages,
+        start_time,
+        tick_count: tick_count.clone(),
+        is_running: is_running.clone(),
+        latest_update: latest_update.clone(),
     };
 
-    const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-    let tick = pb.tick_count.fetch_add(1, Ordering::Relaxed);
-    let frame = SPINNER[tick % SPINNER.len()];
+    // Draw initial 0-state frame immediately
+    {
+        const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+        let frame = SPINNER[0];
+        let term_width = get_terminal_width();
+        if let Ok(initial_guard) = pb.latest_update.lock() {
+            let line =
+                format_crawl_progress(&initial_guard, "00:00", frame, 0, max_pages, term_width);
+            let mut out = io::stdout().lock();
+            let _ = write!(out, "\r\x1b[2K{}", line);
+            let _ = out.flush();
+        }
+    }
 
-    let total_target = if pb.max_pages > 0 {
-        if update.discovered_pages > 0 {
-            update.discovered_pages.min(pb.max_pages as usize)
+    // Spawn background 60ms animator if inside a Tokio runtime
+    if let Ok(handle) = tokio::runtime::Handle::try_current() {
+        let is_running_bg = is_running.clone();
+        let tick_count_bg = tick_count.clone();
+        let latest_update_bg = latest_update.clone();
+
+        handle.spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_millis(60));
+            // First tick completes immediately
+            interval.tick().await;
+
+            while is_running_bg.load(Ordering::Relaxed) {
+                interval.tick().await;
+                if !is_running_bg.load(Ordering::Relaxed) {
+                    break;
+                }
+
+                let update = {
+                    let Ok(guard) = latest_update_bg.lock() else {
+                        break;
+                    };
+                    guard.clone()
+                };
+
+                let elapsed_secs = start_time.elapsed().as_secs();
+                let mins = elapsed_secs / 60;
+                let secs = elapsed_secs % 60;
+                let elapsed_str = format!("{mins:02}:{secs:02}");
+
+                let elapsed_f64 = start_time.elapsed().as_secs_f64();
+                let speed = if elapsed_f64 > 0.05 {
+                    (update.crawled_pages as f64 / elapsed_f64).round() as u64
+                } else {
+                    0
+                };
+
+                const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+                let tick = tick_count_bg.fetch_add(1, Ordering::Relaxed);
+                let frame = SPINNER[tick % SPINNER.len()];
+
+                let term_width = get_terminal_width();
+                let line = format_crawl_progress(
+                    &update,
+                    &elapsed_str,
+                    frame,
+                    speed,
+                    max_pages,
+                    term_width,
+                );
+
+                let mut out = io::stdout().lock();
+                let _ = write!(out, "\r\x1b[2K{}", line);
+                let _ = out.flush();
+            }
+        });
+    }
+
+    pb
+}
+
+/// Legacy init hook preserved for compatibility; progress bar automatically initializes in `create_crawl_progress_bar`.
+pub fn render_crawl_init_status(_pb: &CrawlProgressBar) {}
+
+/// Returns the current terminal column width, checking terminal_size, the `COLUMNS` env var, or defaulting to 80.
+pub fn get_terminal_width() -> usize {
+    if let Some((terminal_size::Width(w), _)) = terminal_size::terminal_size() {
+        if w > 0 {
+            return w as usize;
+        }
+    }
+    if let Ok(cols) = std::env::var("COLUMNS") {
+        if let Ok(c) = cols.trim().parse::<usize>() {
+            if c > 0 {
+                return c;
+            }
+        }
+    }
+    80
+}
+
+/// Calculates the visible terminal display column width of a string, ignoring ANSI escape codes.
+pub fn visible_width(s: &str) -> usize {
+    let mut width = 0;
+    let mut in_escape = false;
+    for c in s.chars() {
+        if c == '\x1b' {
+            in_escape = true;
+        } else if in_escape {
+            if c.is_ascii_alphabetic() {
+                in_escape = false;
+            }
         } else {
-            pb.max_pages as usize
+            width += unicode_width::UnicodeWidthChar::width(c).unwrap_or(1);
+        }
+    }
+    width
+}
+
+/// Truncates a string to at most `max_width` visible display columns while preserving ANSI escape sequences.
+pub fn truncate_to_visible_width(s: &str, max_width: usize) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut current_width = 0;
+    let mut in_escape = false;
+    let mut truncated = false;
+
+    for c in s.chars() {
+        if c == '\x1b' {
+            in_escape = true;
+            result.push(c);
+        } else if in_escape {
+            result.push(c);
+            if c.is_ascii_alphabetic() {
+                in_escape = false;
+            }
+        } else if !truncated {
+            let char_width = unicode_width::UnicodeWidthChar::width(c).unwrap_or(1);
+            if current_width + char_width <= max_width {
+                current_width += char_width;
+                result.push(c);
+            } else {
+                truncated = true;
+            }
+        }
+    }
+
+    if truncated {
+        result.push_str(ANSI_RESET);
+    }
+
+    result
+}
+
+/// Formats the single-line crawl progress indicator to fit strictly within `term_width` columns.
+pub fn format_crawl_progress(
+    update: &ProgressUpdate,
+    elapsed_str: &str,
+    frame: &str,
+    speed: u64,
+    max_pages: u32,
+    term_width: usize,
+) -> String {
+    let safe_width = term_width.saturating_sub(2).max(20);
+
+    let prefix =
+        format!(" {ANSI_CYAN}{ANSI_BOLD}{frame}{ANSI_RESET} {ANSI_DIM}[{elapsed_str}]{ANSI_RESET}");
+
+    let total_target = if max_pages > 0 {
+        if update.discovered_pages > 0 {
+            update.discovered_pages.min(max_pages as usize)
+        } else {
+            max_pages as usize
         }
     } else {
         update.discovered_pages
     };
 
-    let bar_and_pct = if total_target > 0 {
+    let pages_str = if total_target > 0 {
         let pct = ((update.crawled_pages as f64 / total_target as f64) * 100.0).min(100.0) as usize;
-        let filled = (pct * 14) / 100;
-        let empty = 14 - filled;
-        let filled_str = "▰".repeat(filled);
-        let empty_str = "▱".repeat(empty);
-        format!(
-            "{ANSI_GREEN}[{filled_str}{ANSI_DIM}{empty_str}{ANSI_GREEN}]{ANSI_RESET} {ANSI_BOLD}{}/{}{ANSI_RESET} ({pct}%)",
-            update.crawled_pages,
-            total_target,
-        )
+        if term_width >= 105 {
+            let filled = (pct * 14) / 100;
+            let empty = 14 - filled;
+            let filled_str = "▰".repeat(filled);
+            let empty_str = "▱".repeat(empty);
+            format!(
+                "{ANSI_GREEN}[{filled_str}{ANSI_DIM}{empty_str}{ANSI_GREEN}]{ANSI_RESET} {ANSI_BOLD}{}/{}{ANSI_RESET} ({pct}%)",
+                update.crawled_pages, total_target
+            )
+        } else if term_width >= 75 {
+            let filled = (pct * 8) / 100;
+            let empty = 8 - filled;
+            let filled_str = "▰".repeat(filled);
+            let empty_str = "▱".repeat(empty);
+            format!(
+                "{ANSI_GREEN}[{filled_str}{ANSI_DIM}{empty_str}{ANSI_GREEN}]{ANSI_RESET} {ANSI_BOLD}{}/{}{ANSI_RESET} ({pct}%)",
+                update.crawled_pages, total_target
+            )
+        } else {
+            format!(
+                "{ANSI_BOLD}{}/{}{ANSI_RESET} ({pct}%)",
+                update.crawled_pages, total_target
+            )
+        }
     } else {
         format!("{ANSI_BOLD}{} pages{ANSI_RESET}", update.crawled_pages)
     };
 
-    // Human-friendly defect indicators
-    let issues_summary = if update.alert_count > 0 {
-        format!(
-            "{ANSI_RED}🚨 {}{ANSI_RESET} {ANSI_DIM}│{ANSI_RESET} {ANSI_YELLOW}⚠️ {}{ANSI_RESET} {ANSI_DIM}│{ANSI_RESET} {ANSI_YELLOW}⚡ {}{ANSI_RESET}",
-            update.critical_count, update.alert_count, update.warning_count
-        )
+    let speed_str = if term_width >= 105 {
+        format!("{ANSI_CYAN}{speed} pages/s{ANSI_RESET}")
     } else {
-        format!(
-            "{ANSI_RED}🚨 {}{ANSI_RESET} {ANSI_DIM}│{ANSI_RESET} {ANSI_YELLOW}⚡ {}{ANSI_RESET}",
-            update.critical_count, update.warning_count
-        )
+        format!("{ANSI_CYAN}{speed}/s{ANSI_RESET}")
     };
 
-    let line = format!(
-        " {ANSI_CYAN}{ANSI_BOLD}{frame}{ANSI_RESET} {ANSI_DIM}[{elapsed_str}]{ANSI_RESET} {bar_and_pct} {ANSI_DIM}│{ANSI_RESET} {ANSI_CYAN}{speed} pages/s{ANSI_RESET} {ANSI_DIM}│{ANSI_RESET} {issues_summary}"
-    );
+    let issues_str = if term_width >= 105 {
+        if update.alert_count > 0 {
+            format!(
+                "{ANSI_RED}🚨 {}{ANSI_RESET} {ANSI_DIM}│{ANSI_RESET} {ANSI_YELLOW}⚠️ {}{ANSI_RESET} {ANSI_DIM}│{ANSI_RESET} {ANSI_YELLOW}⚡ {}{ANSI_RESET}",
+                update.critical_count, update.alert_count, update.warning_count
+            )
+        } else {
+            format!(
+                "{ANSI_RED}🚨 {}{ANSI_RESET} {ANSI_DIM}│{ANSI_RESET} {ANSI_YELLOW}⚡ {}{ANSI_RESET}",
+                update.critical_count, update.warning_count
+            )
+        }
+    } else if term_width >= 70 {
+        if update.alert_count > 0 {
+            format!(
+                "{ANSI_RED}🚨 {}{ANSI_RESET} {ANSI_YELLOW}⚠️ {}{ANSI_RESET} {ANSI_YELLOW}⚡ {}{ANSI_RESET}",
+                update.critical_count, update.alert_count, update.warning_count
+            )
+        } else {
+            format!(
+                "{ANSI_RED}🚨 {}{ANSI_RESET} {ANSI_YELLOW}⚡ {}{ANSI_RESET}",
+                update.critical_count, update.warning_count
+            )
+        }
+    } else if term_width >= 55 {
+        format!(
+            "{ANSI_RED}🚨 {}{ANSI_RESET} {ANSI_YELLOW}⚡ {}{ANSI_RESET}",
+            update.critical_count, update.warning_count
+        )
+    } else {
+        String::new()
+    };
 
-    let mut out = io::stdout().lock();
-    let _ = write!(out, "\r\x1b[2K{}", line);
-    let _ = out.flush();
+    let line = if issues_str.is_empty() {
+        format!("{prefix} {pages_str} {ANSI_DIM}│{ANSI_RESET} {speed_str}")
+    } else {
+        format!("{prefix} {pages_str} {ANSI_DIM}│{ANSI_RESET} {speed_str} {ANSI_DIM}│{ANSI_RESET} {issues_str}")
+    };
+
+    truncate_to_visible_width(&line, safe_width)
+}
+
+/// Updates the active progress bar with incoming telemetry strictly in-place on one line.
+pub fn update_crawl_progress(pb: &CrawlProgressBar, update: &ProgressUpdate) {
+    if let Ok(mut guard) = pb.latest_update.lock() {
+        *guard = update.clone();
+    }
+    // If background async ticker is not active (e.g. in a synchronous unit test), draw directly:
+    if !pb.is_running.load(Ordering::Relaxed) {
+        let elapsed_secs = pb.start_time.elapsed().as_secs();
+        let mins = elapsed_secs / 60;
+        let secs = elapsed_secs % 60;
+        let elapsed_str = format!("{mins:02}:{secs:02}");
+        let speed = 0;
+        const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+        let tick = pb.tick_count.fetch_add(1, Ordering::Relaxed);
+        let frame = SPINNER[tick % SPINNER.len()];
+        let term_width = get_terminal_width();
+        let line =
+            format_crawl_progress(update, &elapsed_str, frame, speed, pb.max_pages, term_width);
+        let mut out = io::stdout().lock();
+        let _ = write!(out, "\r\x1b[2K{}", line);
+        let _ = out.flush();
+    }
 }
 
 /// Finishes and clears the single-line progress indicator when crawling terminates.
-pub fn finish_crawl_progress(_pb: &CrawlProgressBar) {
+pub fn finish_crawl_progress(pb: &CrawlProgressBar) {
+    pb.is_running.store(false, Ordering::SeqCst);
     let mut out = io::stdout().lock();
     let _ = write!(out, "\r\x1b[2K");
     let _ = out.flush();
@@ -244,7 +461,7 @@ pub fn print_executive_scorecard(result: &CrawlResult, exported_paths: &[(&str, 
     if !already_bannered {
         print!(
             "\n{}",
-            format_section_header("SEO LENS // DEEP AUDIT MATRIX")
+            format_section_header("BLACK SPARROW // DEEP AUDIT MATRIX")
         );
         println!(
             "  {ANSI_BOLD}Target URL  {ANSI_RESET} : {ANSI_CYAN}{}{ANSI_RESET}\n",
