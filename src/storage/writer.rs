@@ -124,7 +124,9 @@ pub fn spawn_db_writer(
     batch_size: usize,
     flush_interval: Duration,
 ) -> SeoResult<(DbWriterHandle, tokio::task::JoinHandle<SeoResult<()>>)> {
-    let (tx, rx) = mpsc::channel(1024);
+    // High-capacity bounded buffer (4096 entries) absorbs write bursts so Tokio worker tasks
+    // never block when the background actor commits heavy SQLite transactions to disk.
+    let (tx, rx) = mpsc::channel(4096);
     let handle = DbWriterHandle { tx };
 
     let join_handle = tokio::spawn(async move {

@@ -184,46 +184,67 @@ impl Frontier {
     /// assert!(!frontier.push("https://example.com/page2", 2, None).unwrap());
     /// ```
     pub fn push(&mut self, raw_url: &str, depth: u16, source_url: Option<&str>) -> SeoResult<bool> {
+        let normalized = normalize_url(raw_url)?;
+        Ok(self.push_normalized(&normalized, depth, source_url))
+    }
+
+    /// Enqueues an already-normalized candidate URL without repeating normalization.
+    pub fn push_normalized(
+        &mut self,
+        normalized: &str,
+        depth: u16,
+        source_url: Option<&str>,
+    ) -> bool {
         if self.max_depth > 0 && depth > self.max_depth {
             self.hit_max_depth = true;
-            return Ok(false);
+            return false;
         }
 
-        let normalized = normalize_url(raw_url)?;
-        let hash = url_hash(&normalized);
+        let hash = url_hash(normalized);
+
+        // Fast path 1: Already visited and popped from queue (already crawled).
+        // In large crawls (e.g. 50k+ pages), >90% of links in navigational menus (header/footer)
+        // point to already audited pages. Checking visited set before heap operations short-circuits in O(1).
+        if self.visited.contains(&hash) && !self.pending_urls.contains(&hash) {
+            return false;
+        }
 
         // Dynamic in-degree authority accumulation:
-        // If the candidate URL is already pending in the queue, increment its reference count
-        // and re-push a prioritized entry with escalated importance!
+        // If the candidate URL is currently pending in the queue, increment its reference count.
+        // Re-push with escalated priority only while in_degree <= 20, because the importance scoring
+        // formula caps authority accumulation at: S_indegree = 50 * min(in_links, 20).
+        // Capping re-pushes at 20 prevents millions of redundant heap duplicates on common site hubs.
         if self.pending_urls.contains(&hash) {
             let count = self.in_degrees.entry(hash).or_insert(1);
             *count = count.saturating_add(1);
             let in_degree = *count;
 
-            let is_sitemap = self.sitemap_hashes.contains(&hash);
-            let priority = calculate_url_importance(&normalized, depth, in_degree, is_sitemap);
-            self.sequence_counter += 1;
-            self.priority_heap.push(PrioritizedEntry {
-                priority,
-                sequence: self.sequence_counter,
-                url_hash: hash,
-                entry: FrontierEntry {
-                    url: CompactString::new(&normalized),
-                    depth,
-                    source_url: source_url.map(CompactString::new),
-                },
-            });
-            return Ok(false);
+            if in_degree <= 20 {
+                let is_sitemap = self.sitemap_hashes.contains(&hash);
+                let priority = calculate_url_importance(normalized, depth, in_degree, is_sitemap);
+                self.sequence_counter += 1;
+                self.priority_heap.push(PrioritizedEntry {
+                    priority,
+                    sequence: self.sequence_counter,
+                    url_hash: hash,
+                    entry: FrontierEntry {
+                        url: CompactString::new(normalized),
+                        depth,
+                        source_url: source_url.map(CompactString::new),
+                    },
+                });
+            }
+            return false;
         }
 
         if self.max_pages > 0 && self.enqueued_count >= self.max_pages {
             self.hit_max_pages = true;
-            return Ok(false);
+            return false;
         }
 
         if !self.visited.insert(hash) {
             // Already visited / crawled
-            return Ok(false);
+            return false;
         }
 
         let initial_in_degree = if source_url.is_some() || depth == 0 {
@@ -237,13 +258,13 @@ impl Frontier {
         self.sequence_counter += 1;
 
         let entry = FrontierEntry {
-            url: CompactString::new(&normalized),
+            url: CompactString::new(normalized),
             depth,
             source_url: source_url.map(CompactString::new),
         };
 
         let is_sitemap = self.sitemap_hashes.contains(&hash);
-        let priority = calculate_url_importance(&normalized, depth, initial_in_degree, is_sitemap);
+        let priority = calculate_url_importance(normalized, depth, initial_in_degree, is_sitemap);
         self.priority_heap.push(PrioritizedEntry {
             priority,
             sequence: self.sequence_counter,
@@ -251,7 +272,24 @@ impl Frontier {
             entry,
         });
 
-        Ok(true)
+        true
+    }
+
+    /// Enqueues a batch of pre-normalized candidate URLs under a single lock acquisition.
+    pub fn push_normalized_batch(
+        &mut self,
+        normalized_urls: &[CompactString],
+        depth: u16,
+        source_url: Option<&str>,
+    ) {
+        if self.max_depth > 0 && depth > self.max_depth {
+            self.hit_max_depth = true;
+            return;
+        }
+
+        for url in normalized_urls {
+            self.push_normalized(url.as_str(), depth, source_url);
+        }
     }
 
     /// Pops the next highest-scoring `FrontierEntry` from the priority heap.

@@ -97,6 +97,10 @@ impl HttpClient {
             .timeout(options.timeout)
             .connect_timeout(options.connect_timeout)
             .redirect(Policy::none()) // We manage redirects manually to track hops and chains
+            // Disable Nagle's algorithm to eliminate latency on small HTTP packet round-trips
+            .tcp_nodelay(true)
+            // Maintain up to 64 warm keep-alive sockets per host to avoid TCP handshakes across workers
+            .pool_max_idle_per_host(64)
             .gzip(true)
             .brotli(true)
             .deflate(true);

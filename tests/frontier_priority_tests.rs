@@ -183,3 +183,34 @@ fn test_dynamic_in_degree_authority_accumulation() {
     // The queue should not contain duplicate entries for item-b
     assert!(frontier.pop().is_none());
 }
+
+#[test]
+fn test_frontier_push_normalized_batch_and_capping() {
+    let mut frontier = Frontier::new(100, 5);
+
+    // Seed push and pop
+    assert!(frontier.push("https://example.com/", 0, None).unwrap());
+    let seed = frontier.pop().unwrap();
+    assert_eq!(seed.url, "https://example.com/");
+
+    // Seed is visited and popped. Now push a batch of pre-normalized candidate URLs.
+    // 1. https://example.com/ (already crawled - should be skipped immediately!)
+    // 2. https://example.com/item-new (brand new URL)
+    // 3. 25 links to https://example.com/item-new (in-degree accumulation up to 20 cap)
+    let mut batch = vec![
+        compact_str::CompactString::new("https://example.com/"),
+        compact_str::CompactString::new("https://example.com/item-new"),
+    ];
+    for _ in 0..25 {
+        batch.push(compact_str::CompactString::new(
+            "https://example.com/item-new",
+        ));
+    }
+
+    frontier.push_normalized_batch(&batch, 1, Some("https://example.com/"));
+
+    assert_eq!(frontier.len(), 1);
+    let item = frontier.pop().unwrap();
+    assert_eq!(item.url, "https://example.com/item-new");
+    assert!(frontier.pop().is_none());
+}

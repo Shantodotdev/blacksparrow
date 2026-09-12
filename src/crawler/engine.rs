@@ -10,10 +10,10 @@
 //! 7. **Topology & Scoring**: Constructs a petgraph directed link graph, computes internal PageRank, detects whole-site graph issues, and produces the health scorecard.
 
 use crate::core::config::CrawlConfig;
-use crate::core::models::{DiscoveredLink, IssueFinding, PageReport, RuleId, Severity};
+use crate::core::models::{IssueFinding, PageReport, RuleId, Severity};
 use crate::core::url::{
-    count_content_facets, has_sorting_facets, is_internal, is_static_asset_url, normalize_url,
-    url_hash,
+    contains_ignore_ascii_case, count_content_facets, has_sorting_facets, is_internal,
+    is_static_asset_url, normalize_url, url_hash,
 };
 use crate::crawler::aimd::AimdController;
 use crate::crawler::client::{FetchOptions, FetchResult, HttpClient};
@@ -86,10 +86,21 @@ pub struct CrawlResult {
     pub health_score: u8,
 }
 
+#[derive(Clone)]
+struct WorkerConfig {
+    no_aimd: bool,
+    static_delay: u64,
+    max_depth: u16,
+    ignore_sorting_facets: bool,
+    max_query_params: usize,
+    include_re: Option<regex::Regex>,
+    exclude_re: Option<regex::Regex>,
+}
+
 #[derive(Debug)]
 struct WorkerPageOutcome {
     report: PageReport,
-    discovered_links: Vec<DiscoveredLink>,
+    candidate_urls: Vec<CompactString>,
     depth: u16,
 }
 
@@ -115,7 +126,7 @@ fn build_page_report(
     url: &str,
     depth: u16,
     res: &FetchResult,
-    parsed: Option<&ParsedPage>,
+    parsed: Option<ParsedPage>,
     issues: Vec<IssueFinding>,
 ) -> PageReport {
     let mut report = PageReport {
@@ -129,7 +140,9 @@ fn build_page_report(
         ttfb_ms: res.ttfb_ms,
         crawl_depth: depth,
         is_internal: true,
-        has_lorem_ipsum: res.body.to_lowercase().contains("lorem ipsum"),
+        // Allocation-free case-insensitive substring search over raw body bytes
+        // avoids allocating full lowercased copies of HTML documents (up to 2.5GB across 50k pages).
+        has_lorem_ipsum: contains_ignore_ascii_case(&res.body, "lorem ipsum"),
         is_https: url.starts_with("https://"),
         has_hsts: res.headers.contains_key("strict-transport-security"),
         has_csp: res.headers.contains_key("content-security-policy"),
@@ -139,32 +152,34 @@ fn build_page_report(
         ..Default::default()
     };
 
+    // Zero-copy move semantics: transfer ownership of parsed structures (links, headings,
+    // images, JSON-LD schemas, hreflangs) directly into the page report without cloning.
     if let Some(p) = parsed {
-        report.title = p.title.clone();
-        report.title_length = p.title.as_ref().map(|t| t.len() as u16).unwrap_or(0);
-        report.meta_description = p.meta_description.clone();
-        report.meta_desc_length = p
+        report.title = p.title;
+        report.title_length = report.title.as_ref().map(|t| t.len() as u16).unwrap_or(0);
+        report.meta_description = p.meta_description;
+        report.meta_desc_length = report
             .meta_description
             .as_ref()
             .map(|d| d.len() as u16)
             .unwrap_or(0);
-        report.canonical_url = p.canonical_url.clone();
-        report.html_lang = p.html_lang.clone();
-        report.charset = p.charset.clone();
-        report.viewport = p.viewport.clone();
+        report.canonical_url = p.canonical_url;
+        report.html_lang = p.html_lang;
+        report.charset = p.charset;
+        report.viewport = p.viewport;
         report.robots_flags = p.robots_flags;
-        report.h1_primary = p.h1_primary.clone();
+        report.h1_primary = p.h1_primary;
         report.h1_count = p.h1_count;
-        report.h2_headings = p.h2_headings.clone();
-        report.h3_headings = p.h3_headings.clone();
+        report.h2_headings = p.h2_headings;
+        report.h3_headings = p.h3_headings;
         report.word_count = p.word_count;
         report.content_hash = p.content_hash;
         report.simhash = p.simhash;
-        report.links = p.links.clone();
-        report.images = p.images.clone();
-        report.schemas = p.schemas.clone();
-        report.hreflangs = p.hreflangs.clone();
-        report.page_intent = p.page_intent.clone();
+        report.links = p.links;
+        report.images = p.images;
+        report.schemas = p.schemas;
+        report.hreflangs = p.hreflangs;
+        report.page_intent = p.page_intent;
     }
 
     report
@@ -359,10 +374,9 @@ async fn fetch_and_audit_page(
     entry: FrontierEntry,
     client: Arc<HttpClient>,
     aimd: Arc<Mutex<AimdController>>,
-    no_aimd: bool,
-    static_delay: u64,
+    worker_cfg: Arc<WorkerConfig>,
 ) -> Option<WorkerPageOutcome> {
-    if !no_aimd && static_delay == 0 {
+    if !worker_cfg.no_aimd && worker_cfg.static_delay == 0 {
         let delay_ms = {
             let a = aimd.lock().await;
             a.current_delay_ms()
@@ -370,8 +384,8 @@ async fn fetch_and_audit_page(
         if delay_ms > 0 {
             tokio::time::sleep(Duration::from_millis(delay_ms)).await;
         }
-    } else if static_delay > 0 {
-        tokio::time::sleep(Duration::from_millis(static_delay)).await;
+    } else if worker_cfg.static_delay > 0 {
+        tokio::time::sleep(Duration::from_millis(worker_cfg.static_delay)).await;
     }
 
     let url_str = entry.url.as_str();
@@ -379,7 +393,7 @@ async fn fetch_and_audit_page(
 
     match fetch_res {
         Ok(res) => {
-            if !no_aimd && static_delay == 0 {
+            if !worker_cfg.no_aimd && worker_cfg.static_delay == 0 {
                 let mut a = aimd.lock().await;
                 if res.status_code >= 400 {
                     a.record_failure(Some(res.status_code), res.status_code == 429);
@@ -400,26 +414,85 @@ async fn fetch_and_audit_page(
                 Vec::new()
             };
 
-            let discovered_links = parsed.as_ref().map(|p| p.links.clone()).unwrap_or_default();
             let depth = entry.depth;
 
-            let report = build_page_report(
-                session_id,
-                url_str,
-                depth,
-                &res,
-                parsed.as_ref(),
-                page_issues,
-            );
+            // Parallel link filtering, normalization, and deduplication across worker green tasks:
+            // Performing URL parsing, regex evaluations, query facet pruning, and normalization
+            // inside concurrent Tokio worker tasks distributes heavy CPU work across all cores,
+            // preventing the single coordinator task from locking the frontier mutex for long durations.
+            let candidate_urls = if let Some(ref p) = parsed {
+                if worker_cfg.max_depth == 0 || depth < worker_cfg.max_depth {
+                    let is_canonicalized_away = match p.canonical_url {
+                        Some(ref canon) => url_str.contains('?') && canon != url_str,
+                        None => false,
+                    };
+
+                    let mut candidates = Vec::with_capacity(p.links.len());
+                    // Deduplicate candidate links locally per page to reduce channel traffic and frontier heap operations
+                    let mut local_seen = HashSet::with_capacity(p.links.len());
+
+                    for link in &p.links {
+                        if !link.is_internal || is_static_asset_url(&link.target_url) {
+                            continue;
+                        }
+
+                        // Faceted defense 1: Prune sorting & display facets if configured
+                        if worker_cfg.ignore_sorting_facets && has_sorting_facets(&link.target_url)
+                        {
+                            continue;
+                        }
+
+                        // Faceted defense 2: Prune excessive content query parameters
+                        if worker_cfg.max_query_params > 0
+                            && count_content_facets(&link.target_url) > worker_cfg.max_query_params
+                        {
+                            continue;
+                        }
+
+                        // Faceted defense 3: Canonical facet pruning
+                        if is_canonicalized_away && link.target_url.contains('?') {
+                            continue;
+                        }
+
+                        // Path filter: Include regex
+                        if let Some(ref inc) = worker_cfg.include_re {
+                            if !inc.is_match(&link.target_url) {
+                                continue;
+                            }
+                        }
+
+                        // Path filter: Exclude regex
+                        if let Some(ref exc) = worker_cfg.exclude_re {
+                            if exc.is_match(&link.target_url) {
+                                continue;
+                            }
+                        }
+
+                        if let Ok(normalized) = normalize_url(&link.target_url) {
+                            let compact = CompactString::new(&normalized);
+                            if local_seen.insert(compact.clone()) {
+                                candidates.push(compact);
+                            }
+                        }
+                    }
+                    candidates
+                } else {
+                    Vec::new()
+                }
+            } else {
+                Vec::new()
+            };
+
+            let report = build_page_report(session_id, url_str, depth, &res, parsed, page_issues);
 
             Some(WorkerPageOutcome {
                 report,
-                discovered_links,
+                candidate_urls,
                 depth,
             })
         }
         Err(_) => {
-            if !no_aimd && static_delay == 0 {
+            if !worker_cfg.no_aimd && worker_cfg.static_delay == 0 {
                 let mut a = aimd.lock().await;
                 a.record_failure(None, false);
             }
@@ -563,6 +636,16 @@ pub async fn run_crawl_with_options(
         None => None,
     };
 
+    let worker_config = Arc::new(WorkerConfig {
+        no_aimd: config.no_aimd,
+        static_delay: config.delay_ms,
+        max_depth: config.max_depth,
+        ignore_sorting_facets: config.ignore_sorting_facets,
+        max_query_params: config.max_query_params,
+        include_re: include_re.clone(),
+        exclude_re: exclude_re.clone(),
+    });
+
     let frontier = Arc::new(Mutex::new(Frontier::new(
         config.max_pages,
         config.max_depth,
@@ -684,9 +767,8 @@ pub async fn run_crawl_with_options(
 
                     let client_clone = Arc::clone(&client);
                     let aimd_clone = Arc::clone(&aimd);
+                    let worker_cfg_clone = Arc::clone(&worker_config);
                     let tx_clone = tx.clone();
-                    let no_aimd = config.no_aimd;
-                    let static_delay = config.delay_ms;
                     let sess_id = session_id.clone();
 
                     tokio::spawn(async move {
@@ -696,8 +778,7 @@ pub async fn run_crawl_with_options(
                             entry,
                             client_clone,
                             aimd_clone,
-                            no_aimd,
-                            static_delay,
+                            worker_cfg_clone,
                         )
                         .await;
                         let _ = tx_clone.send(outcome).await;
@@ -759,73 +840,33 @@ pub async fn run_crawl_with_options(
                             Severity::Warning => warning_count += 1,
                             Severity::Notice => {}
                         }
-                        all_issues.push(issue.clone());
                     }
 
                     if let Some(ref writer) = db_writer {
                         let _ = writer.save_page(outcome.report.clone()).await;
                     }
 
-                    let discovered_count = if config.max_depth == 0 || outcome.depth < config.max_depth {
+                    // Single-lock batch push: enqueues all pre-normalized candidate URLs under a single
+                    // lock acquisition, minimizing contention with worker tasks calling frontier.pop().
+                    let discovered_count = {
                         let mut f = frontier.lock().await;
-
-                        // Canonical facet pruning:
-                        // If the current page is a parameterized/faceted URL whose canonical URL points
-                        // to a base URL without those parameters (or canonical differs from current page),
-                        // do not enqueue parameterized child links discovered on this page.
-                        let is_canonicalized_away = match outcome.report.canonical_url {
-                            Some(ref canon) => {
-                                outcome.report.url.contains('?') && canon != &outcome.report.url
-                            }
-                            None => false,
-                        };
-
-                        for link in outcome.discovered_links {
-                            if !link.is_internal || is_static_asset_url(&link.target_url) {
-                                continue;
-                            }
-
-                            // Faceted defense 1: Prune sorting & display facets if configured
-                            if config.ignore_sorting_facets && has_sorting_facets(&link.target_url) {
-                                continue;
-                            }
-
-                            // Faceted defense 2: Prune excessive content query parameters
-                            if config.max_query_params > 0
-                                && count_content_facets(&link.target_url) > config.max_query_params
-                            {
-                                continue;
-                            }
-
-                            // Faceted defense 3: Canonical facet pruning (do not crawl deeper parameter variants from a non-canonical facet page)
-                            if is_canonicalized_away && link.target_url.contains('?') {
-                                continue;
-                            }
-
-                            // Path filter: Include regex
-                            if let Some(ref inc) = include_re {
-                                if !inc.is_match(&link.target_url) {
-                                    continue;
-                                }
-                            }
-
-                            // Path filter: Exclude regex
-                            if let Some(ref exc) = exclude_re {
-                                if exc.is_match(&link.target_url) {
-                                    continue;
-                                }
-                            }
-
-                            let _ = f.push(&link.target_url, outcome.depth + 1, Some(&outcome.report.url));
+                        if !outcome.candidate_urls.is_empty() {
+                            f.push_normalized_batch(
+                                &outcome.candidate_urls,
+                                outcome.depth + 1,
+                                Some(&outcome.report.url),
+                            );
                         }
-                        f.enqueued_count() as usize
-                    } else {
-                        let f = frontier.lock().await;
                         f.enqueued_count() as usize
                     };
 
                     if let Some(ref cb) = progress_cb {
-                        let current_delay_ms = {
+                        // Avoid locking the AIMD controller mutex if AIMD politeness throttling is disabled
+                        let current_delay_ms = if config.no_aimd {
+                            0
+                        } else if config.delay_ms > 0 {
+                            config.delay_ms
+                        } else {
                             let a = aimd.lock().await;
                             a.current_delay_ms()
                         };
@@ -862,7 +903,6 @@ pub async fn run_crawl_with_options(
             {
                 active_workers.fetch_sub(1, Ordering::SeqCst);
                 if let Some(outcome) = opt {
-                    all_issues.extend(outcome.report.issues.clone());
                     if let Some(ref writer) = db_writer {
                         let _ = writer.save_page(outcome.report.clone()).await;
                     }
@@ -874,7 +914,11 @@ pub async fn run_crawl_with_options(
         }
     }
 
-    let final_aimd_delay = {
+    let final_aimd_delay = if config.no_aimd {
+        0
+    } else if config.delay_ms > 0 {
+        config.delay_ms
+    } else {
         let a = aimd.lock().await;
         a.current_delay_ms()
     };
@@ -891,6 +935,12 @@ pub async fn run_crawl_with_options(
     let is_partial_crawl =
         interrupted || hit_max_pages || hit_frontier_depth_limit || frontier_has_remaining;
     let crawl_exhaustive = !is_partial_crawl;
+
+    // Batch aggregate all page issues once at crawl termination, eliminating tens of thousands
+    // of redundant issue clone operations from inside the high-frequency coordinator loop.
+    for page in &crawled_pages {
+        all_issues.extend(page.issues.iter().cloned());
+    }
 
     let crawl_result = finalize_crawl(
         normalized_start,
