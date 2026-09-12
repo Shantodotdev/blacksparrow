@@ -533,3 +533,125 @@ fn test_json_report_export_compact_link_metrics() {
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
+
+#[tokio::test]
+async fn test_crawl_with_sitemaps_enqueues_and_crawls_unlinked_pages() {
+    let server = MockServer::start().await;
+    let base = server.uri();
+
+    // 1. Robots.txt points to sitemap
+    Mock::given(method("GET"))
+        .and(path("/robots.txt"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(format!(
+            "User-agent: *\nAllow: /\nSitemap: {base}/sitemap.xml\n"
+        )))
+        .mount(&server)
+        .await;
+
+    // 2. /sitemap.xml contains /unlinked-product (not linked on root HTML!)
+    Mock::given(method("GET"))
+        .and(path("/sitemap.xml"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+            <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                <url><loc>{base}/</loc></url>
+                <url><loc>{base}/unlinked-product</loc></url>
+            </urlset>"#
+        )))
+        .mount(&server)
+        .await;
+
+    // 3. Root page has NO links to /unlinked-product
+    Mock::given(method("GET"))
+        .and(path("/"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(
+            "<!DOCTYPE html><html><head><title>Root</title></head><body><p>Hello world</p></body></html>"
+        ))
+        .mount(&server)
+        .await;
+
+    // 4. /unlinked-product endpoint
+    Mock::given(method("GET"))
+        .and(path("/unlinked-product"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(
+            "<!DOCTYPE html><html><head><title>Unlinked Product</title></head><body><h1>Unlinked</h1></body></html>"
+        ))
+        .mount(&server)
+        .await;
+
+    let mut config = CrawlConfig::new(&base).unwrap();
+    config.max_pages = 10;
+    config.concurrency = 2;
+    config.no_aimd = true;
+    config.respect_robots = true;
+
+    let result = run_crawl(&config, None).await.unwrap();
+
+    let crawled_urls: Vec<_> = result.pages.iter().map(|p| p.url.as_str()).collect();
+    assert!(
+        crawled_urls.contains(&format!("{base}/unlinked-product").as_str()),
+        "Sitemap URL must be enqueued and crawled even if not linked in HTML: {crawled_urls:?}"
+    );
+
+    let unlinked_page = result
+        .pages
+        .iter()
+        .find(|p| p.url == format!("{base}/unlinked-product"))
+        .unwrap();
+    assert!(unlinked_page.is_sitemap_url);
+}
+
+#[tokio::test]
+async fn test_crawl_unlimited_depth_with_zero() {
+    let server = MockServer::start().await;
+    let base = server.uri();
+
+    // Chain: / -> /d1 -> /d2 -> /d3 -> /d4 -> /d5 -> /d6
+    Mock::given(method("GET"))
+        .and(path("/"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(format!(
+            r#"<!DOCTYPE html><html><head><title>Root</title></head><body><a href="{base}/d1">D1</a></body></html>"#
+        )))
+        .mount(&server)
+        .await;
+
+    for i in 1..=5 {
+        let curr = format!("/d{i}");
+        let next = format!("/d{}", i + 1);
+        Mock::given(method("GET"))
+            .and(path(&curr))
+            .respond_with(ResponseTemplate::new(200).set_body_string(format!(
+                r#"<!DOCTYPE html><html><head><title>{curr}</title></head><body><a href="{base}{next}">{next}</a></body></html>"#
+            )))
+            .mount(&server)
+            .await;
+    }
+
+    Mock::given(method("GET"))
+        .and(path("/d6"))
+        .respond_with(ResponseTemplate::new(200).set_body_string(
+            "<!DOCTYPE html><html><head><title>D6</title></head><body>End of chain</body></html>",
+        ))
+        .mount(&server)
+        .await;
+
+    let mut config = CrawlConfig::new(&base).unwrap();
+    config.max_pages = 20;
+    config.max_depth = 0; // Unlimited depth!
+    config.concurrency = 2;
+    config.no_aimd = true;
+    config.respect_robots = false;
+
+    let result = run_crawl(&config, None).await.unwrap();
+
+    assert_eq!(
+        result.pages.len(),
+        7,
+        "Unlimited depth (max_depth = 0) must crawl all 7 pages in deep chain: {:?}",
+        result
+            .pages
+            .iter()
+            .map(|p| p.url.as_str())
+            .collect::<Vec<_>>()
+    );
+}

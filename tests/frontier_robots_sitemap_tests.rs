@@ -104,6 +104,23 @@ fn test_frontier_max_depth_enforcement() {
 }
 
 #[test]
+fn test_frontier_unlimited_depth_with_zero() {
+    let mut frontier = Frontier::new(100, 0);
+
+    assert!(frontier
+        .push("https://example.com/depth-0", 0, None)
+        .unwrap());
+    assert!(frontier
+        .push("https://example.com/depth-1", 1, None)
+        .unwrap());
+    assert!(frontier
+        .push("https://example.com/depth-10", 10, None)
+        .unwrap());
+
+    assert_eq!(frontier.len(), 3);
+}
+
+#[test]
 fn test_frontier_max_pages_ceiling() {
     let mut frontier = Frontier::new(3, 10);
 
