@@ -228,6 +228,14 @@ async fn discover_robots_and_sitemaps(
                 }
 
                 Some(parsed_robots)
+            } else if res.status_code >= 500 && res.status_code < 600 {
+                let rule = get_rule(RuleId::ErrHttp5xxServerError);
+                let msg = format!(
+                    "Robots.txt at '{}' returned HTTP {} server error. Under RFC 9309, crawlers must restrict or suspend crawling.",
+                    robots_url, res.status_code
+                );
+                site_issues.push(rule.to_finding(&robots_url, Some(&msg)));
+                Some(RobotsTxt::parse("User-agent: *\nDisallow: /\n"))
             } else {
                 None
             }
@@ -257,11 +265,21 @@ async fn discover_robots_and_sitemaps(
         site_issues.push(rule.to_finding(&llms_url, Some(&msg)));
     }
 
-    // If robots.txt declared no sitemaps, probe standard conventions per docs/crawler.md §5.2
+    // If robots.txt declared no sitemaps, probe standard conventions concurrently per docs/crawler.md §5.2
     if sitemap_feed_seeds.is_empty() {
-        sitemap_feed_seeds.push(format!("{}/sitemap.xml", origin));
-        sitemap_feed_seeds.push(format!("{}/sitemap_index.xml", origin));
-        sitemap_feed_seeds.push(format!("{}/wp-sitemap.xml", origin));
+        let u1 = format!("{}/sitemap.xml", origin);
+        let u2 = format!("{}/sitemap_index.xml", origin);
+        let u3 = format!("{}/wp-sitemap.xml", origin);
+
+        let (r1, r2, r3) = tokio::join!(client.fetch(&u1), client.fetch(&u2), client.fetch(&u3),);
+
+        for (candidate_url, res) in [(u1, r1), (u2, r2), (u3, r3)] {
+            if let Ok(res) = res {
+                if res.status_code == 200 {
+                    sitemap_feed_seeds.push(candidate_url);
+                }
+            }
+        }
     }
 
     // Recursively fetch and parse XML sitemaps up to 3 levels deep
@@ -506,7 +524,7 @@ pub async fn run_crawl_with_options(
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
-                .as_secs()
+                .as_micros()
         )
     });
 
