@@ -485,3 +485,74 @@ fn test_database_path_resolution() {
         }
     }
 }
+
+#[tokio::test]
+async fn test_get_crawl_pages_pagination_and_slice_scoping() {
+    let db_path = unique_test_db_path();
+    let db = Database::open(&db_path).expect("DB open");
+    let session_id = "test_slice_session";
+
+    let init = CrawlSessionInit {
+        session_id: session_id.to_string(),
+        target_url: "https://example.com/".to_string(),
+        max_depth: 2,
+        max_pages: 10,
+        respect_robots: false,
+        render_js: false,
+    };
+    db.init_crawl_session(&init).expect("Init session");
+
+    // Insert 5 pages with different URLs
+    for i in 1..=5 {
+        let page = create_sample_page(session_id, &format!("https://example.com/p{}", i), 200);
+        db.save_page_batch(session_id, &[page]).expect("Save page");
+    }
+
+    // Limit 2, offset 0 -> returns p1, p2
+    let page_slice_1 = db.get_crawl_pages(session_id, 2, 0).expect("Query slice 1");
+    assert_eq!(page_slice_1.len(), 2);
+    for page in &page_slice_1 {
+        // Child tables must only contain elements belonging to this page
+        assert_eq!(page.links.len(), 1);
+        assert_eq!(page.links[0].source_url, page.url);
+        assert_eq!(page.issues.len(), 1);
+        assert_eq!(page.issues[0].target_url, page.url);
+    }
+
+    // Limit 2, offset 2 -> returns p3, p4
+    let page_slice_2 = db.get_crawl_pages(session_id, 2, 2).expect("Query slice 2");
+    assert_eq!(page_slice_2.len(), 2);
+    assert_ne!(page_slice_1[0].url, page_slice_2[0].url);
+
+    // Limit 2, offset 4 -> returns p5
+    let page_slice_3 = db.get_crawl_pages(session_id, 2, 4).expect("Query slice 3");
+    assert_eq!(page_slice_3.len(), 1);
+
+    // Limit 2, offset 10 -> returns empty
+    let page_slice_empty = db
+        .get_crawl_pages(session_id, 2, 10)
+        .expect("Query slice empty");
+    assert!(page_slice_empty.is_empty());
+
+    let _ = std::fs::remove_file(&db_path);
+}
+
+#[tokio::test]
+async fn test_database_pragmas_configured() {
+    let db_path = unique_test_db_path();
+    let db = Database::open(&db_path).expect("DB open");
+
+    // Verify pragmas via connection query
+    let conn = db.connect().expect("Get connection");
+    let mmap_size: i64 = conn
+        .query_row("PRAGMA mmap_size;", [], |row| row.get(0))
+        .expect("PRAGMA mmap_size");
+    assert_eq!(mmap_size, 268435456); // 256MB
+
+    let temp_store: i64 = conn
+        .query_row("PRAGMA temp_store;", [], |row| row.get(0))
+        .expect("PRAGMA temp_store");
+    assert_eq!(temp_store, 2); // 2 = MEMORY
+
+    let _ = std::fs::remove_file(&db_path);
+}

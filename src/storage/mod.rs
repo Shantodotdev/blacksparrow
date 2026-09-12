@@ -12,7 +12,9 @@ pub use queries::{
     get_crawl_issues, get_crawl_pages, init_crawl_session, list_crawls, query_issues_filtered,
     update_crawl_status, CrawlSessionInit, IssueFilterCriteria,
 };
-pub use sqlite::{default_db_path, local_db_path, open_connection, resolve_db_path, SCHEMA};
+pub use sqlite::{
+    connect_configured, default_db_path, local_db_path, open_connection, resolve_db_path, SCHEMA,
+};
 pub use writer::{spawn_db_writer, DbMessage, DbWriterHandle};
 
 use crate::core::models::{CrawlSummary, IssueCategory, IssueFinding, PageReport, Severity};
@@ -46,9 +48,9 @@ impl Database {
         &self.path
     }
 
-    /// Opens a new configured connection to the database.
+    /// Opens a new configured connection to the database without re-executing DDL schema migrations.
     pub fn connect(&self) -> SeoResult<rusqlite::Connection> {
-        sqlite::open_connection(&self.path)
+        sqlite::connect_configured(&self.path)
     }
 
     /// Creates and persists a new crawl session.

@@ -294,21 +294,52 @@ pub fn get_crawl_pages(
         return Ok(pages);
     }
 
-    // Load child collections in bulk
+    // Load child collections in bulk (scoped to the current page slice when <= 500 pages)
+    let page_urls: Vec<&str> = pages.iter().map(|p| p.url.as_str()).collect();
+    let scoped = page_urls.len() <= 500;
+    let placeholders = if scoped {
+        let ph = (0..page_urls.len())
+            .map(|i| format!("?{}", i + 2))
+            .collect::<Vec<_>>()
+            .join(",");
+        Some(ph)
+    } else {
+        None
+    };
+
     let mut links_map: HashMap<String, Vec<DiscoveredLink>> = HashMap::new();
     let mut images_map: HashMap<String, Vec<ImageResource>> = HashMap::new();
     let mut schemas_map: HashMap<String, Vec<SchemaRecord>> = HashMap::new();
     let mut hreflangs_map: HashMap<String, Vec<HreflangTag>> = HashMap::new();
     let mut issues_map: HashMap<String, Vec<IssueFinding>> = HashMap::new();
 
+    // Helper to build param references: session_id + optional page URLs
+    let mut params_vec: Vec<&dyn rusqlite::ToSql> =
+        Vec::with_capacity(1 + if scoped { pages.len() } else { 0 });
+    params_vec.push(&session_id);
+    if scoped {
+        for page in &pages {
+            params_vec.push(&page.url);
+        }
+    }
+
     // 1. Links
     {
-        let mut link_stmt = conn.prepare(
-            "SELECT source_url, target_url, target_url_hash, anchor_text, is_internal,
-                    is_nofollow, is_image_link, is_target_blank, has_opener_or_referrer, status_code
-             FROM links WHERE crawl_id = ?1",
-        )?;
-        let link_rows = link_stmt.query_map(params![session_id], |row| {
+        let sql = match &placeholders {
+            Some(ph) => format!(
+                "SELECT source_url, target_url, target_url_hash, anchor_text, is_internal,
+                        is_nofollow, is_image_link, is_target_blank, has_opener_or_referrer, status_code
+                 FROM links WHERE crawl_id = ?1 AND source_url IN ({ph})"
+            ),
+            None => {
+                "SELECT source_url, target_url, target_url_hash, anchor_text, is_internal,
+                        is_nofollow, is_image_link, is_target_blank, has_opener_or_referrer, status_code
+                 FROM links WHERE crawl_id = ?1"
+                    .to_string()
+            }
+        };
+        let mut link_stmt = conn.prepare(&sql)?;
+        let link_rows = link_stmt.query_map(params_vec.as_slice(), |row| {
             let source_url: String = row.get(0)?;
             let target_url: String = row.get(1)?;
             let _target_url_hash: i64 = row.get(2)?;
@@ -344,11 +375,19 @@ pub fn get_crawl_pages(
 
     // 2. Images
     {
-        let mut img_stmt = conn.prepare(
-            "SELECT page_url, src_url, alt_text, width, height, size_bytes, has_dimensions, is_broken
-             FROM images WHERE crawl_id = ?1",
-        )?;
-        let img_rows = img_stmt.query_map(params![session_id], |row| {
+        let sql = match &placeholders {
+            Some(ph) => format!(
+                "SELECT page_url, src_url, alt_text, width, height, size_bytes, has_dimensions, is_broken
+                 FROM images WHERE crawl_id = ?1 AND page_url IN ({ph})"
+            ),
+            None => {
+                "SELECT page_url, src_url, alt_text, width, height, size_bytes, has_dimensions, is_broken
+                 FROM images WHERE crawl_id = ?1"
+                    .to_string()
+            }
+        };
+        let mut img_stmt = conn.prepare(&sql)?;
+        let img_rows = img_stmt.query_map(params_vec.as_slice(), |row| {
             let page_url: String = row.get(0)?;
             let src_url: String = row.get(1)?;
             let alt_text: Option<String> = row.get(2)?;
@@ -379,11 +418,17 @@ pub fn get_crawl_pages(
 
     // 3. Schemas
     {
-        let mut schema_stmt = conn.prepare(
-            "SELECT page_url, schema_type, raw_json, is_valid_json, is_google_eligible
-             FROM schemas WHERE crawl_id = ?1",
-        )?;
-        let schema_rows = schema_stmt.query_map(params![session_id], |row| {
+        let sql = match &placeholders {
+            Some(ph) => format!(
+                "SELECT page_url, schema_type, raw_json, is_valid_json, is_google_eligible
+                 FROM schemas WHERE crawl_id = ?1 AND page_url IN ({ph})"
+            ),
+            None => "SELECT page_url, schema_type, raw_json, is_valid_json, is_google_eligible
+                 FROM schemas WHERE crawl_id = ?1"
+                .to_string(),
+        };
+        let mut schema_stmt = conn.prepare(&sql)?;
+        let schema_rows = schema_stmt.query_map(params_vec.as_slice(), |row| {
             let page_url: String = row.get(0)?;
             let schema_type: String = row.get(1)?;
             let raw_json: String = row.get(2)?;
@@ -409,11 +454,17 @@ pub fn get_crawl_pages(
 
     // 4. Hreflangs
     {
-        let mut href_stmt = conn.prepare(
-            "SELECT page_url, lang_code, target_url, is_reciprocal
-             FROM hreflangs WHERE crawl_id = ?1",
-        )?;
-        let href_rows = href_stmt.query_map(params![session_id], |row| {
+        let sql = match &placeholders {
+            Some(ph) => format!(
+                "SELECT page_url, lang_code, target_url, is_reciprocal
+                 FROM hreflangs WHERE crawl_id = ?1 AND page_url IN ({ph})"
+            ),
+            None => "SELECT page_url, lang_code, target_url, is_reciprocal
+                 FROM hreflangs WHERE crawl_id = ?1"
+                .to_string(),
+        };
+        let mut href_stmt = conn.prepare(&sql)?;
+        let href_rows = href_stmt.query_map(params_vec.as_slice(), |row| {
             let page_url: String = row.get(0)?;
             let lang_code: String = row.get(1)?;
             let target_url: String = row.get(2)?;
@@ -436,11 +487,17 @@ pub fn get_crawl_pages(
 
     // 5. Issues
     {
-        let mut issue_stmt = conn.prepare(
-            "SELECT target_url, code, category, severity, title, message, source_page_url
-             FROM issues WHERE crawl_id = ?1",
-        )?;
-        let issue_rows = issue_stmt.query_map(params![session_id], |row| {
+        let sql = match &placeholders {
+            Some(ph) => format!(
+                "SELECT target_url, code, category, severity, title, message, source_page_url
+                 FROM issues WHERE crawl_id = ?1 AND target_url IN ({ph})"
+            ),
+            None => "SELECT target_url, code, category, severity, title, message, source_page_url
+                 FROM issues WHERE crawl_id = ?1"
+                .to_string(),
+        };
+        let mut issue_stmt = conn.prepare(&sql)?;
+        let issue_rows = issue_stmt.query_map(params_vec.as_slice(), |row| {
             let target_url: String = row.get(0)?;
             let code_str: String = row.get(1)?;
             let cat_str: String = row.get(2)?;

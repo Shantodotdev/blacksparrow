@@ -84,6 +84,13 @@ pub fn resolve_db_path(explicit: Option<PathBuf>, local: bool) -> PathBuf {
     default_db_path()
 }
 
+/// Opens a configured SQLite connection to the specified path without re-executing schema DDL migrations.
+pub fn connect_configured(path: &Path) -> SeoResult<Connection> {
+    let conn = Connection::open(path)?;
+    configure_connection(&conn)?;
+    Ok(conn)
+}
+
 /// Opens a SQLite connection to the specified path and applies WAL mode and schema.
 pub fn open_connection(path: &Path) -> SeoResult<Connection> {
     if let Some(parent) = path.parent() {
@@ -103,8 +110,8 @@ pub fn open_connection(path: &Path) -> SeoResult<Connection> {
     Ok(conn)
 }
 
-/// Configures connection PRAGMAs for concurrency and durability, then executes schema migrations.
-pub fn init_connection(conn: &Connection) -> SeoResult<()> {
+/// Applies high-throughput PRAGMAs for concurrency, caching, and durability without modifying schema.
+pub fn configure_connection(conn: &Connection) -> SeoResult<()> {
     // 1. WAL mode: Non-blocking readers during background crawl ingestion via sequential log append.
     let _ = conn.pragma_update(None, "journal_mode", "WAL");
 
@@ -120,7 +127,24 @@ pub fn init_connection(conn: &Connection) -> SeoResult<()> {
     // 5. Cache Size: Negative value allocates exactly 64 MiB (64,000 KiB) of RAM for B-Tree page cache.
     conn.pragma_update(None, "cache_size", -64000)?;
 
-    // Execute schema DDL
+    // 6. Temp Store: Keep temporary indices, sort buffers, and transient tables in RAM.
+    conn.pragma_update(None, "temp_store", "MEMORY")?;
+
+    // 7. Memory-mapped I/O: 256 MiB memory mapping for microsecond read latency.
+    let _ = conn.pragma_update(None, "mmap_size", 268435456i64);
+
+    Ok(())
+}
+
+/// Executes authoritative DDL schema migrations.
+pub fn apply_schema(conn: &Connection) -> SeoResult<()> {
     conn.execute_batch(SCHEMA)?;
+    Ok(())
+}
+
+/// Configures connection PRAGMAs for concurrency and durability, then executes schema migrations.
+pub fn init_connection(conn: &Connection) -> SeoResult<()> {
+    configure_connection(conn)?;
+    apply_schema(conn)?;
     Ok(())
 }
