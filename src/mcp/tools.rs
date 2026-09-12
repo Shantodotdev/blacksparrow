@@ -240,7 +240,7 @@ async fn tool_start_audit(args: Option<&Value>, db: &Database) -> SeoResult<Call
 
     let ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
+        .map(|d| d.as_micros())
         .unwrap_or(0);
     let session_id = format!("crawl_{ts}");
 

@@ -90,7 +90,7 @@ async fn handle_audit(args: AuditArgs) -> Result<(), Box<dyn std::error::Error>>
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
-            .as_secs()
+            .as_micros()
     );
     config.session_id = Some(session_id.clone());
 
