@@ -184,7 +184,7 @@ impl Frontier {
     /// assert!(!frontier.push("https://example.com/page2", 2, None).unwrap());
     /// ```
     pub fn push(&mut self, raw_url: &str, depth: u16, source_url: Option<&str>) -> SeoResult<bool> {
-        if depth > self.max_depth {
+        if self.max_depth > 0 && depth > self.max_depth {
             self.hit_max_depth = true;
             return Ok(false);
         }
@@ -226,9 +226,14 @@ impl Frontier {
             return Ok(false);
         }
 
+        let initial_in_degree = if source_url.is_some() || depth == 0 {
+            1
+        } else {
+            0
+        };
         self.enqueued_count += 1;
         self.pending_urls.insert(hash);
-        self.in_degrees.insert(hash, 1);
+        self.in_degrees.insert(hash, initial_in_degree);
         self.sequence_counter += 1;
 
         let entry = FrontierEntry {
@@ -238,7 +243,7 @@ impl Frontier {
         };
 
         let is_sitemap = self.sitemap_hashes.contains(&hash);
-        let priority = calculate_url_importance(&normalized, depth, 1, is_sitemap);
+        let priority = calculate_url_importance(&normalized, depth, initial_in_degree, is_sitemap);
         self.priority_heap.push(PrioritizedEntry {
             priority,
             sequence: self.sequence_counter,

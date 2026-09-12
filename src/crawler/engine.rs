@@ -267,16 +267,17 @@ async fn discover_robots_and_sitemaps(
     // Recursively fetch and parse XML sitemaps up to 3 levels deep
     let mut queue = VecDeque::new();
     let mut visited_feeds = HashSet::new();
-    let mut discovered_pages = HashSet::new();
+    let mut discovered_pages_set = HashSet::new();
+    let mut discovered_pages = Vec::new();
 
     for feed in sitemap_feed_seeds {
         queue.push_back((feed, 0u8));
     }
 
     let max_sitemap_target = if max_pages > 0 {
-        (max_pages as usize).saturating_mul(2).max(10_000)
+        (max_pages as usize).saturating_mul(3).max(10_000)
     } else {
-        50_000
+        usize::MAX
     };
 
     while let Some((feed_url, depth)) = queue.pop_front() {
@@ -302,10 +303,10 @@ async fn discover_robots_and_sitemaps(
                                     && !loc.ends_with(".xml")
                                     && !loc.ends_with(".xml.gz")
                                 {
-                                    if let Ok(norm) = normalize_url(loc) {
-                                        discovered_pages.insert(norm);
-                                    } else {
-                                        discovered_pages.insert(loc.to_string());
+                                    let candidate =
+                                        normalize_url(loc).unwrap_or_else(|_| loc.to_string());
+                                    if discovered_pages_set.insert(candidate.clone()) {
+                                        discovered_pages.push(candidate);
                                     }
                                 }
                             }
@@ -328,8 +329,7 @@ async fn discover_robots_and_sitemaps(
         }
     }
 
-    let sitemap_urls = discovered_pages.into_iter().collect::<Vec<String>>();
-    (robots, sitemap_urls, site_issues)
+    (robots, discovered_pages, site_issues)
 }
 
 /// Fetches a single frontier entry, applies AIMD politeness throttling, evaluates single-page rules, and generates a PageReport.
@@ -571,18 +571,18 @@ pub async fn run_crawl_with_options(
             .collect();
         f.register_sitemap_urls(&filtered_sitemaps);
         f.push(&normalized_start, 0, None)?;
+
+        // Seed the frontier with discovered XML sitemap URLs so they are crawled
+        for sm_url in &filtered_sitemaps {
+            if sm_url == &normalized_start {
+                continue;
+            }
+            if config.max_pages > 0 && f.enqueued_count() >= config.max_pages {
+                break;
+            }
+            let _ = f.push(sm_url, 1, None);
+        }
     }
-
-    let aimd = Arc::new(Mutex::new(AimdController::new(
-        config.concurrency,
-        config.delay_ms,
-    )));
-
-    let concurrency = config.concurrency.max(1);
-    let semaphore = Arc::new(Semaphore::new(concurrency));
-    let active_workers = Arc::new(AtomicUsize::new(0));
-
-    let (tx, mut rx) = mpsc::channel::<Option<WorkerPageOutcome>>(concurrency * 2);
 
     let mut crawled_pages = Vec::new();
     let mut all_issues = Vec::new();
@@ -602,6 +602,33 @@ pub async fn run_crawl_with_options(
         }
         all_issues.push(issue.clone());
     }
+
+    if let Some(ref cb) = progress_cb {
+        let f = frontier.lock().await;
+        cb(ProgressUpdate {
+            crawled_pages: 0,
+            discovered_pages: f.enqueued_count() as usize,
+            max_pages: config.max_pages,
+            current_url: normalized_start.clone(),
+            status_code: 0,
+            ttfb_ms: 0,
+            aimd_delay_ms: config.delay_ms,
+            critical_count,
+            alert_count,
+            warning_count,
+        });
+    }
+
+    let aimd = Arc::new(Mutex::new(AimdController::new(
+        config.concurrency,
+        config.delay_ms,
+    )));
+
+    let concurrency = config.concurrency.max(1);
+    let semaphore = Arc::new(Semaphore::new(concurrency));
+    let active_workers = Arc::new(AtomicUsize::new(0));
+
+    let (tx, mut rx) = mpsc::channel::<Option<WorkerPageOutcome>>(concurrency * 2);
 
     loop {
         if interrupted {
