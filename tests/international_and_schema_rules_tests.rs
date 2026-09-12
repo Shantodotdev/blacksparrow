@@ -368,3 +368,64 @@ Allow: /
         "Expected WarnLlmsTxtMissing when /llms.txt returns 404"
     );
 }
+
+#[test]
+fn test_validate_raw_schema_multiple_json_ld_blocks() {
+    use blacksparrow::rules::page::schema_val::validate_raw_schema;
+
+    let html = r#"
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <script type="application/ld+json">
+        {
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            "itemListElement": [{
+                "@type": "ListItem",
+                "position": 1,
+                "name": "Home",
+                "item": "https://example.com"
+            }]
+        }
+        </script>
+        <script type="application/ld+json">
+        {
+            "@context": "https://schema.org",
+            "@type": "Product",
+            "name": "Super Widget",
+            "image": "https://example.com/widget.jpg",
+            "offers": {
+                "@type": "Offer",
+                "price": "29.99",
+                "priceCurrency": "USD"
+            }
+        }
+        </script >
+    </head>
+    <body>
+        <h1>Widget Page</h1>
+    </body>
+    </html>
+    "#;
+
+    // 1. With expected_type = Some("Product"), it must skip BreadcrumbList and match Product
+    let res = validate_raw_schema(html, Some("Product")).expect("Schema validation should succeed");
+    assert!(res.is_valid_json);
+    assert_eq!(res.detected_type.as_deref(), Some("Product"));
+    assert!(res.is_rich_result_eligible);
+    assert!(res.missing_required_fields.is_empty());
+
+    // 2. With expected_type = None, it should detect a supported rich result type (Product or BreadcrumbList)
+    let res_auto = validate_raw_schema(html, None).expect("Schema validation should succeed");
+    assert!(res_auto.is_valid_json);
+    assert!(res_auto.detected_type.is_some());
+    assert!(res_auto.is_rich_result_eligible);
+
+    // 3. With expected_type = Some("Recipe") which is absent, it should report valid JSON but missing requested type
+    let res_missing =
+        validate_raw_schema(html, Some("Recipe")).expect("Validation returns outcome");
+    assert!(res_missing.is_valid_json);
+    assert!(!res_missing.is_rich_result_eligible);
+    assert!(res_missing.error_message.unwrap().contains("Recipe"));
+}

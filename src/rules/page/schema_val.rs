@@ -353,8 +353,9 @@ const SUPPORTED_RICH_RESULT_TYPES: &[&str] = &[
     "AggregateRating",
 ];
 
-fn extract_json_ld_script_content(html: &str) -> Option<&str> {
+fn extract_all_json_ld_scripts(html: &str) -> Vec<&str> {
     let lower = html.to_ascii_lowercase();
+    let mut scripts = Vec::new();
     let mut cursor = 0;
     while let Some(pos) = lower[cursor..].find("<script") {
         let tag_start = cursor + pos;
@@ -362,8 +363,14 @@ fn extract_json_ld_script_content(html: &str) -> Option<&str> {
             let open_tag = &lower[tag_start..tag_start + tag_close];
             if open_tag.contains("application/ld+json") {
                 let body_start = tag_start + tag_close + 1;
-                if let Some(end_pos) = lower[body_start..].find("</script>") {
-                    return Some(html[body_start..body_start + end_pos].trim());
+                // Find closing </script> allowing optional whitespace or casing before '>'
+                if let Some(end_pos) = lower[body_start..].find("</script") {
+                    let close_candidate = &lower[body_start + end_pos..];
+                    if let Some(close_tag_len) = close_candidate.find('>') {
+                        scripts.push(html[body_start..body_start + end_pos].trim());
+                        cursor = body_start + end_pos + close_tag_len + 1;
+                        continue;
+                    }
                 }
             }
             cursor = tag_start + tag_close + 1;
@@ -371,7 +378,7 @@ fn extract_json_ld_script_content(html: &str) -> Option<&str> {
             break;
         }
     }
-    None
+    scripts
 }
 
 fn extract_all_types(val: &Value) -> Vec<String> {
@@ -396,54 +403,16 @@ fn extract_all_types(val: &Value) -> Vec<String> {
     types
 }
 
-/// Validates a raw JSON-LD snippet or HTML block against Google Rich Results eligibility rules.
-pub fn validate_raw_schema(
-    raw: &str,
-    expected_type: Option<&str>,
-) -> SeoResult<SchemaValidationOutcome> {
-    let trimmed = raw.trim();
-    let json_text = if let Some(content) = extract_json_ld_script_content(trimmed) {
-        content
-    } else if trimmed.starts_with('{') || trimmed.starts_with('[') {
-        trimmed
-    } else if trimmed.to_ascii_lowercase().contains("<script") {
-        return Ok(SchemaValidationOutcome {
-            is_valid_json: false,
-            detected_type: None,
-            is_rich_result_eligible: false,
-            missing_required_fields: Vec::new(),
-            missing_recommended_fields: Vec::new(),
-            error_message: Some(
-                "No JSON-LD script block (<script type=\"application/ld+json\">) found in HTML"
-                    .to_string(),
-            ),
-        });
-    } else {
-        trimmed
-    };
-
-    let val: Value = match serde_json::from_str(json_text) {
-        Ok(v) => v,
-        Err(e) => {
-            return Ok(SchemaValidationOutcome {
-                is_valid_json: false,
-                detected_type: None,
-                is_rich_result_eligible: false,
-                missing_required_fields: Vec::new(),
-                missing_recommended_fields: Vec::new(),
-                error_message: Some(format!("Invalid JSON syntax: {e}")),
-            });
-        }
-    };
-
-    let types = extract_all_types(&val);
+/// Evaluates a parsed JSON-LD Value against Google Rich Results rules.
+fn validate_single_json_val(val: &Value, expected_type: Option<&str>) -> SchemaValidationOutcome {
+    let types = extract_all_types(val);
     let detected_type = types.first().cloned();
 
     let target_type = if let Some(exp) = expected_type {
         if let Some(matched) = types.iter().find(|t| t.eq_ignore_ascii_case(exp)) {
             Some(matched.clone())
         } else {
-            return Ok(SchemaValidationOutcome {
+            return SchemaValidationOutcome {
                 is_valid_json: true,
                 detected_type,
                 is_rich_result_eligible: false,
@@ -453,7 +422,7 @@ pub fn validate_raw_schema(
                     "Expected type '{}' not found in detected schema types: {:?}",
                     exp, types
                 )),
-            });
+            };
         }
     } else {
         types
@@ -467,7 +436,7 @@ pub fn validate_raw_schema(
     };
 
     let Some(ref t) = target_type else {
-        return Ok(SchemaValidationOutcome {
+        return SchemaValidationOutcome {
             is_valid_json: true,
             detected_type: detected_type.clone(),
             is_rich_result_eligible: false,
@@ -477,46 +446,46 @@ pub fn validate_raw_schema(
                 "Detected type '{}' is not eligible for Google Rich Results",
                 detected_type.as_deref().unwrap_or("Unknown")
             )),
-        });
+        };
     };
 
     let mut missing_required = Vec::new();
     let mut missing_recommended = Vec::new();
 
     if t.eq_ignore_ascii_case("product") {
-        if !json_has_field(&val, "name") {
+        if !json_has_field(val, "name") {
             missing_required.push("name".to_string());
         }
-        if !json_has_field(&val, "image") {
+        if !json_has_field(val, "image") {
             missing_recommended.push("image".to_string());
         }
-        if !json_has_field(&val, "offers") {
+        if !json_has_field(val, "offers") {
             missing_required.push("offers".to_string());
         }
-        if !json_has_field(&val, "aggregateRating") && !json_has_field(&val, "review") {
+        if !json_has_field(val, "aggregateRating") && !json_has_field(val, "review") {
             missing_recommended.push("aggregateRating".to_string());
         }
     } else if t.eq_ignore_ascii_case("article")
         || t.eq_ignore_ascii_case("newsarticle")
         || t.eq_ignore_ascii_case("blogposting")
     {
-        if !json_has_field(&val, "headline") {
+        if !json_has_field(val, "headline") {
             missing_required.push("headline".to_string());
         }
-        if !json_has_field(&val, "author") {
+        if !json_has_field(val, "author") {
             missing_recommended.push("author".to_string());
         }
-        if !json_has_field(&val, "datePublished") {
+        if !json_has_field(val, "datePublished") {
             missing_recommended.push("datePublished".to_string());
         }
-        if !json_has_field(&val, "image") {
+        if !json_has_field(val, "image") {
             missing_recommended.push("image".to_string());
         }
     } else if t.eq_ignore_ascii_case("faqpage") {
-        if !json_has_field(&val, "mainEntity") {
+        if !json_has_field(val, "mainEntity") {
             missing_required.push("mainEntity".to_string());
         }
-    } else if t.eq_ignore_ascii_case("breadcrumblist") && !json_has_field(&val, "itemListElement") {
+    } else if t.eq_ignore_ascii_case("breadcrumblist") && !json_has_field(val, "itemListElement") {
         missing_required.push("itemListElement".to_string());
     }
 
@@ -530,12 +499,125 @@ pub fn validate_raw_schema(
         None
     };
 
-    Ok(SchemaValidationOutcome {
+    SchemaValidationOutcome {
         is_valid_json: true,
         detected_type: target_type.or(detected_type),
         is_rich_result_eligible: is_eligible,
         missing_required_fields: missing_required,
         missing_recommended_fields: missing_recommended,
         error_message: err_msg,
-    })
+    }
+}
+
+/// Validates a raw JSON-LD snippet or HTML block against Google Rich Results eligibility rules.
+pub fn validate_raw_schema(
+    raw: &str,
+    expected_type: Option<&str>,
+) -> SeoResult<SchemaValidationOutcome> {
+    let trimmed = raw.trim();
+
+    if trimmed.to_ascii_lowercase().contains("<script") {
+        let scripts = extract_all_json_ld_scripts(trimmed);
+        if scripts.is_empty() {
+            return Ok(SchemaValidationOutcome {
+                is_valid_json: false,
+                detected_type: None,
+                is_rich_result_eligible: false,
+                missing_required_fields: Vec::new(),
+                missing_recommended_fields: Vec::new(),
+                error_message: Some(
+                    "No JSON-LD script block (<script type=\"application/ld+json\">) found in HTML"
+                        .to_string(),
+                ),
+            });
+        }
+
+        // Parse each extracted script block
+        let mut parsed_scripts: Vec<Value> = Vec::new();
+        let mut first_err = None;
+
+        for s in &scripts {
+            match serde_json::from_str::<Value>(s) {
+                Ok(v) => parsed_scripts.push(v),
+                Err(e) => {
+                    if first_err.is_none() {
+                        first_err = Some(e.to_string());
+                    }
+                }
+            }
+        }
+
+        if parsed_scripts.is_empty() {
+            return Ok(SchemaValidationOutcome {
+                is_valid_json: false,
+                detected_type: None,
+                is_rich_result_eligible: false,
+                missing_required_fields: Vec::new(),
+                missing_recommended_fields: Vec::new(),
+                error_message: Some(format!(
+                    "Invalid JSON syntax in script block: {}",
+                    first_err.unwrap_or_default()
+                )),
+            });
+        }
+
+        // If an expected type was requested, locate the script block defining that type
+        if let Some(exp) = expected_type {
+            if let Some(matched_val) = parsed_scripts.iter().find(|val| {
+                extract_all_types(val)
+                    .iter()
+                    .any(|t| t.eq_ignore_ascii_case(exp))
+            }) {
+                return Ok(validate_single_json_val(matched_val, Some(exp)));
+            }
+
+            // Type not found in any script block: aggregate all detected types across all blocks
+            let mut all_types = Vec::new();
+            for val in &parsed_scripts {
+                all_types.extend(extract_all_types(val));
+            }
+            return Ok(SchemaValidationOutcome {
+                is_valid_json: true,
+                detected_type: all_types.first().cloned(),
+                is_rich_result_eligible: false,
+                missing_required_fields: Vec::new(),
+                missing_recommended_fields: Vec::new(),
+                error_message: Some(format!(
+                    "Expected type '{}' not found in detected schema types: {:?}",
+                    exp, all_types
+                )),
+            });
+        }
+
+        // No expected type: pick the first block matching a supported rich result type, or first block
+        let chosen = parsed_scripts
+            .iter()
+            .find(|val| {
+                extract_all_types(val).iter().any(|t| {
+                    SUPPORTED_RICH_RESULT_TYPES
+                        .iter()
+                        .any(|s| s.eq_ignore_ascii_case(t))
+                })
+            })
+            .unwrap_or(&parsed_scripts[0]);
+
+        return Ok(validate_single_json_val(chosen, None));
+    }
+
+    // Direct JSON payload (not wrapped in <script>)
+    let val: Value = match serde_json::from_str(trimmed) {
+        Ok(v) => v,
+        Err(e) => {
+            return Ok(SchemaValidationOutcome {
+                is_valid_json: false,
+                detected_type: None,
+                is_rich_result_eligible: false,
+                missing_required_fields: Vec::new(),
+                missing_recommended_fields: Vec::new(),
+                error_message: Some(format!("Invalid JSON syntax: {e}")),
+            });
+        }
+    };
+
+    Ok(validate_single_json_val(&val, expected_type))
 }
