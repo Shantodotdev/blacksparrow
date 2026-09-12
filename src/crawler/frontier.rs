@@ -151,9 +151,7 @@ impl Frontier {
     /// Registers a collection of XML sitemap URLs to receive seed priority boosts.
     pub fn register_sitemap_urls(&mut self, urls: &[String]) {
         for url in urls {
-            if let Ok(normalized) = normalize_url(url) {
-                self.sitemap_hashes.insert(url_hash(&normalized));
-            }
+            self.sitemap_hashes.insert(url_hash(url));
         }
     }
 

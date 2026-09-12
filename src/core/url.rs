@@ -167,48 +167,57 @@ pub fn normalize_url(raw: &str) -> SeoResult<String> {
 
     // 4. Path normalization & dot segment resolution & consecutive slash collapsing
     let path = parsed.path();
-    let has_trailing_slash = path.ends_with('/') && path.len() > 1;
+    if path.contains("//") || path.contains("/.") || path.is_empty() {
+        let has_trailing_slash = path.ends_with('/') && path.len() > 1;
 
-    let mut segments: Vec<&str> = Vec::new();
-    for seg in path.split('/') {
-        if seg.is_empty() || seg == "." {
-            continue;
+        let mut segments: Vec<&str> = Vec::new();
+        for seg in path.split('/') {
+            if seg.is_empty() || seg == "." {
+                continue;
+            }
+            if seg == ".." {
+                segments.pop();
+            } else {
+                segments.push(seg);
+            }
         }
-        if seg == ".." {
-            segments.pop();
-        } else {
-            segments.push(seg);
-        }
-    }
 
-    let mut clean_path = String::with_capacity(path.len() + 1);
-    clean_path.push('/');
-    clean_path.push_str(&segments.join("/"));
-    if has_trailing_slash && !clean_path.ends_with('/') {
+        let mut clean_path = String::with_capacity(path.len() + 1);
         clean_path.push('/');
+        for (i, seg) in segments.iter().enumerate() {
+            if i > 0 {
+                clean_path.push('/');
+            }
+            clean_path.push_str(seg);
+        }
+        if has_trailing_slash && !clean_path.ends_with('/') {
+            clean_path.push('/');
+        }
+        parsed.set_path(&clean_path);
     }
-    parsed.set_path(&clean_path);
 
     // 5. Fragment stripping
     parsed.set_fragment(None);
 
     // 6. Tracking parameter stripping & 7. Deterministic lexicographical query sorting
-    let mut clean_pairs: Vec<(String, String)> = parsed
-        .query_pairs()
-        .filter(|(k, _)| !is_tracking_parameter(k))
-        .map(|(k, v)| (k.into_owned(), v.into_owned()))
-        .collect();
+    if parsed.query().is_some() {
+        let mut clean_pairs: Vec<(String, String)> = parsed
+            .query_pairs()
+            .filter(|(k, _)| !is_tracking_parameter(k))
+            .map(|(k, v)| (k.into_owned(), v.into_owned()))
+            .collect();
 
-    if clean_pairs.is_empty() {
-        parsed.set_query(None);
-    } else {
-        clean_pairs.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
-        let mut serializer = url::form_urlencoded::Serializer::new(String::new());
-        for (k, v) in clean_pairs {
-            serializer.append_pair(&k, &v);
+        if clean_pairs.is_empty() {
+            parsed.set_query(None);
+        } else {
+            clean_pairs.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+            let mut serializer = url::form_urlencoded::Serializer::new(String::new());
+            for (k, v) in clean_pairs {
+                serializer.append_pair(&k, &v);
+            }
+            let query_str = serializer.finish();
+            parsed.set_query(Some(&query_str));
         }
-        let query_str = serializer.finish();
-        parsed.set_query(Some(&query_str));
     }
 
     Ok(parsed.to_string())

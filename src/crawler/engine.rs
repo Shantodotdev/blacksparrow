@@ -183,6 +183,7 @@ async fn discover_robots_and_sitemaps(
     seed_url: &str,
     respect_robots: bool,
     explicit_sitemaps: &[String],
+    max_pages: u32,
 ) -> (Option<RobotsTxt>, Vec<String>, Vec<IssueFinding>) {
     let Ok(parsed_url) = url::Url::parse(seed_url) else {
         return (None, Vec::new(), Vec::new());
@@ -272,7 +273,16 @@ async fn discover_robots_and_sitemaps(
         queue.push_back((feed, 0u8));
     }
 
+    let max_sitemap_target = if max_pages > 0 {
+        (max_pages as usize).saturating_mul(2).max(10_000)
+    } else {
+        50_000
+    };
+
     while let Some((feed_url, depth)) = queue.pop_front() {
+        if discovered_pages.len() >= max_sitemap_target {
+            break;
+        }
         if depth > 3 || !visited_feeds.insert(feed_url.clone()) {
             continue;
         }
@@ -283,6 +293,9 @@ async fn discover_robots_and_sitemaps(
                     match doc {
                         SitemapDocument::UrlSet(entries) => {
                             for entry in entries {
+                                if discovered_pages.len() >= max_sitemap_target {
+                                    break;
+                                }
                                 let loc = entry.loc.as_str();
                                 if is_internal(loc, &origin)
                                     && !is_static_asset_url(loc)
@@ -298,7 +311,7 @@ async fn discover_robots_and_sitemaps(
                             }
                         }
                         SitemapDocument::Index(sub_sitemaps) => {
-                            if depth < 3 {
+                            if depth < 3 && discovered_pages.len() < max_sitemap_target {
                                 for sub in sub_sitemaps {
                                     let child_feed = sub.loc.as_str().to_string();
                                     if is_internal(&child_feed, &origin)
@@ -511,6 +524,7 @@ pub async fn run_crawl_with_options(
         &normalized_start,
         config.respect_robots,
         &config.explicit_sitemaps,
+        config.max_pages,
     )
     .await;
 
