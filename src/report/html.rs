@@ -247,9 +247,17 @@ fn render_html_report(result: &CrawlResult) -> String {
         ));
     }
 
-    // Render Pages Table Rows
+    // Render Pages Table Rows (windowed to 1,000 pages to avoid multi-megabyte DOM freezes on massive audits)
+    const MAX_HTML_PAGES_TABLE_ROWS: usize = 1000;
+    let total_pages = result.pages.len();
+    let preview_pages = if total_pages > MAX_HTML_PAGES_TABLE_ROWS {
+        &result.pages[..MAX_HTML_PAGES_TABLE_ROWS]
+    } else {
+        &result.pages[..]
+    };
+
     let mut pages_table_rows = String::new();
-    for (i, p) in result.pages.iter().enumerate() {
+    for (i, p) in preview_pages.iter().enumerate() {
         let url_esc = html_escape(&p.url);
         let title_esc = html_escape(p.title.as_deref().unwrap_or("-"));
         let h1_esc = html_escape(p.h1_primary.as_deref().unwrap_or("-"));
@@ -282,6 +290,16 @@ fn render_html_report(result: &CrawlResult) -> String {
             p.status_code,
             p.ttfb_ms,
             p.word_count
+        ));
+    }
+
+    if total_pages > MAX_HTML_PAGES_TABLE_ROWS {
+        pages_table_rows.push_str(&format!(
+            r#"<tr class="page-row-notice">
+                <td colspan="10" style="text-align: center; padding: 1.25rem; background: var(--bg-subtle); color: var(--text-muted); font-size: 13.5px;">
+                    ⚡ <strong>Showing top 1,000 priority pages.</strong> Complete dataset of {total_pages} crawled pages is exported in <code>csv/internal_all.csv</code>.
+                </td>
+            </tr>"#
         ));
     }
 
@@ -1443,7 +1461,7 @@ fn render_html_report(result: &CrawlResult) -> String {
         result.issues.len(),
         result.pages.len(),
         result.issues.len(),
-        result.pages.len(),
+        preview_pages.len(),
         result.pages.len(),
         sorted_statuses.len(),
         sorted_depths.last().map(|(d, _)| *d).unwrap_or(0)

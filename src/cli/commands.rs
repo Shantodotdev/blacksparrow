@@ -15,10 +15,11 @@ use crate::crawler::engine::{run_crawl_with_options, CrawlResult, ProgressCallba
 use crate::crawler::inspector::inspect_url_with_options;
 use crate::graph::{compute_pagerank, SiteGraph};
 use crate::report::{
-    create_crawl_progress_bar, export_csv_suite, export_html_report, export_json_report,
-    export_markdown_report, finish_crawl_progress, print_ai_readiness_scorecard,
-    print_audit_banner, print_executive_scorecard, print_historical_sessions, print_issues_matrix,
-    print_page_inspection, print_schema_outcome, update_crawl_progress,
+    clear_post_crawl_status, create_crawl_progress_bar, export_csv_suite, export_html_report,
+    export_json_report, export_markdown_report, finish_crawl_progress,
+    print_ai_readiness_scorecard, print_audit_banner, print_executive_scorecard,
+    print_historical_sessions, print_issues_matrix, print_page_inspection, print_schema_outcome,
+    render_post_crawl_status, update_crawl_progress,
 };
 use crate::rules::page::schema_val::validate_raw_schema;
 use crate::storage::{resolve_db_path, CrawlSessionInit, Database, IssueFilterCriteria};
@@ -104,7 +105,15 @@ async fn handle_audit(args: AuditArgs) -> Result<(), Box<dyn std::error::Error>>
             respect_robots: config.respect_robots,
             render_js: config.render_js,
         })?;
-        let (handle, task) = db.spawn_writer(&session_id, 50, Duration::from_millis(500))?;
+        // Dynamically scale batch size: large site audits (>= 5k pages) batch 250 records per write
+        // transaction, reducing SQLite WAL commit cycles and fsync overhead by ~80%.
+        let batch_size = if config.max_pages >= 5_000 || config.max_pages == 0 {
+            250
+        } else {
+            50
+        };
+        let (handle, task) =
+            db.spawn_writer(&session_id, batch_size, Duration::from_millis(500))?;
         (Some(handle), Some(task))
     } else {
         (None, None)
@@ -142,6 +151,9 @@ async fn handle_audit(args: AuditArgs) -> Result<(), Box<dyn std::error::Error>>
     }
 
     if let (Some(handle), Some(task)) = (writer_handle, writer_task) {
+        if !config.quiet {
+            render_post_crawl_status("Flushing SQLite database...");
+        }
         let _ = handle.shutdown().await;
         let _ = task.await;
     }
@@ -156,22 +168,73 @@ async fn handle_audit(args: AuditArgs) -> Result<(), Box<dyn std::error::Error>>
         let _ = std::fs::remove_file(wal);
     }
 
-    // Handle file exports
+    // Handle file exports concurrently across CPU cores
     let formats: Vec<&str> = args.format.split(',').map(|s| s.trim()).collect();
+    let has_file_exports = formats
+        .iter()
+        .any(|&f| f == "md" || f == "json" || f == "csv" || f == "html" || f == "all");
+
+    if has_file_exports && !config.quiet {
+        render_post_crawl_status("Generating export reports (CSV, HTML, MD, JSON)...");
+    }
+
+    let cr = Arc::new(crawl_result);
+    let output_dir = args.output_dir.clone();
+
+    let md_task = if formats.contains(&"md") || formats.contains(&"all") {
+        let cr = cr.clone();
+        let od = output_dir.clone();
+        Some(tokio::task::spawn_blocking(move || {
+            export_markdown_report(&cr, &od)
+        }))
+    } else {
+        None
+    };
+
+    let json_task = if formats.contains(&"json") || formats.contains(&"all") {
+        let cr = cr.clone();
+        let od = output_dir.clone();
+        Some(tokio::task::spawn_blocking(move || {
+            export_json_report(&cr, &od)
+        }))
+    } else {
+        None
+    };
+
+    let csv_task = if formats.contains(&"csv") || formats.contains(&"all") {
+        let cr = cr.clone();
+        let od = output_dir.clone();
+        Some(tokio::task::spawn_blocking(move || {
+            export_csv_suite(&cr, &od)
+        }))
+    } else {
+        None
+    };
+
+    let html_task = if formats.contains(&"html") || formats.contains(&"all") {
+        let cr = cr.clone();
+        let od = output_dir.clone();
+        Some(tokio::task::spawn_blocking(move || {
+            export_html_report(&cr, &od)
+        }))
+    } else {
+        None
+    };
+
     let mut exported_artifacts = Vec::new();
 
-    if formats.contains(&"md") || formats.contains(&"all") {
-        let path = export_markdown_report(&crawl_result, &args.output_dir)?;
+    if let Some(task) = md_task {
+        let path = task.await??;
         exported_artifacts.push(("Markdown", path));
     }
 
-    if formats.contains(&"json") || formats.contains(&"all") {
-        let path = export_json_report(&crawl_result, &args.output_dir)?;
+    if let Some(task) = json_task {
+        let path = task.await??;
         exported_artifacts.push(("JSON", path));
     }
 
-    if formats.contains(&"csv") || formats.contains(&"all") {
-        let paths = export_csv_suite(&crawl_result, &args.output_dir)?;
+    if let Some(task) = csv_task {
+        let paths = task.await??;
         if let Some(first) = paths.first() {
             if let Some(parent) = first.parent() {
                 exported_artifacts.push(("CSV Suite", parent.to_path_buf()));
@@ -179,9 +242,13 @@ async fn handle_audit(args: AuditArgs) -> Result<(), Box<dyn std::error::Error>>
         }
     }
 
-    if formats.contains(&"html") || formats.contains(&"all") {
-        let path = export_html_report(&crawl_result, &args.output_dir)?;
+    if let Some(task) = html_task {
+        let path = task.await??;
         exported_artifacts.push(("HTML", path));
+    }
+
+    if has_file_exports && !config.quiet {
+        clear_post_crawl_status();
     }
 
     // Always display executive terminal scorecard if requested and not in quiet mode
@@ -192,21 +259,21 @@ async fn handle_audit(args: AuditArgs) -> Result<(), Box<dyn std::error::Error>>
             .iter()
             .map(|(fmt, p)| (*fmt, p.as_path()))
             .collect();
-        print_executive_scorecard(&crawl_result, &ref_paths);
+        print_executive_scorecard(&cr, &ref_paths);
     }
 
     // Check CI/CD failure threshold
-    let critical_count = crawl_result
+    let critical_count = cr
         .issues
         .iter()
         .filter(|i| i.severity == Severity::Critical)
         .count();
-    let alert_count = crawl_result
+    let alert_count = cr
         .issues
         .iter()
         .filter(|i| i.severity == Severity::Alert)
         .count();
-    let warning_count = crawl_result
+    let warning_count = cr
         .issues
         .iter()
         .filter(|i| i.severity == Severity::Warning)

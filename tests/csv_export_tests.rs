@@ -386,3 +386,35 @@ fn test_csv_formula_injection_neutralization() {
 
     let _ = fs::remove_dir_all(&out_dir);
 }
+
+#[test]
+fn test_html_report_windowing_for_massive_crawls() {
+    use blacksparrow::report::export_html_report;
+
+    let out_dir = unique_test_csv_dir();
+    let mut crawl_result = create_test_crawl_result();
+
+    // Populate with 1050 pages (> 1000 threshold)
+    for i in 1..=1050 {
+        let mut p = crawl_result.pages[0].clone();
+        p.url = format!("https://example.com/item-{}", i);
+        p.url_hash = 1000 + i as u64;
+        crawl_result.pages.push(p);
+    }
+
+    let html_path = export_html_report(&crawl_result, &out_dir).expect("Export HTML");
+    assert!(html_path.exists());
+
+    let html_content = fs::read_to_string(&html_path).expect("Read HTML");
+    // Verify window notice is present
+    assert!(
+        html_content.contains("Showing top 1,000 priority pages"),
+        "HTML report must include windowing notice for crawls > 1,000 pages"
+    );
+    assert!(
+        html_content.contains("Showing 1000 /"),
+        "HTML report target counter must reflect windowed count"
+    );
+
+    let _ = fs::remove_dir_all(&out_dir);
+}

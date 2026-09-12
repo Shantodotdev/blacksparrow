@@ -455,6 +455,23 @@ pub fn finish_crawl_progress(pb: &CrawlProgressBar) {
     let _ = out.flush();
 }
 
+/// Renders an in-place status message during post-crawl operations (DB sync, reports generation).
+pub fn render_post_crawl_status(message: &str) {
+    let mut out = io::stdout().lock();
+    let _ = write!(
+        out,
+        "\r\x1b[2K  {ANSI_PINK}{ANSI_BOLD}⚡{ANSI_RESET} {ANSI_BOLD}{message}{ANSI_RESET}"
+    );
+    let _ = out.flush();
+}
+
+/// Clears the active post-crawl status line.
+pub fn clear_post_crawl_status() {
+    let mut out = io::stdout().lock();
+    let _ = write!(out, "\r\x1b[2K");
+    let _ = out.flush();
+}
+
 /// Renders the comprehensive post-crawl executive scorecard in the terminal.
 pub fn print_executive_scorecard(result: &CrawlResult, exported_paths: &[(&str, &Path)]) {
     let already_bannered = BANNER_PRINTED.swap(false, Ordering::SeqCst);
