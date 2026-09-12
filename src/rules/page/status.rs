@@ -113,34 +113,44 @@ pub fn check_status(page: &ParsedPage, fetch: &FetchResult, issues: &mut Vec<Iss
             .title
             .as_deref()
             .map(|t| {
-                let l = t.to_lowercase();
-                l.contains("404 not found")
-                    || l.contains("page not found")
-                    || l.contains("error 404")
+                crate::core::url::contains_ignore_ascii_case(t, "404 not found")
+                    || crate::core::url::contains_ignore_ascii_case(t, "page not found")
+                    || crate::core::url::contains_ignore_ascii_case(t, "error 404")
             })
             .unwrap_or(false);
         let is_soft_404_h1 = page
             .h1_primary
             .as_deref()
             .map(|h| {
-                let l = h.to_lowercase();
-                l.contains("404 not found")
-                    || l.contains("page not found")
-                    || l.contains("error 404")
+                crate::core::url::contains_ignore_ascii_case(h, "404 not found")
+                    || crate::core::url::contains_ignore_ascii_case(h, "page not found")
+                    || crate::core::url::contains_ignore_ascii_case(h, "error 404")
             })
             .unwrap_or(false);
-        let body_lower = fetch.body.to_lowercase();
-        let body_has_404_msg = body_lower.contains("404 not found")
-            || body_lower.contains("page not found")
-            || body_lower.contains("page cannot be found")
-            || body_lower.contains("page was not found");
 
-        if (is_soft_404_title || is_soft_404_h1) && (page.word_count < 150 || body_has_404_msg) {
-            let rule = get_rule(RuleId::ErrHttpSoft404);
-            issues.push(rule.to_finding(
-                url,
-                Some("Page returned HTTP 200 OK but displays 404 Not Found error messaging."),
-            ));
+        // Short-circuit: >99.9% of pages are not soft 404s. Only scan the multi-kilobyte HTML body
+        // if the document's <title> or primary <h1> explicitly exhibits 404 error messaging.
+        if is_soft_404_title || is_soft_404_h1 {
+            let body_has_404_msg = || {
+                crate::core::url::contains_ignore_ascii_case(&fetch.body, "404 not found")
+                    || crate::core::url::contains_ignore_ascii_case(&fetch.body, "page not found")
+                    || crate::core::url::contains_ignore_ascii_case(
+                        &fetch.body,
+                        "page cannot be found",
+                    )
+                    || crate::core::url::contains_ignore_ascii_case(
+                        &fetch.body,
+                        "page was not found",
+                    )
+            };
+
+            if page.word_count < 150 || body_has_404_msg() {
+                let rule = get_rule(RuleId::ErrHttpSoft404);
+                issues.push(rule.to_finding(
+                    url,
+                    Some("Page returned HTTP 200 OK but displays 404 Not Found error messaging."),
+                ));
+            }
         }
     }
 

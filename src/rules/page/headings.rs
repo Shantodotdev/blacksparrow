@@ -57,20 +57,28 @@ pub fn check_headings(page: &ParsedPage, url: &str, issues: &mut Vec<IssueFindin
     }
 
     // 5. Duplicate Heading Text
+    // Pages typically have 2-15 headings. Pairwise slice comparisons with eq_ignore_ascii_case
+    // avoid allocating a temporary HashSet and multiple lowercased Strings for every page audited.
     let mut has_duplicate_heading = false;
-    let mut seen_h2 = std::collections::HashSet::new();
-    for h2 in &page.h2_headings {
+    for (i, h2) in page.h2_headings.iter().enumerate() {
         let trimmed = h2.trim();
-        if !trimmed.is_empty() && !seen_h2.insert(trimmed.to_lowercase()) {
+        if !trimmed.is_empty()
+            && page.h2_headings[i + 1..]
+                .iter()
+                .any(|other| trimmed.eq_ignore_ascii_case(other.trim()))
+        {
             has_duplicate_heading = true;
             break;
         }
     }
     if !has_duplicate_heading {
-        let mut seen_h3 = std::collections::HashSet::new();
-        for h3 in &page.h3_headings {
+        for (i, h3) in page.h3_headings.iter().enumerate() {
             let trimmed = h3.trim();
-            if !trimmed.is_empty() && !seen_h3.insert(trimmed.to_lowercase()) {
+            if !trimmed.is_empty()
+                && page.h3_headings[i + 1..]
+                    .iter()
+                    .any(|other| trimmed.eq_ignore_ascii_case(other.trim()))
+            {
                 has_duplicate_heading = true;
                 break;
             }

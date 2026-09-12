@@ -81,14 +81,20 @@ pub fn check_directives(
 
     // Unrendered SPA Heuristic
     if page.links.is_empty() && page.word_count < 50 {
-        let body_lower = fetch.body.to_lowercase();
-        let is_spa_root = body_lower.contains("<div id=\"root\">")
-            || body_lower.contains("<div id=\"app\">")
-            || body_lower.contains("<div id=\"__next\">")
-            || body_lower.contains("id=\"root\"")
-            || body_lower.contains("id=\"app\"")
-            || body_lower.contains("<noscript>you need javascript")
-            || body_lower.contains("enable javascript to run this app");
+        let is_spa_root =
+            crate::core::url::contains_ignore_ascii_case(&fetch.body, "<div id=\"root\">")
+                || crate::core::url::contains_ignore_ascii_case(&fetch.body, "<div id=\"app\">")
+                || crate::core::url::contains_ignore_ascii_case(&fetch.body, "<div id=\"__next\">")
+                || crate::core::url::contains_ignore_ascii_case(&fetch.body, "id=\"root\"")
+                || crate::core::url::contains_ignore_ascii_case(&fetch.body, "id=\"app\"")
+                || crate::core::url::contains_ignore_ascii_case(
+                    &fetch.body,
+                    "<noscript>you need javascript",
+                )
+                || crate::core::url::contains_ignore_ascii_case(
+                    &fetch.body,
+                    "enable javascript to run this app",
+                );
 
         if is_spa_root {
             let rule = get_rule(RuleId::AlertUnrenderedSpaHeuristic);

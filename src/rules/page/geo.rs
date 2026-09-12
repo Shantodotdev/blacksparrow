@@ -28,7 +28,7 @@ pub fn check_content_and_ai(
     }
 
     // 2. Placeholder Lorem Ipsum Text
-    if fetch.body.to_lowercase().contains("lorem ipsum") {
+    if crate::core::url::contains_ignore_ascii_case(&fetch.body, "lorem ipsum") {
         let rule = get_rule(RuleId::WarnLoremIpsumDetected);
         issues.push(rule.to_finding(
             url,

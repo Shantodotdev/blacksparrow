@@ -6,6 +6,28 @@ use crate::core::models::IssueFinding;
 use crate::parser::ParsedPage;
 use crate::rules::catalog::{get_rule, RuleId};
 
+// Allocation-free case-insensitive comparison against static catalog of non-descriptive anchor phrases;
+// avoids heap-allocating lowercased Strings for every hyperlink discovered across millions of links.
+fn is_generic_anchor(text: &str) -> bool {
+    const GENERIC_ANCHORS: &[&str] = &[
+        "click here",
+        "click this",
+        "here",
+        "read more",
+        "learn more",
+        "more",
+        "link",
+        "this link",
+        "page",
+        "website",
+        "continue",
+        "details",
+    ];
+    GENERIC_ANCHORS
+        .iter()
+        .any(|&g| text.eq_ignore_ascii_case(g))
+}
+
 /// Evaluates link quality and anchor text rules for a parsed document.
 pub fn check_links(page: &ParsedPage, url: &str, issues: &mut Vec<IssueFinding>) {
     // 1. Excessive links on page (> 250)
@@ -27,25 +49,8 @@ pub fn check_links(page: &ParsedPage, url: &str, issues: &mut Vec<IssueFinding>)
         let trimmed = link.anchor_text.trim();
         if !link.is_image_link && trimmed.is_empty() {
             empty_count += 1;
-        } else {
-            let lower = trimmed.to_lowercase();
-            if matches!(
-                lower.as_str(),
-                "click here"
-                    | "click this"
-                    | "here"
-                    | "read more"
-                    | "learn more"
-                    | "more"
-                    | "link"
-                    | "this link"
-                    | "page"
-                    | "website"
-                    | "continue"
-                    | "details"
-            ) {
-                suspicious_count += 1;
-            }
+        } else if is_generic_anchor(trimmed) {
+            suspicious_count += 1;
         }
     }
 
