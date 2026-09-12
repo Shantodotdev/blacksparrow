@@ -53,8 +53,9 @@ pub fn compute_pagerank(
     let mut scores = vec![initial_score; num_nodes];
     let mut next_scores = vec![0.0; num_nodes];
 
-    // Precalculate outgoing valid link counts for each node (excluding nofollow and non-hyperlinks)
+    // Precalculate outgoing valid link counts and inverse factors for each node
     let mut out_degrees = vec![0usize; num_nodes];
+    let mut inv_out_degrees = vec![0.0f64; num_nodes];
     for (i, out_deg) in out_degrees.iter_mut().enumerate() {
         let idx = petgraph::graph::NodeIndex::new(i);
         *out_deg = graph
@@ -63,35 +64,51 @@ pub fn compute_pagerank(
                 e.weight().edge_type == LinkEdgeType::InternalHyperlink && !e.weight().is_nofollow
             })
             .count();
+        if *out_deg > 0 {
+            inv_out_degrees[i] = 1.0 / (*out_deg as f64);
+        }
+    }
+
+    // Precalculate dangling node indices for fast equity redistribution
+    let dangling_indices: Vec<usize> = (0..num_nodes).filter(|&i| out_degrees[i] == 0).collect();
+
+    // Flatten incoming followed internal hyperlink edges into CSR (Compressed Sparse Row)
+    let mut flat_in_sources: Vec<u32> = Vec::new();
+    let mut in_offsets: Vec<usize> = Vec::with_capacity(num_nodes + 1);
+    in_offsets.push(0);
+
+    for v_idx_raw in 0..num_nodes {
+        let v_idx = petgraph::graph::NodeIndex::new(v_idx_raw);
+        for edge in graph.edges_directed(v_idx, Direction::Incoming) {
+            if edge.weight().edge_type == LinkEdgeType::InternalHyperlink
+                && !edge.weight().is_nofollow
+            {
+                let u_idx_raw = edge.source().index();
+                if out_degrees[u_idx_raw] > 0 {
+                    flat_in_sources.push(u_idx_raw as u32);
+                }
+            }
+        }
+        in_offsets.push(flat_in_sources.len());
     }
 
     let teleport_base = (1.0 - damping_factor) / n;
 
     for _ in 0..max_iterations {
-        // Calculate equity contribution from dangling nodes (nodes with 0 outgoing followed internal links)
+        // Calculate equity contribution from dangling nodes
         let mut dangling_equity = 0.0;
-        for (i, &score) in scores.iter().enumerate() {
-            if out_degrees[i] == 0 {
-                dangling_equity += score;
-            }
+        for &d_idx in &dangling_indices {
+            dangling_equity += scores[d_idx];
         }
         let dangling_redistribution = damping_factor * (dangling_equity / n);
 
-        for (v_idx_raw, next_score) in next_scores.iter_mut().enumerate() {
-            let v_idx = petgraph::graph::NodeIndex::new(v_idx_raw);
-
-            // Sum incoming link equity from non-nofollow internal links
+        for (v, next_score) in next_scores.iter_mut().enumerate() {
+            let start = in_offsets[v];
+            let end = in_offsets[v + 1];
             let mut incoming_equity = 0.0;
-            for edge in graph.edges_directed(v_idx, Direction::Incoming) {
-                if edge.weight().edge_type == LinkEdgeType::InternalHyperlink
-                    && !edge.weight().is_nofollow
-                {
-                    let u_idx_raw = edge.source().index();
-                    let u_out = out_degrees[u_idx_raw];
-                    if u_out > 0 {
-                        incoming_equity += scores[u_idx_raw] / (u_out as f64);
-                    }
-                }
+            for &u in &flat_in_sources[start..end] {
+                let u_idx = u as usize;
+                incoming_equity += scores[u_idx] * inv_out_degrees[u_idx];
             }
 
             *next_score =

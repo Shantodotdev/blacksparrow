@@ -61,6 +61,10 @@ pub struct SiteGraph {
     graph: DiGraph<PageNode, LinkEdge>,
     /// Index mapping 64-bit URL hashes to petgraph `NodeIndex`.
     url_to_node: HashMap<u64, NodeIndex>,
+    /// Cached incoming hyperlink counts per node index.
+    in_degrees: Vec<u32>,
+    /// Cached outgoing hyperlink counts per node index.
+    out_degrees: Vec<u32>,
 }
 
 impl SiteGraph {
@@ -69,6 +73,8 @@ impl SiteGraph {
         Self {
             graph: DiGraph::new(),
             url_to_node: HashMap::new(),
+            in_degrees: Vec::new(),
+            out_degrees: Vec::new(),
         }
     }
 
@@ -156,32 +162,65 @@ impl SiteGraph {
         self.graph.add_edge(source_idx, target_idx, edge);
     }
 
-    /// Computes the incoming internal hyperlink count for a page.
+    /// Computes or retrieves the incoming internal hyperlink count for a page.
     ///
     /// Considers only [`LinkEdgeType::InternalHyperlink`] edges.
     pub fn in_degree(&self, url: &str) -> usize {
         match self.get_node_index(url) {
-            Some(idx) => self
-                .graph
-                .edges_directed(idx, Direction::Incoming)
-                .filter(|e| e.weight().edge_type == LinkEdgeType::InternalHyperlink)
-                .count(),
+            Some(idx) => {
+                if let Some(&deg) = self.in_degrees.get(idx.index()) {
+                    deg as usize
+                } else {
+                    self.graph
+                        .edges_directed(idx, Direction::Incoming)
+                        .filter(|e| e.weight().edge_type == LinkEdgeType::InternalHyperlink)
+                        .count()
+                }
+            }
             None => 0,
         }
     }
 
-    /// Computes the outgoing internal hyperlink count for a page.
+    /// Computes or retrieves the outgoing internal hyperlink count for a page.
     ///
     /// Considers only [`LinkEdgeType::InternalHyperlink`] edges.
     pub fn out_degree(&self, url: &str) -> usize {
         match self.get_node_index(url) {
-            Some(idx) => self
-                .graph
-                .edges_directed(idx, Direction::Outgoing)
-                .filter(|e| e.weight().edge_type == LinkEdgeType::InternalHyperlink)
-                .count(),
+            Some(idx) => {
+                if let Some(&deg) = self.out_degrees.get(idx.index()) {
+                    deg as usize
+                } else {
+                    self.graph
+                        .edges_directed(idx, Direction::Outgoing)
+                        .filter(|e| e.weight().edge_type == LinkEdgeType::InternalHyperlink)
+                        .count()
+                }
+            }
             None => 0,
         }
+    }
+
+    /// Recomputes and caches the in-degree and out-degree arrays for all nodes in O(E) time.
+    pub fn recompute_degrees(&mut self) {
+        let n = self.graph.node_count();
+        let mut in_degs = vec![0u32; n];
+        let mut out_degs = vec![0u32; n];
+
+        for edge in self.graph.raw_edges() {
+            if edge.weight.edge_type == LinkEdgeType::InternalHyperlink {
+                let s = edge.source().index();
+                let t = edge.target().index();
+                if s < n {
+                    out_degs[s] = out_degs[s].saturating_add(1);
+                }
+                if t < n {
+                    in_degs[t] = in_degs[t].saturating_add(1);
+                }
+            }
+        }
+
+        self.in_degrees = in_degs;
+        self.out_degrees = out_degs;
     }
 
     /// Builds a `SiteGraph` from crawled page reports and discovered sitemap URLs.
@@ -203,36 +242,68 @@ impl SiteGraph {
             );
         }
 
-        // 3. Populate directed edges
+        // 3. Populate directed edges using cached source indices
         for page in pages {
+            let source_idx = match graph.get_node_index(&page.url) {
+                Some(idx) => idx,
+                None => graph.add_node(
+                    &page.url,
+                    page.status_code,
+                    page.crawl_depth,
+                    page.is_sitemap_url,
+                ),
+            };
+
             // HTTP Redirect edge
             if let Some(ref dest) = page.final_url {
                 if dest != &page.url {
-                    graph.add_edge(&page.url, dest, LinkEdgeType::Redirect, false, "");
+                    let target_idx = graph.add_node(dest, 0, 0, false);
+                    graph.graph.add_edge(
+                        source_idx,
+                        target_idx,
+                        LinkEdge {
+                            edge_type: LinkEdgeType::Redirect,
+                            is_nofollow: false,
+                            anchor_text: CompactString::new(""),
+                        },
+                    );
                 }
             }
 
             // Canonical link edge
             if let Some(ref canon) = page.canonical_url {
                 if canon != &page.url {
-                    graph.add_edge(&page.url, canon, LinkEdgeType::Canonical, false, "");
+                    let target_idx = graph.add_node(canon, 0, 0, false);
+                    graph.graph.add_edge(
+                        source_idx,
+                        target_idx,
+                        LinkEdge {
+                            edge_type: LinkEdgeType::Canonical,
+                            is_nofollow: false,
+                            anchor_text: CompactString::new(""),
+                        },
+                    );
                 }
             }
 
             // Navigational internal hyperlinks
             for link in &page.links {
                 if link.is_internal {
-                    graph.add_edge(
-                        &page.url,
-                        &link.target_url,
-                        LinkEdgeType::InternalHyperlink,
-                        link.is_nofollow,
-                        &link.anchor_text,
+                    let target_idx = graph.add_node(&link.target_url, 0, 0, false);
+                    graph.graph.add_edge(
+                        source_idx,
+                        target_idx,
+                        LinkEdge {
+                            edge_type: LinkEdgeType::InternalHyperlink,
+                            is_nofollow: link.is_nofollow,
+                            anchor_text: CompactString::new(&link.anchor_text),
+                        },
                     );
                 }
             }
         }
 
+        graph.recompute_degrees();
         graph
     }
 

@@ -1147,3 +1147,68 @@ fn test_charikar_simhash_multi_page_near_duplicate_detection() {
         );
     }
 }
+
+#[test]
+fn test_cached_graph_degrees_and_recomputation() {
+    let p1 = mock_page(
+        "https://example.com/a",
+        200,
+        0,
+        Some("A"),
+        None,
+        None,
+        1,
+        100,
+        vec![
+            mock_link("https://example.com/a", "https://example.com/b", false),
+            mock_link("https://example.com/a", "https://example.com/c", false),
+        ],
+        vec![],
+    );
+    let p2 = mock_page(
+        "https://example.com/b",
+        200,
+        1,
+        Some("B"),
+        None,
+        None,
+        2,
+        200,
+        vec![mock_link(
+            "https://example.com/b",
+            "https://example.com/c",
+            false,
+        )],
+        vec![],
+    );
+    let p3 = mock_page(
+        "https://example.com/c",
+        200,
+        1,
+        Some("C"),
+        None,
+        None,
+        3,
+        300,
+        vec![],
+        vec![],
+    );
+
+    let graph = SiteGraph::from_pages(&[p1, p2, p3], &[]);
+
+    // A: 0 in, 2 out
+    assert_eq!(graph.in_degree("https://example.com/a"), 0);
+    assert_eq!(graph.out_degree("https://example.com/a"), 2);
+
+    // B: 1 in (from A), 1 out (to C)
+    assert_eq!(graph.in_degree("https://example.com/b"), 1);
+    assert_eq!(graph.out_degree("https://example.com/b"), 1);
+
+    // C: 2 in (from A and B), 0 out
+    assert_eq!(graph.in_degree("https://example.com/c"), 2);
+    assert_eq!(graph.out_degree("https://example.com/c"), 0);
+
+    // Non-existent URL returns 0
+    assert_eq!(graph.in_degree("https://example.com/missing"), 0);
+    assert_eq!(graph.out_degree("https://example.com/missing"), 0);
+}
