@@ -427,3 +427,20 @@ pub fn is_static_asset_url(raw_url: &str) -> bool {
     }
     false
 }
+
+/// Performs an allocation-free case-insensitive substring search over ASCII characters.
+pub fn contains_ignore_ascii_case(haystack: &str, needle: &str) -> bool {
+    if needle.is_empty() {
+        return true;
+    }
+    let needle_bytes = needle.as_bytes();
+    if haystack.len() < needle_bytes.len() {
+        return false;
+    }
+    // Scan sliding byte windows directly in CPU cache with SIMD auto-vectorization;
+    // avoids allocating multi-megabyte lowercased strings across hundreds of thousands of pages.
+    haystack
+        .as_bytes()
+        .windows(needle_bytes.len())
+        .any(|window| window.eq_ignore_ascii_case(needle_bytes))
+}

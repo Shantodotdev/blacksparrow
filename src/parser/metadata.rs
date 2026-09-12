@@ -108,10 +108,14 @@ pub fn decode_html_entities(input: &str) -> String {
 /// assert_eq!(clean_whitespace(raw), "Hello world!");
 /// ```
 pub fn clean_whitespace(input: &str) -> String {
-    let mut result = String::with_capacity(input.len());
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    let mut result = String::with_capacity(trimmed.len());
     let mut in_whitespace = false;
 
-    for c in input.chars() {
+    for c in trimmed.chars() {
         if c.is_whitespace() {
             if !in_whitespace {
                 result.push(' ');
@@ -123,7 +127,7 @@ pub fn clean_whitespace(input: &str) -> String {
         }
     }
 
-    result.trim().to_string()
+    result
 }
 
 #[cfg(test)]

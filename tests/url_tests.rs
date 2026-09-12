@@ -440,3 +440,25 @@ fn test_is_static_asset_url_detects_non_html_files() {
         "https://example.com/v1.2/governance/teams"
     ));
 }
+
+// =========================================================================
+// 14. CASE-INSENSITIVE SUBSTRING SEARCH TESTS
+// =========================================================================
+
+#[test]
+fn test_contains_ignore_ascii_case() {
+    use blacksparrow::core::url::contains_ignore_ascii_case;
+
+    assert!(contains_ignore_ascii_case("Hello World", "world"));
+    assert!(contains_ignore_ascii_case("Hello World", "HELLO"));
+    assert!(contains_ignore_ascii_case(
+        "Lorem Ipsum Dolor Sit Amet",
+        "lorem ipsum"
+    ));
+    assert!(contains_ignore_ascii_case("Lorem Ipsum", ""));
+    assert!(!contains_ignore_ascii_case(
+        "Short",
+        "LongerNeedleThanHaystack"
+    ));
+    assert!(!contains_ignore_ascii_case("Hello World", "earth"));
+}
