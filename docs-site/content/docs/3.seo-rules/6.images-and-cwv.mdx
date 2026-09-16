@@ -1,0 +1,45 @@
+---
+title: "Rules: Images & Core Web Vitals"
+description: Rules covering image accessibility, missing dimensions (CLS), broken images, and modern image formats.
+icon: i-lucide-image
+---
+
+Images enrich web content, but unoptimized media is the primary contributor to slow page load times and Cumulative Layout Shift (CLS) under Google's Core Web Vitals.
+
+---
+
+### `IMG-001` — Missing Image `alt` Attribute
+- **Severity**: `WARNING` (-2 pts)
+- **Heuristic**: An `<img>` tag has no `alt` attribute, or `alt` is completely empty on a non-decorative image.
+- **Why It Matters**: `alt` text is critical for web accessibility (screen readers for visually impaired users) and allows images to rank in Google Image Search.
+- **How to Fix**: Add a concise description of what the image shows:
+  ```html
+  <img src="dashboard.png" alt="Black Sparrow interactive audit dashboard">
+  ```
+
+---
+
+### `IMG-002` — Missing `width` and `height` Attributes (CLS Risk)
+- **Severity**: `WARNING` (-2 pts)
+- **Heuristic**: An `<img>` element lacks explicit HTML `width` and `height` attributes.
+- **Why It Matters**: Without explicit dimensions, the browser cannot reserve space for the image before it finishes downloading. When the image suddenly renders, the page layout jumps—triggering a **Cumulative Layout Shift (CLS)** penalty.
+- **How to Fix**: Always specify aspect-ratio dimensions directly in the HTML:
+  ```html
+  <img src="hero.jpg" width="1200" height="630" alt="Product Hero">
+  ```
+
+---
+
+### `IMG-003` — Broken Image (HTTP 404)
+- **Severity**: `ALERT` (-5 pts)
+- **Heuristic**: The image `src` URL returns an HTTP 404 or fails to load.
+- **Why It Matters**: Shows ugly broken image placeholder icons, destroys user trust, and wastes bandwidth.
+- **How to Fix**: Check the file path or upload the missing asset to your CDN.
+
+---
+
+### `IMG-004` — Oversized Image Asset (> 2 MB)
+- **Severity**: `WARNING` (-2 pts)
+- **Heuristic**: An individual image payload exceeds 2 megabytes in file size.
+- **Why It Matters**: Inflates page weight, increases Largest Contentful Paint (LCP) times, and hurts mobile users on cellular networks.
+- **How to Fix**: Compress the image using modern tools (Squoosh, Sharp) and convert to modern WebP or AVIF formats.

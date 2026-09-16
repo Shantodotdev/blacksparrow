@@ -1,0 +1,49 @@
+---
+title: "Rules: AI Search & GEO Readiness"
+description: Rules covering Generative Engine Optimization, /llms.txt discovery, and AI bot crawler access.
+icon: i-lucide-bot
+---
+
+As search behaviour shifts toward Large Language Model answer engines (ChatGPT Search, Perplexity, Claude, Google Gemini), websites must be accessible to AI agent crawlers.
+
+---
+
+### `AI-001` — Missing `/llms.txt` Standard File
+- **Severity**: `INFO` (0 pts)
+- **Heuristic**: HTTP GET request to `https://example.com/llms.txt` returns an HTTP 404 or non-text response.
+- **Why It Matters**: The `/llms.txt` standard provides AI models with a clean, Markdown-formatted index of your website's key pages, documentation, and product offerings without web clutter.
+- **How to Fix**: Create a plain-text `/llms.txt` file at your web root summarizing your key resources.
+
+---
+
+### `AI-002` — Missing `/llms-full.txt` Comprehensive File
+- **Severity**: `INFO` (0 pts)
+- **Heuristic**: No `/llms-full.txt` found at domain root.
+- **Why It Matters**: `/llms-full.txt` bundles the full text of your public documentation or articles for zero-hop LLM ingestion.
+- **How to Fix**: Generate an automated `/llms-full.txt` containing full documentation in clean markdown.
+
+---
+
+### `AI-003` — AI Search Crawlers Blocked in `robots.txt`
+- **Severity**: `WARNING` (-2 pts)
+- **Heuristic**: `robots.txt` contains `Disallow: /` directives targeting `GPTBot`, `ClaudeBot`, or `PerplexityBot`.
+- **Why It Matters**: Prevents your website from being cited as a source or referenced in conversational search answers by OpenAI, Anthropic, and Perplexity.
+- **How to Fix**: If you wish to receive traffic and citations from AI search engines, update your `robots.txt`:
+  ```text
+  User-agent: GPTBot
+  Allow: /
+
+  User-agent: ClaudeBot
+  Allow: /
+
+  User-agent: PerplexityBot
+  Allow: /
+  ```
+
+---
+
+### `AI-004` — Bot Challenge Screen Intercepts AI Agents
+- **Severity**: `ALERT` (-5 pts)
+- **Heuristic**: Crawler requests using standard AI user agents trigger Cloudflare Under Attack mode, Akamai Bot Manager, or CAPTCHA challenge screens.
+- **Why It Matters**: Automated search engines and LLM agents cannot solve CAPTCHAs and will mark your website as unreachable.
+- **How to Fix**: Configure your WAF or CDN firewall to allow verified AI crawler IP ranges or user agents.

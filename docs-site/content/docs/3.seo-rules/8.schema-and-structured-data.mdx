@@ -1,0 +1,52 @@
+---
+title: "Rules: Schema & Structured Data"
+description: Rules covering JSON-LD syntax validation, schema.org types, and Google Rich Results eligibility.
+icon: i-lucide-boxes
+---
+
+Structured data (schema.org) unlocks Google Rich Results—including star ratings, product pricing, FAQ accordions, and breadcrumbs directly within search snippets.
+
+---
+
+### `SCHEMA-001` — Malformed JSON-LD Syntax
+- **Severity**: `ALERT` (-5 pts)
+- **Heuristic**: `<script type="application/ld+json">` contains invalid JSON (e.g. unescaped quotes, trailing commas, or syntax errors).
+- **Why It Matters**: Search engine parsers completely reject unparseable JSON blocks, losing all structured data.
+- **How to Fix**: Validate your JSON with a linter and ensure server-side template serialization properly escapes special characters.
+
+---
+
+### `SCHEMA-002` — Missing Required Fields for Article
+- **Severity**: `WARNING` (-2 pts)
+- **Heuristic**: An `Article`, `NewsArticle`, or `BlogPosting` schema is missing one or more required fields: `headline`, `image`, `datePublished`, or `author`.
+- **Why It Matters**: Disqualifies the article from appearing in Google Top Stories and mobile rich carousels.
+- **How to Fix**: Provide all required properties in your JSON-LD block:
+  ```json
+  {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    "headline": "Modern SEO Crawling in Rust",
+    "image": ["https://example.com/banner.jpg"],
+    "datePublished": "2026-09-15T08:00:00+08:00",
+    "author": {
+      "@type": "Person",
+      "name": "Jane Doe"
+    }
+  }
+  ```
+
+---
+
+### `SCHEMA-003` — Missing Required Fields for Product
+- **Severity**: `ALERT` (-5 pts)
+- **Heuristic**: A `Product` schema is missing `name`, `image`, or an `offers` block containing `price` and `priceCurrency`.
+- **Why It Matters**: Disqualifies e-commerce product pages from showing rich price snippets and in-stock badges.
+- **How to Fix**: Include an explicit `offers` object with `price`, `priceCurrency`, and `availability`.
+
+---
+
+### `SCHEMA-004` — Invalid BreadcrumbList Structure
+- **Severity**: `WARNING` (-2 pts)
+- **Heuristic**: `BreadcrumbList` has non-sequential `position` integers or missing `itemListElement` arrays.
+- **Why It Matters**: Search engines will display standard messy URLs instead of clean breadcrumb paths (`Home > Category > Product`).
+- **How to Fix**: Ensure `position` increments sequentially starting from `1`.

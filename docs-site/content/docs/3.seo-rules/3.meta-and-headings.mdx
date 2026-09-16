@@ -1,0 +1,69 @@
+---
+title: "Rules: Meta & Headings"
+description: Rules covering <title>, meta descriptions, OpenGraph tags, and H1–H6 heading hierarchy.
+icon: i-lucide-heading
+---
+
+Title tags and heading elements provide search engines and users with immediate semantic context about page topics and keyword relevance.
+
+---
+
+## Title & Description Rules
+
+### `META-001` — Missing `<title>` Tag
+- **Severity**: `ALERT` (-5 pts)
+- **Heuristic**: The document `<head>` contains no `<title>` element, or the tag contains only whitespace.
+- **Why It Matters**: The title tag is one of the single most influential on-page ranking signals and is displayed as the primary clickable headline in search results.
+- **How to Fix**: Add a concise, keyword-focused `<title>` inside `<head>`.
+
+---
+
+### `META-002` / `META-003` — Title Tag Length Issues
+- **Severity**: `WARNING` (-2 pts)
+- **Heuristic**:
+  - `META-002`: Title is shorter than 20 characters (under-optimized).
+  - `META-003`: Title exceeds 65 characters or ~600 pixels width (truncated in SERP).
+- **Why It Matters**: Titles that are too short fail to convey clear value; titles that are too long get clipped with an ellipsis (`...`) on Google search result pages.
+- **How to Fix**: Aim for titles between **45 and 60 characters** that frontload important primary keywords.
+
+---
+
+### `META-004` — Duplicate Title Tags
+- **Severity**: `ALERT` (-5 pts)
+- **Heuristic**: Two or more distinct indexable URLs share the exact same title tag string.
+- **Why It Matters**: Causes keyword cannibalization—search engines struggle to understand which URL is the canonical authority for that query.
+- **How to Fix**: Give every unique URL a distinct, descriptive title.
+
+---
+
+### `META-005` — Missing Meta Description
+- **Severity**: `WARNING` (-2 pts)
+- **Heuristic**: No `<meta name="description" content="...">` tag found in `<head>`.
+- **Why It Matters**: While not a direct ranking factor, meta descriptions determine organic Click-Through Rate (CTR) in search snippets.
+- **How to Fix**: Write an engaging summary between 120 and 155 characters that includes a clear call-to-action.
+
+---
+
+## Heading Hierarchy Rules
+
+### `H1-001` — Missing `<h1>` Heading
+- **Severity**: `ALERT` (-5 pts)
+- **Heuristic**: HTML `<body>` contains zero `<h1>` tags.
+- **Why It Matters**: Search engines use the top-level H1 heading to understand the primary subject of the webpage.
+- **How to Fix**: Add a single `<h1>` tag at the top of your page content.
+
+---
+
+### `H1-002` — Multiple `<h1>` Headings
+- **Severity**: `WARNING` (-2 pts)
+- **Heuristic**: HTML document contains two or more `<h1>` tags.
+- **Why It Matters**: Multiple H1s dilute topical clarity and make document outlines confusing for screen readers and search bots.
+- **How to Fix**: Reserve `<h1>` for the main title and convert subheadings into `<h2>` or `<h3>`.
+
+---
+
+### `H1-004` — Skipped Heading Hierarchy Levels
+- **Severity**: `WARNING` (-2 pts)
+- **Heuristic**: A heading jumps levels downwards without the intermediate heading (e.g. `<h1>` followed directly by `<h3>` with no `<h2>`).
+- **Why It Matters**: Violates W3C semantic accessibility standards and disrupts structural document outlines.
+- **How to Fix**: Nest headings sequentially: `<h1>` → `<h2>` → `<h3>`.

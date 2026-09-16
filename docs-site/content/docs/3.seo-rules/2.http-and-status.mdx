@@ -1,0 +1,57 @@
+---
+title: "Rules: HTTP & Transport"
+description: Rules 101–108 covering status codes, redirects, SSL transport, and server response times.
+icon: i-lucide-activity
+---
+
+HTTP transport is the backbone of technical SEO. If a search crawler cannot reliably fetch a webpage or encounters server errors, indexing immediately halts.
+
+---
+
+### `STATUS-404` — Broken Page / Not Found
+- **Severity**: `ALERT` (-5 pts)
+- **Heuristic**: HTTP response code is `404 Not Found` or `410 Gone`.
+- **Why It Matters**: Broken links waste crawl budget, cause negative user experience, and drop existing organic search equity.
+- **How to Fix**:
+  - If the page was permanently moved, set up a server-level `301 Redirect` to the most relevant replacement URL.
+  - If the link was a typo in your HTML, update the `href` attribute on the referring page.
+
+---
+
+### `STATUS-5XX` — Server Error
+- **Severity**: `CRITICAL` (-10 pts)
+- **Heuristic**: HTTP response code is in the 500–599 range (`500 Internal Server Error`, `502 Bad Gateway`, `503 Service Unavailable`).
+- **Why It Matters**: Googlebot and other search engines will rapidly demote or de-index URLs that consistently fail with 5xx errors.
+- **How to Fix**: Inspect your backend application logs, database connection pools, or upstream reverse proxy (Nginx/Cloudflare) configurations to fix the crash.
+
+---
+
+### `STATUS-LOOP` — Redirect Loop Detected
+- **Severity**: `CRITICAL` (-10 pts)
+- **Heuristic**: Crawling follows a redirection sequence where a URL redirects back to an earlier URL in the chain (e.g. A → B → A).
+- **Why It Matters**: Search crawlers and human visitors are trapped in an infinite loop and cannot access the page.
+- **How to Fix**: Review your server redirection rules (e.g. `.htaccess`, Nginx `rewrite`, or Next.js `middleware.ts`) and point the source URL directly to the final 200 OK destination.
+
+---
+
+### `STATUS-302` — Temporary Redirect Used Instead of Permanent
+- **Severity**: `WARNING` (-2 pts)
+- **Heuristic**: HTTP response code is `302 Found` or `307 Temporary Redirect`.
+- **Why It Matters**: Search engines do not always pass PageRank and link equity through temporary redirects.
+- **How to Fix**: If the page has moved permanently, change the HTTP status code to `301 Moved Permanently` or `308 Permanent Redirect`.
+
+---
+
+### `STATUS-SSL` — Insecure HTTP or Mixed Content
+- **Severity**: `ALERT` (-5 pts)
+- **Heuristic**: Target URL loads over unencrypted `http://`, has an invalid SSL certificate, or contains mixed-content resources.
+- **Why It Matters**: HTTPS is a confirmed Google ranking factor and modern web browsers flag HTTP pages as "Not Secure".
+- **How to Fix**: Install a valid TLS certificate (e.g. via Let's Encrypt) and configure an HTTP-to-HTTPS redirect.
+
+---
+
+### `STATUS-TTFB` — Slow Time To First Byte (> 800ms)
+- **Severity**: `WARNING` (-2 pts)
+- **Heuristic**: Server response time before the first byte arrives exceeds 800 milliseconds.
+- **Why It Matters**: High TTFB indicates server-side lag, slow database queries, or un-cached pages, hurting Core Web Vitals and crawl budget.
+- **How to Fix**: Implement server-side edge caching, optimize database queries, or use a Content Delivery Network (CDN).

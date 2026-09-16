@@ -1,0 +1,67 @@
+---
+title: "Rules: Directives & Canonicals"
+description: Rules covering robots directives, noindex tags, X-Robots-Tag, and canonicalization integrity.
+icon: i-lucide-shield-alert
+---
+
+Directives control whether search engines are allowed to crawl, index, and follow links on a webpage. Canonical tags prevent duplicate content penalties by consolidating link signals into one primary URL.
+
+---
+
+## Robots & Indexing Directives
+
+### `ROBOT-001` — Critical Page Marked as `noindex`
+- **Severity**: `ALERT` (-5 pts)
+- **Heuristic**: An important internal URL with multiple incoming internal links contains `<meta name="robots" content="noindex">` or an HTTP `X-Robots-Tag: noindex` header.
+- **Why It Matters**: Prevents search engines from indexing the page entirely. Often happens accidentally when deploying staging code to production!
+- **How to Fix**: Remove the `noindex` directive from pages intended for public search visibility.
+
+---
+
+### `ROBOT-002` — Conflicting Robots Directives
+- **Severity**: `ALERT` (-5 pts)
+- **Heuristic**: The page specifies contradictory instructions (e.g. `index` in HTML meta tag, but `noindex` in HTTP `X-Robots-Tag` header).
+- **Why It Matters**: Search engines follow the most restrictive rule, resulting in unpredictable indexing behavior.
+- **How to Fix**: Align your HTML meta tags and web server response headers to use identical directives.
+
+---
+
+### `ROBOT-003` — Blocked in `robots.txt` but Linked Internally
+- **Severity**: `WARNING` (-2 pts)
+- **Heuristic**: An internal URL is disallowed in `robots.txt`, yet linked throughout your site's navigation.
+- **Why It Matters**: Search crawlers cannot access the URL to evaluate content, but may still index the bare URL without snippets if it receives external links.
+- **How to Fix**: If the URL shouldn't be indexed, use `noindex` rather than a `robots.txt` disallow rule.
+
+---
+
+## Canonicalization Rules
+
+### `CANON-001` — Missing Canonical Tag
+- **Severity**: `WARNING` (-2 pts)
+- **Heuristic**: Webpage `<head>` contains no `<link rel="canonical" href="...">` tag.
+- **Why It Matters**: Search engines must guess which version of a URL is primary if accessed via query parameters, uppercase paths, or HTTP/HTTPS variants.
+- **How to Fix**: Add a self-referencing canonical tag to all unique pages.
+
+---
+
+### `CANON-002` — Canonical Points to Broken / Redirecting URL
+- **Severity**: `ALERT` (-5 pts)
+- **Heuristic**: The canonical target URL returns an HTTP 404 Not Found, 301 Redirect, or 500 Server Error.
+- **Why It Matters**: Search engines will ignore the canonical instruction, resulting in duplicate content issues or loss of ranking signals.
+- **How to Fix**: Ensure canonical URLs point strictly to live, canonical, indexable **200 OK** pages.
+
+---
+
+### `CANON-003` — Canonical Loop Detected
+- **Severity**: `CRITICAL` (-10 pts)
+- **Heuristic**: Page A canonicalizes to Page B, and Page B canonicalizes back to Page A.
+- **Why It Matters**: Creates an unresolvable logical contradiction for search indexing algorithms.
+- **How to Fix**: Pick one single master URL and ensure all other variants canonicalize exclusively to it.
+
+---
+
+### `CANON-005` — Multiple Canonical Tags Present
+- **Severity**: `ALERT` (-5 pts)
+- **Heuristic**: The document `<head>` contains two or more `<link rel="canonical">` elements with different URLs.
+- **Why It Matters**: When multiple canonical tags conflict, search engines discard all of them.
+- **How to Fix**: Remove redundant canonical tags injected by conflicting plugins, themes, or header scripts.

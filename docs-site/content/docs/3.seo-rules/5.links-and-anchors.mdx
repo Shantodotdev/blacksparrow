@@ -1,0 +1,47 @@
+---
+title: "Rules: Links & Anchors"
+description: Rules covering internal link health, broken external links, anchor text optimization, and nofollow usage.
+icon: i-lucide-link
+---
+
+Links define the architecture of the web. Internal links distribute PageRank equity across your site, while descriptive anchor text tells crawlers what the linked page is about.
+
+---
+
+### `LINK-001` — Broken Internal Link
+- **Severity**: `ALERT` (-5 pts)
+- **Heuristic**: An internal link points to a destination on the same domain that returns an HTTP `4xx` error.
+- **Why It Matters**: Prevents search crawlers from indexing deeper pages and frustrates human visitors.
+- **How to Fix**: Update the `href` attribute on the referring page to point to the correct URL, or implement a 301 redirect.
+
+---
+
+### `LINK-002` — Broken External Outbound Link
+- **Severity**: `WARNING` (-2 pts)
+- **Heuristic**: A link pointing to a third-party domain returns an HTTP `4xx` or `5xx` error.
+- **Why It Matters**: Linking to dead third-party resources signals poor content maintenance.
+- **How to Fix**: Remove the dead link or update it to an authoritative, active source.
+
+---
+
+### `LINK-003` — Empty Anchor Text
+- **Severity**: `WARNING` (-2 pts)
+- **Heuristic**: An `<a>` element contains no text content, or wraps an `<img>` that is missing an `alt` attribute.
+- **Why It Matters**: Search engines use anchor text as a ranking signal. Empty anchors provide zero contextual meaning.
+- **How to Fix**: Add descriptive, human-readable text inside the `<a>` tag, or add an `alt` tag if linking an image.
+
+---
+
+### `LINK-004` — Generic Anchor Text
+- **Severity**: `WARNING` (-2 pts)
+- **Heuristic**: Anchor text uses generic non-descriptive phrases like *"click here"*, *"read more"*, or *"learn more"*.
+- **Why It Matters**: Misses an opportunity to pass topical relevance and keyword context to the destination page.
+- **How to Fix**: Replace generic phrases with descriptive copy (e.g. *"read our guide on SEO audit rules"* instead of *"read more"*).
+
+---
+
+### `LINK-005` — Internal Link Marked with `rel="nofollow"`
+- **Severity**: `WARNING` (-2 pts)
+- **Heuristic**: An internal link to another page on the same domain has a `rel="nofollow"` attribute.
+- **Why It Matters**: Traps and wastes PageRank link equity by preventing it from circulating through your site's internal pages.
+- **How to Fix**: Remove `rel="nofollow"` from standard internal links. Reserve it only for user-generated content or paid links.

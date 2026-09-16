@@ -1,0 +1,39 @@
+---
+title: "Rules: Graph & Internal PageRank"
+description: Post-crawl graph analysis covering orphan pages, excessive click depth, and link equity flow.
+icon: i-lucide-share-2
+---
+
+Unlike single-page linters, Black Sparrow constructs a complete directed link topology graph using Rust's `petgraph` library after a crawl finishes. This enables site-wide structural diagnostics.
+
+---
+
+### `GRAPH-001` — Orphan Page Detected
+- **Severity**: `ALERT` (-5 pts)
+- **Heuristic**: An indexable URL exists in your XML sitemap or was reached via a redirect, but has **zero incoming internal links** from anywhere else on the website.
+- **Why It Matters**: Search engines rarely crawl or rank pages that have no internal links connecting them to the rest of the site.
+- **How to Fix**: Add relevant internal links to this page from related blog articles, category hubs, or site navigation menus.
+
+---
+
+### `GRAPH-002` — Excessive Click Depth (> 4 Clicks)
+- **Severity**: `WARNING` (-2 pts)
+- **Heuristic**: The shortest path from the homepage to this URL requires more than 4 link clicks.
+- **Why It Matters**: Search engine crawlers prioritize shallow pages. Content buried 5+ clicks deep receives minimal PageRank equity and is crawled infrequently.
+- **How to Fix**: Elevate important pages by linking to them from category navigation, breadcrumbs, or featured content carousels.
+
+---
+
+### `GRAPH-003` — Dead-End Page (PageRank Equity Leak)
+- **Severity**: `WARNING` (-2 pts)
+- **Heuristic**: A page with high internal PageRank equity contains zero outbound internal links, causing link equity flow to terminate abruptly.
+- **Why It Matters**: Wastes internal ranking power rather than circulating it back through other valuable pages on your site.
+- **How to Fix**: Add contextual internal links, footer links, or related-reading recommendations.
+
+---
+
+### `GRAPH-004` — Internal Redirect Chain
+- **Severity**: `WARNING` (-2 pts)
+- **Heuristic**: An internal link points to a URL that initiates two or more consecutive redirects (A → B → C).
+- **Why It Matters**: Each redirect hop adds latency, burns crawl budget, and can cause crawlers to abandon the request.
+- **How to Fix**: Update the `href` on the source page to link directly to the final 200 OK target URL (C).

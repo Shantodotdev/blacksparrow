@@ -1,0 +1,60 @@
+---
+title: "Rules: International & Security"
+description: Rules covering hreflang reciprocity, multi-lingual SEO, and essential web security headers.
+icon: i-lucide-globe
+---
+
+Multi-lingual websites require precise hreflang annotations to serve the correct regional language variant. Modern search engines also prioritize sites that maintain strong HTTP transport security.
+
+---
+
+## International SEO (Hreflang) Rules
+
+### `HREF-001` — Missing Reciprocal Hreflang Tag
+- **Severity**: `ALERT` (-5 pts)
+- **Heuristic**: Page A points to Page B using `rel="alternate" hreflang="es"`, but Page B does not link back to Page A with a reciprocal `hreflang="en"` tag.
+- **Why It Matters**: Google ignores non-reciprocal hreflang tags to prevent arbitrary third parties from claiming foreign-language versions of your pages.
+- **How to Fix**: Ensure that all language alternates bi-directionally reference each other:
+  ```html
+  <!-- On both the English and Spanish pages: -->
+  <link rel="alternate" hreflang="en" href="https://example.com/en/page">
+  <link rel="alternate" hreflang="es" href="https://example.com/es/page">
+  <link rel="alternate" hreflang="x-default" href="https://example.com/en/page">
+  ```
+
+---
+
+### `HREF-002` — Missing `x-default` Fallback
+- **Severity**: `WARNING` (-2 pts)
+- **Heuristic**: Multi-lingual page cluster has hreflang annotations for specific languages, but omits an `hreflang="x-default"` catch-all.
+- **Why It Matters**: Search engines use `x-default` to decide which page to serve to users whose browser language doesn't match any of your explicit target languages.
+- **How to Fix**: Add an `x-default` entry pointing to your primary language page or country selector.
+
+---
+
+### `HREF-003` — Invalid Language / Region Code
+- **Severity**: `ALERT` (-5 pts)
+- **Heuristic**: Hreflang attribute contains an invalid ISO 639-1 language code or ISO 3166-1 alpha-2 region format (e.g. `en-UK` instead of `en-GB`).
+- **Why It Matters**: Invalid codes cause search engines to reject the annotation entirely.
+- **How to Fix**: Use standard format: `language-country` (e.g. `en-US`, `fr-FR`, `de-DE`).
+
+---
+
+## Security Header Rules
+
+### `SEC-001` — Missing HTTP Strict Transport Security (HSTS)
+- **Severity**: `WARNING` (-2 pts)
+- **Heuristic**: Server response headers do not include `Strict-Transport-Security: max-age=...`.
+- **Why It Matters**: Without HSTS, visitors can be downgraded to unencrypted HTTP during man-in-the-middle attacks.
+- **How to Fix**: Configure your server or CDN to send:
+  ```http
+  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+  ```
+
+---
+
+### `SEC-002` — Missing Content Security Policy (CSP)
+- **Severity**: `WARNING` (-2 pts)
+- **Heuristic**: No `Content-Security-Policy` header or `<meta http-equiv="Content-Security-Policy">` present.
+- **Why It Matters**: Leaves the site vulnerable to cross-site scripting (XSS) and unauthorized third-party script injection.
+- **How to Fix**: Add a restrictive CSP header defining trusted script and style origins.

@@ -1,0 +1,52 @@
+---
+title: Rules Catalog Overview
+description: Architecture of Black Sparrow's 120-rule technical SEO audit engine and scoring rubric.
+icon: i-lucide-book-open
+---
+
+Black Sparrow ships with an exhaustive catalog of **120 built-in technical SEO rules**. Each rule has been meticulously designed according to modern search engine specifications (Google Search Central, RFC 9309 robots standard, W3C HTML5, and Schema.org).
+
+Every rule includes:
+- A unique rule code (e.g. `STATUS-404`, `CANON-002`, `IMG-001`).
+- A assigned severity tier (`CRITICAL`, `ALERT`, `WARNING`, or `INFO`).
+- A clear, human-friendly explanation of why it matters.
+- Direct remediation steps to fix the issue.
+
+---
+
+## The 13 Rule Categories
+
+| Category | Code Prefix | Focus Area |
+| :--- | :--- | :--- |
+| [**HTTP & Transport**](/docs/seo-rules/http-and-status) | `STATUS-` | 404s, 5xx server errors, redirect loops, SSL/TLS certificates, TTFB. |
+| [**Titles & Meta**](/docs/seo-rules/meta-and-headings) | `META-` | `<title>` length, duplicate titles, meta descriptions, OpenGraph. |
+| [**Headings & Structure**](/docs/seo-rules/meta-and-headings) | `H1-` | Missing H1, multiple H1s, improper heading hierarchy order. |
+| [**Directives & Robots**](/docs/seo-rules/directives-and-canonicals) | `ROBOT-` | `noindex`, `nofollow`, `X-Robots-Tag`, `robots.txt` disallows. |
+| [**Canonicalization**](/docs/seo-rules/directives-and-canonicals) | `CANON-` | Missing canonicals, canonical loops, cross-domain mismatches. |
+| [**Links & Anchors**](/docs/seo-rules/links-and-anchors) | `LINK-` | Broken internal/external links, empty anchors, generic text ("click here"). |
+| [**Images & CWV**](/docs/seo-rules/images-and-cwv) | `IMG-` | Missing `alt` tags, missing `width`/`height` (CLS), oversized files. |
+| [**International (Hreflang)**](/docs/seo-rules/international-and-security) | `HREF-` | Reciprocal hreflang links, missing `x-default`, invalid ISO codes. |
+| [**Security Headers**](/docs/seo-rules/international-and-security) | `SEC-` | Missing HSTS, Content Security Policy (CSP), X-Frame-Options. |
+| [**Schema & Structured Data**](/docs/seo-rules/schema-and-structured-data) | `SCHEMA-` | JSON-LD syntax, missing required fields for Google Rich Results. |
+| [**Graph & Internal PageRank**](/docs/seo-rules/graph-and-internal-pagerank) | `GRAPH-` | Orphan pages, click depth > 4, internal PageRank equity traps. |
+| [**AI Search Readiness (GEO)**](/docs/seo-rules/ai-and-geo-readiness) | `AI-` | `/llms.txt` presence, AI crawler permissions (`GPTBot`, `ClaudeBot`). |
+| **Content & Duplication** | `CONT-` | Near-duplicate pages (SimHash), thin content under 150 words. |
+
+---
+
+## Anatomy of a Rule Finding
+
+When Black Sparrow detects an issue, it generates a structured finding:
+
+```json
+{
+  "rule_code": "CANON-002",
+  "category": "canonicalization",
+  "severity": "ALERT",
+  "url": "https://example.com/products/blue-shoes",
+  "message": "Canonical tag points to an internal page that returns HTTP 404",
+  "fix": "Update the rel='canonical' target URL to point to an existing, indexable 200 OK webpage."
+}
+```
+
+This structure makes it easy for developers, SEO consultants, and AI coding agents to diagnose and resolve errors rapidly.
