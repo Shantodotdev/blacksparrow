@@ -1,2 +1,47 @@
 @import 'tailwindcss';
 @import 'docora/styles.css';
+
+/*
+ * Black Sparrow Signature Theme
+ * Deep dark slate background with vibrant rose / crimson / pink accents (#e11d48 / #f43f5e).
+ * Replaces the default Docora emerald/green palette completely.
+ */
+
+:root {
+  /* Black Sparrow Primary (Rose-600 / Crimson) */
+  --primary: oklch(58.6% 0.253 17.585); /* #e11d48 */
+  --primary-foreground: oklch(100% 0 0);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-ring: var(--primary);
+}
+
+.dark {
+  /* Deeper pitch-dark slate for Black Sparrow terminal aesthetic */
+  --background: oklch(14.5% 0.005 285.823); /* zinc-950 */
+  --elevated: oklch(19.5% 0.006 285.885); /* zinc-900 */
+  --muted: oklch(19.5% 0.006 285.885);
+  --accented: oklch(26% 0.008 286.0);
+  --border: oklch(25% 0.006 286.033);
+  --border-accented: oklch(33% 0.01 286.0);
+
+  /* Vibrant Rose / Pink Accent in Dark Mode (#f43f5e) */
+  --primary: oklch(66.5% 0.24 16.5); /* rose-500 */
+  --primary-foreground: oklch(100% 0 0);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-ring: var(--primary);
+}
+
+/* Override any remaining emerald callout classes to Black Sparrow Rose */
+[class*='text-emerald'] {
+  color: var(--primary) !important;
+}
+
+/* Custom text selection in Black Sparrow crimson */
+::selection {
+  background-color: color-mix(in oklch, var(--primary) 35%, transparent);
+  color: inherit;
+}

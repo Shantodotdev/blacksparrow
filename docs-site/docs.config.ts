@@ -27,6 +27,15 @@ export default defineDocsConfig({
     title: "On this page",
   },
 
+  colorMode: {
+    default: "dark",
+  },
+
+  loadingIndicator: {
+    enabled: true,
+    color: "#e11d48",
+  },
+
   footer: {
     credits: "Built with Docora & Next.js for Black Sparrow",
     columns: [
