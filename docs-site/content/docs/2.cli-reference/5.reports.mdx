@@ -1,0 +1,79 @@
+---
+title: "Command: sparrow report"
+description: Export interactive HTML dashboards, Screaming Frog CSV suites, and Markdown reports.
+icon: i-lucide-file-text
+---
+
+The `report` command allows you to export or re-generate reports for any past crawl session without having to re-crawl the website.
+
+```bash [Terminal]
+sparrow report <SESSION_ID> [OPTIONS]
+```
+
+---
+
+## Supported Report Formats
+
+Black Sparrow provides 4 rich export formats designed for different audiences:
+
+### 1. Interactive HTML Dashboard (`html`)
+
+Generates a modern, standalone single-file HTML dashboard with dark/light styling, zero external CDN dependencies, and offline support:
+
+- 📊 **Health Score Gauge**: Interactive visual score ring with letter grade.
+- 🗂️ **Categorized Issue Tabs**: Filter by Status, Meta, Headings, Links, Images, and Security.
+- 🔍 **Real-Time Search**: Search through crawled URLs, status codes, and issue descriptions.
+- 🕸️ **Link Topology**: View orphan pages, PageRank equity distribution, and click depth.
+
+### 2. Screaming Frog-Compatible CSV Suite (`csv`)
+
+Exports a suite of standard CSV files designed to match Screaming Frog's layout, allowing you to import them into Google Sheets, Excel, or existing reporting pipelines:
+
+- `internal_all.csv`: Every crawled URL, status code, title, meta description, H1, word count, and canonical.
+- `all_issues.csv`: Complete list of all 120-rule findings with URL, rule code, severity, and remediation advice.
+- `all_inlinks.csv`: Internal link mapping showing source URL, target URL, and anchor text.
+- `response_codes.csv`: Breakdown of 2xx, 3xx, 4xx, and 5xx HTTP responses.
+
+### 3. LLM-Tailored Markdown (`md`)
+
+Generates a concise, high-density Markdown summary designed specifically to fit into Large Language Model context windows (Claude, ChatGPT, Gemini). It highlights critical bottlenecks, health scores, and top action items.
+
+### 4. Machine-Readable JSON (`json`)
+
+Outputs the complete raw telemetry dataset for custom Python scripts, data warehouses, or BI dashboards.
+
+---
+
+## Options & Flags
+
+| Option | Default | Description |
+| :--- | :--- | :--- |
+| `<SESSION_ID>` | *Required* | Crawl session identifier. |
+| `-f, --format <FORMATS>`| `"html,csv"` | Comma-separated list: `html`, `csv`, `md`, `json`, or `all`. |
+| `-o, --output-dir <DIR>` | `"./reports"` | Target directory where exported files are saved. |
+| `--open` | `false` | Automatically opens the generated HTML report in your default browser. |
+
+---
+
+## Example Usage
+
+### Export HTML Dashboard and Open in Browser
+
+```bash [Terminal]
+sparrow report crawl_20260915_a7f9b2 -f html --open
+```
+
+### Export Complete CSV Suite for Client Deliverable
+
+```bash [Terminal]
+sparrow report crawl_20260915_a7f9b2 -f csv -o ./client-export
+```
+
+Files produced:
+```text
+client-export/
+├── internal_all.csv
+├── all_issues.csv
+├── all_inlinks.csv
+└── response_codes.csv
+```

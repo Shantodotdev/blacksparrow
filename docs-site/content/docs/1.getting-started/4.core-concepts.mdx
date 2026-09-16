@@ -1,0 +1,96 @@
+---
+title: Core Concepts
+description: Understand how Black Sparrow calculates health scores, organizes 4 severity tiers, and persists data.
+icon: i-lucide-layers
+---
+
+To make the most of Black Sparrow, it helps to understand a few foundational concepts: how health scores are calculated, how findings are categorized, and where your data is stored.
+
+---
+
+## 1. The 100-Point Health Score
+
+Every audit session calculates a comprehensive **Website Health Score** on a scale from **0 to 100**:
+
+```text
+Health Score = max(0, 100 - Total Deductions)
+```
+
+Deductions are weighted by severity:
+
+| Severity Level | Point Deduction | Meaning & Impact |
+| :--- | :--- | :--- |
+| **CRITICAL** | **-10 points** each | Fatal blockers: 5xx server errors, broken canonical loops, SSL cert failures. |
+| **ALERT** | **-5 points** each | High impact: Broken internal links (404), missing H1, accidental `noindex` on priority pages. |
+| **WARNING** | **-2 points** each | SEO degradation: Missing image alt tags, missing width/height (CLS), short descriptions. |
+| **INFO** | **0 points** | Informational: Self-referencing canonicals, trailing slash redirects, schema type found. |
+
+### Letter Grades
+
+Black Sparrow assigns an intuitive letter grade to summarize overall site health:
+
+- **A (90–100)**: Excellent technical health. Ready for top-tier search engine crawling and indexing.
+- **B (80–89)**: Good health, but has minor warnings or alerts that should be resolved.
+- **C (70–79)**: Needs attention. Multiple broken links or missing core metadata detected.
+- **D (60–69)**: Poor health. Severe indexing or status errors blocking visibility.
+- **F (Below 60)**: Failing. Immediate remediation required to prevent organic traffic collapse.
+
+---
+
+## 2. In-Flight vs. Post-Crawl Rules
+
+Black Sparrow runs two types of rules during an audit:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      CRAWL EXECUTION                        │
+│                                                             │
+│   Incoming Page Stream  ──►  In-Flight Page Rules (lol_html)│
+│                                (Immediate per-page checks)   │
+│                                      │                      │
+│                                      ▼                      │
+│                              Link Graph Ingestion           │
+│                                      │                      │
+│                                      ▼                      │
+│   Post-Crawl Stage      ──►  Graph Rules (petgraph)         │
+│                               (Orphans, PageRank, Chains)   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+1. **In-Flight Page Rules**: Evaluated in real time as each webpage is streamed from the network. This includes title tags, headings, HTTP status, robots directives, image dimensions, and schema.
+2. **Post-Crawl Graph Rules**: Evaluated after the entire crawl finishes. The engine builds a directed site topology graph using `petgraph` to compute internal PageRank, detect orphan pages (pages with zero incoming internal links), and identify redirect chains.
+
+---
+
+## 3. Streaming Parsing vs. In-Memory DOM Trees
+
+Traditional crawlers (such as Headless Chrome or JS-based scrapers) build an entire memory tree for every page crawled. If you crawl a 10,000-page website, memory quickly swells to multiple gigabytes.
+
+Black Sparrow uses Cloudflare's **`lol_html`** streaming tokenizer written in Rust:
+
+- **Zero Full-DOM Memory**: Characters are tokenized on the fly as TCP chunks arrive.
+- **Minimal Allocation**: Uses `compact_str` for URLs and tags under 24 bytes, preventing heap allocations.
+- **Instant Disposal**: Once a page is tokenized, findings are stored and memory is freed immediately.
+
+This allows Black Sparrow to crawl tens of thousands of pages while using **less than 50 MB of RAM**.
+
+---
+
+## 4. Local-First SQLite Persistence
+
+Every audit creates a unique session identifier (e.g. `crawl_20260915_a7f9b2`). All crawled URLs, discovered links, HTTP headers, and issue findings are saved to an embedded SQLite database running in **WAL (Write-Ahead Logging)** mode.
+
+### Where is the database located?
+
+- **Default (Global)**: Stored in your OS user data directory:
+  - Linux: `~/.local/share/blacksparrow/seolens.db`
+  - macOS: `~/Library/Application Support/blacksparrow/seolens.db`
+  - Windows: `%APPDATA%\blacksparrow\seolens.db`
+- **Project-Local Mode (`-L` or `--local`)**:
+  - Saved directly in your project folder at `./.seolens/seolens.db`.
+- **Ephemeral Mode (`--ephemeral`)**:
+  - Crawl results are kept in memory and exported to files without creating permanent database records. Useful for CI/CD runs.
+
+::tip
+Because your data is in a standard SQLite database, you can query it anytime using the `sqlite3` command-line tool, DBeaver, or Black Sparrow's built-in `sparrow issues` command!
+::

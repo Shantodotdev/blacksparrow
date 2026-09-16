@@ -1,0 +1,76 @@
+---
+title: "Command: sparrow audit"
+description: Complete guide to running full-site technical SEO audits with Black Sparrow.
+icon: i-lucide-activity
+---
+
+The `audit` command is Black Sparrow's core workhorse. It crawls an entire website, validates all 120 technical SEO rules, maps internal links, and calculates a site health score.
+
+```bash [Terminal]
+sparrow audit <URL> [OPTIONS]
+```
+
+---
+
+## Command-Line Options
+
+| Option | Default | Description |
+| :--- | :--- | :--- |
+| `<URL>` | *Required* | Root website URL to start crawling from (e.g. `https://example.com`). |
+| `-p, --max-pages <N>` | `500` | Maximum pages to crawl. Set to `0` for unlimited. |
+| `-d, --max-depth <N>` | `None` | Maximum link depth from root URL (e.g. `-d 3`). |
+| `-c, --concurrency <N>` | `10` | Maximum concurrent HTTP worker tasks. |
+| `--delay <MS>` | `0` | Delay between requests in milliseconds. `0` enables dynamic AIMD auto-tuning. |
+| `--render-js` | `false` | Enables Headless Chrome CDP to render client-side JavaScript (SPAs). |
+| `--chrome-ws <URL>` | `"auto"` | Remote Chrome WebSocket URL (e.g. `ws://127.0.0.1:9222`). |
+| `-u, --user-agent <STR>` | `"BlackSparrow/1.0"` | Custom HTTP `User-Agent` header sent with requests. |
+| `-f, --format <STR>` | `"terminal,json,md"` | Comma-separated outputs: `terminal`, `json`, `md`, `html`, `csv`, or `all`. |
+| `-o, --output-dir <DIR>` | `"./reports"` | Target directory where export artifacts are written. |
+| `--fail-on <LEVEL>` | `"none"` | CI/CD threshold: `critical`, `alert`, or `warning`. Returns exit code 1 if matched. |
+| `--no-robots` | `false` | Ignore `/robots.txt` disallow rules (use with caution). |
+| `--ephemeral` | `false` | Discards SQLite database records after crawl completion. Ideal for CI test runners. |
+| `--no-aimd` | `false` | Disables dynamic AIMD congestion control (useful for high-speed local staging). |
+| `--max-query-params <N>`| `2` | Maximum query parameters before flagging or pruning faceted spider traps. |
+| `--ignore-sorting-facets` | `true` | Strips e-commerce display facets (e.g. `?sort=price`, `?order=asc`) to avoid loops. |
+
+---
+
+## Real-World Examples
+
+### 1. High-Speed Local Dev Audit
+
+Audit your local development server running on `localhost:3000` with 20 concurrent connections and no AIMD throttling:
+
+```bash [Terminal]
+sparrow audit http://localhost:3000 --max-pages 200 -c 20 --no-aimd -f terminal
+```
+
+### 2. Full Production Audit with All Reports
+
+Audit a live client domain, crawl up to 2,000 pages, and generate an interactive HTML report plus CSV spreadsheets:
+
+```bash [Terminal]
+sparrow audit https://example.com --max-pages 2000 -c 12 -f all -o ./client-audit
+```
+
+### 3. JavaScript Single-Page Application (SPA) Audit
+
+Audit a React, Vue, or Angular application that renders its content dynamically in the browser via JavaScript:
+
+```bash [Terminal]
+sparrow audit https://spa.example.com --render-js --max-pages 100
+```
+
+::tip
+When `--render-js` is enabled, Black Sparrow automatically connects to a local Chrome instance or launches one via the Chrome DevTools Protocol (CDP).
+::
+
+### 4. CI/CD Pull Request Quality Gate
+
+Fail the build if any `critical` or `alert` SEO bugs (such as broken internal links or missing title tags) are detected:
+
+```bash [Terminal]
+sparrow audit https://staging.example.com --max-pages 500 --fail-on alert --ephemeral
+```
+
+If any alert or critical issue is discovered, Black Sparrow exits with code `1`, causing the CI pipeline step to fail before code reaches production!

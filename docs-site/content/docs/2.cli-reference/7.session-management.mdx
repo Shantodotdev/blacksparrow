@@ -1,0 +1,84 @@
+---
+title: "Commands: list, delete & clean"
+description: Manage historical crawl sessions and maintain your local SQLite database.
+icon: i-lucide-database
+---
+
+Black Sparrow automatically records every audit session in your local SQLite database. Over time, you can inspect past audits, compare health score improvements, or clean up disk space.
+
+---
+
+## 1. `sparrow list` — List Past Sessions
+
+Displays a formatted table of previous crawl sessions:
+
+```bash [Terminal]
+sparrow list [OPTIONS]
+```
+
+### Options
+
+- `-n, --limit <N>`: Maximum number of recent sessions to display (default: 20).
+- `-f, --format <FORMAT>`: `terminal` (default) or `json`.
+- `-L, --local`: Read from project-local `.seolens/seolens.db` instead of the global database.
+
+### Example Output
+
+```text
++-----------------------+-----------------------+-------+--------+----------+---------------------+
+| Session ID            | Target URL            | Pages | Score  | Duration | Timestamp           |
++-----------------------+-----------------------+-------+--------+----------+---------------------+
+| crawl_20260915_a7f9b2 | https://example.com   | 500   | 94 (A) | 1.84s    | 2026-09-15 14:32:10 |
+| crawl_20260914_c103e8 | https://staging.dev   | 142   | 81 (B) | 0.92s    | 2026-09-14 11:15:04 |
+| crawl_20260910_88b14a | https://client.org    | 1,200 | 73 (C) | 4.10s    | 2026-09-10 16:50:22 |
++-----------------------+-----------------------+-------+--------+----------+---------------------+
+```
+
+---
+
+## 2. `sparrow delete` — Delete a Single Session
+
+Permanently removes a specific crawl session along with all of its crawled pages, discovered links, and issue findings:
+
+```bash [Terminal]
+sparrow delete <SESSION_ID>
+```
+
+### Example
+
+```bash [Terminal]
+sparrow delete crawl_20260914_c103e8
+```
+
+Output:
+```text
+Successfully deleted session 'crawl_20260914_c103e8' and 142 associated page records.
+```
+
+---
+
+## 3. `sparrow clean` — Prune Old Audits
+
+Over months of continuous auditing, your database might hold thousands of historical records. The `clean` command prunes older sessions in a single operation:
+
+```bash [Terminal]
+sparrow clean [OPTIONS]
+```
+
+### Options
+
+- `--days <N>`: Remove sessions older than N days (default: 30 days).
+- `--all`: Remove all historical sessions and reset the database schema.
+- `-y, --yes`: Skip interactive confirmation prompt.
+
+### Example
+
+```bash [Terminal]
+# Prune all crawl sessions older than 14 days
+sparrow clean --days 14 -y
+```
+
+Output:
+```text
+Cleaned 12 historical sessions older than 14 days. Reclaimed 84.2 MB disk space.
+```

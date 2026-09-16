@@ -1,0 +1,103 @@
+---
+title: Installation
+description: Simple, step-by-step instructions to install Black Sparrow on Linux, macOS, and Windows.
+icon: i-lucide-download
+---
+
+Installing **Black Sparrow** takes less than a minute. You can install precompiled standalone binaries without needing Rust installed, or build directly from source using Cargo.
+
+::tip
+After installation, both `blacksparrow` and the short alias `sparrow` will be available in your terminal!
+::
+
+---
+
+## 1. Quick Install (Standalone Binary)
+
+Choose the tab corresponding to your operating system:
+
+::tabs
+:::tabs-item{label="macOS & Linux" icon="i-lucide-terminal"}
+
+Open your terminal and run the official installation script:
+
+```bash [Terminal]
+curl -fsSL https://raw.githubusercontent.com/Shantodotdev/blacksparrow/main/install.sh | bash
+```
+
+This script:
+1. Detects your CPU architecture (`x86_64` or `aarch64` / Apple Silicon).
+2. Downloads the latest verified binary release from GitHub.
+3. Installs `blacksparrow` and creates a symlink alias `sparrow` in `~/.local/bin` or `/usr/local/bin`.
+:::
+
+:::tabs-item{label="Windows (PowerShell)" icon="i-lucide-monitor"}
+
+Open **PowerShell** (no administrator rights needed) and run:
+
+```powershell [PowerShell]
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/Shantodotdev/blacksparrow/releases/latest/download/blacksparrow-installer.ps1 | iex"
+```
+
+Alternatively, you can download the standalone `.msi` graphical installer directly from the [GitHub Releases page](https://github.com/Shantodotdev/blacksparrow/releases).
+:::
+::
+
+---
+
+## 2. Install via Cargo (Rust Developers)
+
+If you already have Rust and Cargo installed, you can compile and install Black Sparrow directly:
+
+```bash [Terminal]
+# Install from source repository
+git clone https://github.com/Shantodotdev/blacksparrow.git
+cd blacksparrow
+cargo install --path .
+```
+
+This places `blacksparrow` into your `~/.cargo/bin` folder. Make sure `~/.cargo/bin` is in your shell `PATH`:
+
+```bash [~/.bashrc or ~/.zshrc]
+export PATH="$HOME/.cargo/bin:$PATH"
+```
+
+---
+
+## 3. Verify Your Installation
+
+To confirm that Black Sparrow is correctly installed and ready to use, run:
+
+```bash [Terminal]
+sparrow --version
+```
+
+You should see output similar to:
+
+```text
+blacksparrow 0.1.0
+```
+
+To see the available commands and flags:
+
+```bash [Terminal]
+sparrow --help
+```
+
+---
+
+## System Requirements & Prerequisites
+
+- **Supported Platforms**:
+  - Linux (`x86_64`, `aarch64` / ARM64)
+  - macOS (Apple Silicon `M1/M2/M3/M4`, and Intel `x86_64`)
+  - Windows 10 / 11 (`x86_64`)
+- **Memory**: Runs efficiently on machines with as little as 512 MB RAM.
+- **Dependencies**: The standalone binaries are self-contained with zero external runtime dependencies (SQLite and TLS certificates are bundled).
+
+::note
+If you are compiling from source on Linux (Ubuntu / Debian), make sure standard development libraries are present:
+```bash [Terminal]
+sudo apt update && sudo apt install build-essential pkg-config libssl-dev
+```
+::

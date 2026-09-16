@@ -1,0 +1,110 @@
+---
+title: "Commands: check-ai & schema"
+description: Audit website readiness for AI search engines (/llms.txt) and validate schema.org structured data.
+icon: i-lucide-sparkles
+---
+
+As search evolves toward conversational AI answers and rich snippet search results, Black Sparrow provides two specialized commands to optimize your digital footprint: `check-ai` and `schema`.
+
+---
+
+## 1. `sparrow check-ai` — AI Search Readiness (GEO)
+
+Generative Engine Optimization (GEO) ensures that AI search engines (like ChatGPT Search, Perplexity, Claude, and Google AI Overviews) can discover, comprehend, and cite your website.
+
+```bash [Terminal]
+sparrow check-ai <URL>
+```
+
+### What `check-ai` Probes
+
+- 📄 **`/llms.txt` Discovery**: Checks if `/llms.txt` and `/llms-full.txt` exist at the domain root, providing clean Markdown documentation for AI systems.
+- 🤖 **AI Bot Permissions**: Analyzes `robots.txt` rules specifically for leading AI crawler user agents:
+  - `GPTBot` (OpenAI / ChatGPT)
+  - `ClaudeBot` (Anthropic / Claude)
+  - `PerplexityBot` (Perplexity AI)
+  - `Google-Extended` (Gemini training)
+  - `Applebot-Extended` (Apple Intelligence)
+- 🛡️ **WAF & Firewall Screens**: Tests whether Cloudflare, Akamai, or DataDome bot challenge screens intercept AI crawlers with HTTP 403 or JavaScript puzzles.
+
+### Example
+
+```bash [Terminal]
+sparrow check-ai https://example.com
+```
+
+Sample output:
+
+```text
+================================================================================
+                         AI SEARCH & GEO AUDIT
+================================================================================
+Target URL       : https://example.com
+
+LLMS.TXT DISCOVERY:
+  /llms.txt      : [FOUND] (200 OK, 1.4 KB) - Valid structure
+  /llms-full.txt : [FOUND] (200 OK, 12.8 KB)
+
+AI ROBOTS.TXT DIRECTIVES:
+  GPTBot         : [ALLOWED]
+  ClaudeBot      : [ALLOWED]
+  PerplexityBot  : [ALLOWED]
+  Google-Extended: [DISALLOWED] (Opted out of Gemini training)
+
+BOT DEFENSE (WAF):
+  Status         : Clean. No Cloudflare or Akamai challenge screens detected.
+
+VERDICT:
+  Overall Readiness : HIGH (Ready for AI citations & indexing)
+```
+
+---
+
+## 2. `sparrow schema` — Schema.org & Google Rich Results
+
+Structured data helps search engines understand products, reviews, FAQs, and recipes, triggering rich result badges and star ratings in Google search.
+
+```bash [Terminal]
+sparrow schema <URL> [OPTIONS]
+```
+
+### What `schema` Validates
+
+- 📐 **JSON-LD & Microdata Syntax**: Extracts and checks syntax of all inline schema scripts.
+- ⭐ **Google Rich Results Requirements**: Checks required and recommended properties against Google's official Search Central guidelines for:
+  - `Article` & `BlogPosting` (`headline`, `image`, `datePublished`, `author`)
+  - `Product` (`name`, `image`, `offers`, `price`, `availability`, `aggregateRating`)
+  - `BreadcrumbList` (`itemListElement`, `position`, `item`)
+  - `FAQPage` (`mainEntity`, `Question`, `AcceptedAnswer`)
+  - `LocalBusiness` & `Organization` (`name`, `address`, `telephone`, `logo`)
+  - `Recipe` & `Event`
+
+### Example
+
+```bash [Terminal]
+sparrow schema https://example.com/products/running-shoes
+```
+
+Sample output:
+
+```text
+================================================================================
+                       STRUCTURED DATA AUDIT (SCHEMA.ORG)
+================================================================================
+URL              : https://example.com/products/running-shoes
+Schema Found     : JSON-LD (Product, BreadcrumbList)
+
+VALIDATION RESULTS:
+  [OK] Product:
+    - name             : "Velocity Pro Running Shoes"
+    - image            : https://example.com/shoes.png
+    - offers.price     : "129.99"
+    - offers.currency  : "USD"
+    - availability     : "https://schema.org/InStock"
+
+  [WARNING] Product:
+    - Missing recommended field: "aggregateRating" (Eligible for star rating badges)
+    - Missing recommended field: "review"
+
+Eligible for Google Rich Results : YES (Product Snippet)
+```

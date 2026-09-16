@@ -1,0 +1,75 @@
+---
+title: Introduction
+description: Learn what Black Sparrow is, why it was built, and how it compares to traditional SEO crawlers.
+icon: i-lucide-info
+---
+
+Welcome to **Black Sparrow**!
+
+Black Sparrow is a high-speed website crawler, technical SEO auditor, and AI-native analysis engine written from scratch in Rust. It runs locally on your laptop, workstation, or continuous integration (CI) runner.
+
+You can run it via the command line with either `blacksparrow` or its friendly short alias, `sparrow`.
+
+::note
+**What is Black Sparrow?**
+Think of Black Sparrow as a fast, lightweight alternative to legacy desktop tools like Screaming Frog and costly cloud subscriptions like Sitebulb Cloud or Ahrefs site audit. It gives you complete privacy, instant execution, and native AI integration.
+::
+
+---
+
+## Why Black Sparrow Was Created
+
+For years, technical SEO auditing has been stuck between two extremes:
+
+1. **Heavy Desktop Tools**: Java-based software that demands gigabytes of RAM, slows down your computer during large crawls, and requires commercial license keys.
+2. **Expensive Cloud Crawlers**: SaaS platforms that require monthly recurring fees, queue your crawls in remote servers, and upload your private staging or client data to external databases.
+
+Black Sparrow was engineered with a modern philosophy:
+
+- ⚡ **Stream, Don't Buffer**: Rather than constructing an entire Document Object Model (DOM) tree in memory for every page, Black Sparrow streams HTML through Cloudflare's `lol_html` parser. It crawls 500 to 800 pages per second using under **50 MB of RAM**.
+- 🔒 **Local-First & Completely Private**: Your audit data is saved to a local SQLite database on your machine. There are no tracking scripts, no telemetry, and no accounts.
+- 🧠 **Ready for the AI Era**: Search is shifting toward AI answers (ChatGPT, Perplexity, Claude, Google AI Overviews). Black Sparrow includes native **Model Context Protocol (MCP)** tools and automated `/llms.txt` checks so AI coding assistants can audit sites for you.
+- 🛡️ **Polite & Safe for Target Servers**: With its built-in Additive-Increase / Multiplicative-Decrease (AIMD) congestion algorithm, Black Sparrow monitors server response times and automatically backs off if a website starts to slow down.
+
+---
+
+## Comparison: Black Sparrow vs. Others
+
+| Feature | Black Sparrow | Screaming Frog | Cloud Crawlers (Ahrefs, etc.) |
+| :--- | :--- | :--- | :--- |
+| **Language & Engine** | Pure Rust (`lol_html`) | Java | Distributed Cloud Workers |
+| **Typical Memory Usage** | **under 50 MB RAM** | 2 GB – 8 GB RAM | Cloud-hosted |
+| **Crawl Speed** | **500–800 pages/sec** | ~20–50 pages/sec | Varies by cloud queue |
+| **Data Privacy** | **100% Local (SQLite)** | Local file storage | Cloud server storage |
+| **AI Integration (MCP)**| **Native stdio MCP** | None | Limited Webhooks / API |
+| **AI Search Readiness** | Audits `/llms.txt` & AI Bots | Manual regex | None or basic |
+| **CI / CD Automated Gating** | Built-in (`--fail-on`) | CLI Requires Paid License | API / Webhooks only |
+| **Interactive Reports** | Standalone HTML + CSV | Proprietary GUI + CSV | Cloud Web Dashboard |
+
+---
+
+## The 3 Pillars of Black Sparrow
+
+::card-group
+:::card{title="1. The Crawler & Engine" icon="i-lucide-activity" to="/docs/architecture/crawler-and-aimd"}
+Asynchronous HTTP engine running on Tokio green tasks. Automatically follows redirects, parses XML sitemaps, respects `robots.txt`, and navigates canonical paths.
+:::
+
+:::card{title="2. The 120-Rule SEO Audit" icon="i-lucide-check-check" to="/docs/seo-rules/overview"}
+Covers everything: missing titles, broken links, orphan pages, redirect loops, unoptimized images causing layout shifts, missing structured data (schema), and hreflang mismatches.
+:::
+
+:::card{title="3. Autonomous AI (MCP)" icon="i-lucide-cpu" to="/docs/ai-and-mcp/mcp-setup"}
+Exposes standardized JSON-RPC 2.0 tools to AI assistants like Claude Desktop, Cursor, and Windsurf, enabling AI agents to fix SEO issues directly in codebases.
+:::
+::
+
+---
+
+## Next Steps
+
+Ready to get started? Head over to the installation guide to install Black Sparrow on your operating system:
+
+::tip{to="/docs/getting-started/installation"}
+Jump to the [Installation Guide](/docs/getting-started/installation) to install Black Sparrow with a single command.
+::

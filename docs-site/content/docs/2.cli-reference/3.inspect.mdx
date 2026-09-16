@@ -1,0 +1,84 @@
+---
+title: "Command: sparrow inspect"
+description: Instant single-page developer X-ray for inspecting HTTP status, DOM metadata, and schemas.
+icon: i-lucide-scan
+---
+
+The `inspect` command provides an instant, developer-focused X-ray of any single webpage without crawling the entire website.
+
+```bash [Terminal]
+sparrow inspect <URL> [OPTIONS]
+```
+
+It is ideal for testing blog posts, landing pages, or pricing tables locally while developing.
+
+---
+
+## What `inspect` Checks
+
+When you inspect a URL, Black Sparrow evaluates:
+
+- ⏱️ **Network & Performance**: HTTP status (200, 301, 404), Time To First Byte (TTFB), total fetch duration, and compressed content size.
+- 🏷️ **Essential Metadata**: Page `<title>` length and pixel width, `<meta name="description">`, and robots directives (`noindex`, `nofollow`).
+- 🔗 **Canonicalization**: Canonical tag target, self-referencing check, and HTTP `Link` headers.
+- 📑 **Heading Structure**: Full H1 through H6 hierarchy, checking for missing H1s, multiple H1s, or skipped heading levels.
+- 🖼️ **Image Health**: Images missing descriptive `alt` text and images missing explicit `width` and `height` attributes (which cause Cumulative Layout Shift).
+- 📱 **Social Sharing Cards**: OpenGraph (`og:title`, `og:image`, `og:type`) and Twitter Card tags.
+- 🧩 **Structured Data**: Detection and syntax validation of JSON-LD schemas (e.g. `Article`, `Product`, `Organization`, `FAQPage`).
+
+---
+
+## Options & Flags
+
+| Option | Default | Description |
+| :--- | :--- | :--- |
+| `<URL>` | *Required* | Webpage URL to inspect. |
+| `-f, --format <FORMAT>` | `"terminal"` | Output format: `terminal` (ANSI color) or `json`. |
+| `-u, --user-agent <STR>` | `"BlackSparrow/1.0"` | Custom HTTP User-Agent. |
+| `--render-js` | `false` | Renders client-side JavaScript via Headless Chrome before inspection. |
+
+---
+
+## Example Usage
+
+### Instant Terminal Inspection
+
+```bash [Terminal]
+sparrow inspect https://example.com/blog/rust-concurrency
+```
+
+Sample output:
+
+```text
+================================================================================
+                         PAGE INSPECTION X-RAY
+================================================================================
+URL              : https://example.com/blog/rust-concurrency
+Status Code      : 200 OK (TTFB: 48ms, Content: 24.8 KB)
+
+METADATA:
+  Title          : Rust Concurrency in Practice - High Performance Systems (56 chars)
+  Description    : Learn how to leverage Tokio green tasks and channels. (61 chars)
+  Canonical      : https://example.com/blog/rust-concurrency [Matches URL]
+  Robots         : INDEX, FOLLOW
+
+HEADINGS HIERARCHY:
+  H1 (1)         : Rust Concurrency in Practice
+  H2 (4)         : 1. Green Tasks | 2. Channels | 3. AIMD Control | 4. Benchmarks
+  H3 (6)         : Sub-sections verified cleanly
+
+STRUCTURED DATA (JSON-LD):
+  Found          : BlogPosting, BreadcrumbList
+  Status         : Valid schema.org syntax
+
+FINDINGS (1 Warning):
+  [WARNING]      : IMG-002: 2 images are missing explicit width/height attributes
+```
+
+### JSON Output for Scripts and Git Hooks
+
+Export the raw inspection data as JSON to integrate with pre-commit hooks or automated linters:
+
+```bash [Terminal]
+sparrow inspect http://localhost:3000/about -f json > inspect_result.json
+```

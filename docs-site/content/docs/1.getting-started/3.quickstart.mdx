@@ -1,0 +1,107 @@
+---
+title: Quickstart Tutorial
+description: Run your first website audit in under 60 seconds with Black Sparrow.
+icon: i-lucide-zap
+---
+
+Ready to see Black Sparrow in action? In this 60-second tutorial, you will run a full technical SEO audit, inspect the findings in your terminal, and open an interactive HTML report.
+
+::steps{level="3"}
+
+### Audit Your First Website
+
+Run `sparrow audit` with the target website URL. Let's start with a small crawl limit of 50 pages:
+
+```bash [Terminal]
+sparrow audit https://example.com --max-pages 50
+```
+
+Black Sparrow immediately starts crawling:
+- Probes `/robots.txt` and discovers XML sitemaps.
+- Normalizes internal URLs and enqueues them.
+- Streams HTML without buffering DOM trees into memory.
+- Monitors server response times and adjusts speed automatically with AIMD congestion control.
+
+### Read the Live Terminal Summary
+
+Once the audit finishes, Black Sparrow displays an ANSI terminal summary:
+
+```text
+================================================================================
+                           BLACK SPARROW AUDIT SUMMARY
+================================================================================
+Target URL       : https://example.com
+Session ID       : crawl_20260915_a7f9b2
+Pages Crawled    : 50
+Total Duration   : 1.42s (~35.2 pages/sec)
+Health Score     : 94 / 100 (Grade: A)
+
+Findings Breakdown:
+  [CRITICAL]     : 0
+  [ALERT]        : 2 (Broken internal link, Missing title tag)
+  [WARNING]      : 5 (Missing image alt text, Short meta description)
+  [INFO]         : 12 (Canonical tag self-referencing)
+
+Reports saved to : ./reports/crawl_20260915_a7f9b2.{json,md}
+```
+
+### Inspect a Single URL Instantly
+
+When you're editing code locally or troubleshooting a specific URL, you don't need to crawl the whole site. Use `sparrow inspect` to get an instant X-ray of that URL:
+
+```bash [Terminal]
+sparrow inspect https://example.com/pricing
+```
+
+This checks:
+- HTTP Status Code & Time To First Byte (TTFB)
+- `<title>` and `<meta name="description">`
+- OpenGraph & Twitter Cards
+- H1–H6 heading hierarchy
+- Structured Data / JSON-LD schemas
+- Missing image `alt` attributes or missing `width`/`height`
+
+### Generate an Interactive HTML Dashboard
+
+Want a visual report you can share with clients or teammates? Run:
+
+```bash [Terminal]
+sparrow report crawl_20260915_a7f9b2 -f html -o ./reports
+```
+
+Open `./reports/crawl_20260915_a7f9b2.html` in your browser. You get an interactive dashboard complete with:
+- Health score gauge
+- Category tabs (Status, Meta, Images, Links, Security)
+- Searchable, filterable issue tables
+- Internal PageRank equity distribution
+
+### Check AI Search Readiness
+
+Want to know if search engines powered by AI (Perplexity, ChatGPT, Claude) can read and cite your website?
+
+```bash [Terminal]
+sparrow check-ai https://example.com
+```
+
+This verifies:
+- Whether `/llms.txt` or `/llms-full.txt` exists.
+- Whether your `robots.txt` blocks or permits AI crawlers (`GPTBot`, `ClaudeBot`, `PerplexityBot`).
+- Whether Cloudflare or WAF challenge screens are blocking AI bots.
+
+::
+
+---
+
+## What's Next?
+
+Now that you've run your first audit, dive into the core concepts to understand how Black Sparrow calculates health scores and classifies issues.
+
+::card-group
+:::card{title="Core Concepts" icon="i-lucide-book-open" to="/docs/getting-started/core-concepts"}
+Learn how health scores, severity tiers, and local SQLite storage work.
+:::
+
+:::card{title="CLI Command Reference" icon="i-lucide-terminal" to="/docs/cli-reference/overview"}
+Explore all 10 subcommands and advanced flags like concurrency, depth, and JS rendering.
+:::
+::

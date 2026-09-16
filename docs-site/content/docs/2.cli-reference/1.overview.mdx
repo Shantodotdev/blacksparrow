@@ -1,0 +1,63 @@
+---
+title: CLI Overview
+description: Complete overview of Black Sparrow commands, global options, and exit codes.
+icon: i-lucide-terminal
+---
+
+Black Sparrow features a high-performance command-line interface parsed with `clap`. You can invoke it using either `blacksparrow` or its alias `sparrow`.
+
+```bash [Terminal]
+sparrow <COMMAND> [OPTIONS]
+```
+
+---
+
+## The 10 Subcommands
+
+| Subcommand | Description | Typical Use Case |
+| :--- | :--- | :--- |
+| [`audit`](/docs/cli-reference/audit) | Run full website crawl with AIMD rate limiting & 120-rule audit | Full site health inspection, SEO audits |
+| [`inspect`](/docs/cli-reference/inspect) | Instant developer X-ray for a single webpage (DOM, tags, headers) | Pre-deployment checks, local testing |
+| [`mcp`](/docs/ai-and-mcp/mcp-setup) | Launch native Model Context Protocol server over `stdio` | AI coding assistants (Claude, Cursor, Windsurf) |
+| [`report`](/docs/cli-reference/reports) | Re-export or inspect an existing audit from SQLite | Generating HTML dashboards, CSV exports |
+| [`issues`](/docs/cli-reference/issues) | Filter and drill down into audit findings for a session | Finding specific 404s, broken schemas, or warnings |
+| [`check-ai`](/docs/cli-reference/ai-and-schema) | Audit website readiness for AI search engines & `/llms.txt` | Generative Engine Optimization (GEO) audits |
+| [`schema`](/docs/cli-reference/ai-and-schema) | Validate JSON-LD / schema against Google Rich Results | E-commerce products, articles, FAQs |
+| [`list`](/docs/cli-reference/session-management) | List all historical audit sessions stored in SQLite | Viewing past crawl history and scores |
+| [`delete`](/docs/cli-reference/session-management) | Delete a specific crawl session and its records | Removing temporary test crawls |
+| [`clean`](/docs/cli-reference/session-management) | Clean historical crawl sessions older than N days | Database disk maintenance |
+
+---
+
+## Global Options
+
+The following flags can be passed to commands that interact with the database:
+
+- `-L, --local`: Forces SQLite persistence to a project-local folder (`./.seolens/seolens.db`) instead of the user's global data directory. Useful when keeping audit history inside a specific repository.
+- `--db-path <PATH>`: Explicitly specifies a custom SQLite database file location.
+- `-h, --help`: Displays detailed help and options for any command.
+- `-V, --version`: Displays current Black Sparrow version.
+
+---
+
+## Output Formats
+
+Black Sparrow supports multiple output formats through the `-f, --format` option:
+
+- `terminal` (Default): Clean, color-coded ANSI terminal summaries.
+- `html`: Standalone interactive single-file HTML dashboard with filters and search.
+- `csv`: Suite of Screaming Frog-compatible CSV spreadsheets (`pages.csv`, `issues.csv`, `links.csv`).
+- `json`: Machine-readable structured JSON document containing full crawl telemetry.
+- `md`: Executive Markdown summary optimized for Large Language Model (LLM) context windows.
+- `all`: Generates all formats simultaneously into the output directory (`./reports`).
+
+---
+
+## CI/CD Exit Codes
+
+When running in automated continuous integration (GitHub Actions, GitLab CI, Jenkins), Black Sparrow signals success or failure using standard process exit codes:
+
+- **Exit Code `0`**: Crawl finished successfully and no issue violated the `--fail-on` threshold.
+- **Exit Code `1`**: Crawl completed, but one or more issues matched or exceeded the `--fail-on` gate (e.g. `--fail-on critical`).
+- **Exit Code `2`**: Invalid CLI arguments or unparseable command options.
+- **Exit Code `10`**: Fatal network failure (e.g. target host unreachable or DNS failure).

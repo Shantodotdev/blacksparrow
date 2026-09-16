@@ -1,0 +1,71 @@
+---
+title: "Command: sparrow issues"
+description: Filter, search, and drill down into audit findings for any session.
+icon: i-lucide-alert-circle
+---
+
+The `issues` command lets you inspect and filter specific findings from any historical crawl stored in your local SQLite database.
+
+```bash [Terminal]
+sparrow issues <SESSION_ID> [OPTIONS]
+```
+
+::note
+You can get the `<SESSION_ID>` from the audit summary output or by running `sparrow list`.
+::
+
+---
+
+## Filtering Options
+
+| Option | Default | Description |
+| :--- | :--- | :--- |
+| `<SESSION_ID>` | *Required* | Unique crawl session identifier (e.g. `crawl_20260915_a7f9b2`). |
+| `-s, --severity <LEVELS>` | `"all"` | Comma-separated severities: `critical`, `alert`, `warning`, `info`. |
+| `-c, --category <CAT>` | `"all"` | Filter by rule category (e.g. `links`, `images`, `meta`, `security`, `schema`). |
+| `-r, --rule <RULE_CODE>` | `None` | Filter by specific rule ID (e.g. `STATUS-404`, `IMG-001`, `H1-001`). |
+| `-n, --limit <N>` | `50` | Maximum number of issue rows to return. |
+| `-f, --format <FORMAT>` | `"terminal"` | Output format: `terminal`, `json`, or `csv`. |
+
+---
+
+## Example Usage
+
+### 1. Show Only Critical and Alert Issues
+
+Focus immediately on high-impact problems that damage search rankings:
+
+```bash [Terminal]
+sparrow issues crawl_20260915_a7f9b2 --severity critical,alert
+```
+
+Sample output:
+
+```text
+Found 3 issues matching severity [critical, alert]:
+
+[ALERT] STATUS-404
+  URL     : https://example.com/products/old-model
+  Message : HTTP 404 Not Found response returned from internal link
+  Source  : Discovered on https://example.com/products
+
+[ALERT] META-001
+  URL     : https://example.com/checkout
+  Message : Missing required <title> tag in HTML document
+```
+
+### 2. Find All Broken Images and Missing Alt Tags
+
+Audit your images across the site:
+
+```bash [Terminal]
+sparrow issues crawl_20260915_a7f9b2 --category images
+```
+
+### 3. Export Specific Findings to CSV
+
+Export all broken internal links to a CSV file for your engineering team to fix:
+
+```bash [Terminal]
+sparrow issues crawl_20260915_a7f9b2 --rule STATUS-404 -f csv > broken_links.csv
+```
