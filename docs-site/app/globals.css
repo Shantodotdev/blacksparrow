@@ -45,3 +45,60 @@
   background-color: color-mix(in oklch, var(--primary) 35%, transparent);
   color: inherit;
 }
+
+/*
+ * Docora SiteHeader Layout & Word-Wrap Fix:
+ * 1. Prevent brand name and header nav links from breaking into multiline words.
+ * 2. Replace Docora's rigid 3-column grid (which gives 28rem to search, squeezing nav items)
+ *    with a balanced, responsive flex layout.
+ */
+header a span {
+  white-space: nowrap !important;
+}
+
+header nav[aria-label='Main'] {
+  flex-shrink: 0;
+}
+
+header nav[aria-label='Main'] a {
+  white-space: nowrap !important;
+  flex-shrink: 0;
+}
+
+@media (min-width: 768px) {
+  header > div {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+  }
+
+  /* Left column: Brand + Navigation links */
+  header > div > div:first-child {
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
+  }
+
+  /* Search button container: flexible width instead of rigid 28rem grid column */
+  header > div > div:nth-child(2) {
+    flex: 0 1 20rem !important;
+    min-width: 9rem !important;
+    margin-left: auto !important;
+    margin-right: 0.75rem !important;
+  }
+
+  /* Right actions: GitHub, ThemeToggle */
+  header > div > div:last-child {
+    flex-shrink: 0 !important;
+    margin-left: 0 !important;
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1280px) {
+  header nav[aria-label='Main'] {
+    gap: 0.85rem !important;
+    font-size: 0.8125rem;
+  }
+}
+
+
+
