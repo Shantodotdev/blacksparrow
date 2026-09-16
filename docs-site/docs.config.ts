@@ -5,7 +5,7 @@ export default defineDocsConfig({
     name: "Black Sparrow",
     description:
       "High-performance, local-first website crawler, 120-rule technical SEO audit engine, and AI-native auditor in Rust.",
-    url: "https://blacksparrow.dev",
+    url: "https://blacksparrowdev.vercel.app/",
     locale: "en",
   },
 
