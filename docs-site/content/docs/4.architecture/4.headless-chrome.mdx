@@ -1,0 +1,45 @@
+---
+title: Headless Chrome & JavaScript SEO
+description: Decoupled Chrome DevTools Protocol (CDP) for crawling client-side JavaScript SPAs.
+icon: i-lucide-monitor
+---
+
+Modern web applications often rely on client-side JavaScript frameworks (such as React, Vue, Angular, or Svelte) to render page elements, navigation links, and metadata dynamically in the user's browser.
+
+Black Sparrow supports full JavaScript rendering using a **decoupled Chrome DevTools Protocol (CDP)** engine.
+
+---
+
+## The Decoupled Philosophy
+
+Unlike heavy tools that bundle an entire 200 MB Chromium binary directly into the download package, Black Sparrow keeps its core release binary tiny (**under 15 MB**).
+
+When you pass `--render-js`:
+1. Black Sparrow checks for an already-installed browser on your system (Google Chrome, Chromium, Brave, or Microsoft Edge).
+2. It launches a headless instance communicating over standard Chrome DevTools Protocol (CDP) WebSockets.
+3. If running inside a Docker container or remote server, you can connect to an external browser cluster using `--chrome-ws ws://<HOST>:9222`.
+
+---
+
+## When to Enable `--render-js`
+
+| Crawl Mode | Speed | Memory | Best Used For |
+| :--- | :--- | :--- | :--- |
+| **HTTP Streaming (Default)** | **500–800 pages/sec** | **under 50 MB** | Server-rendered sites (WordPress, Next.js SSR, Hugo, Shopify, Astro) |
+| **Chrome CDP (`--render-js`)**| **15–30 pages/sec** | **~250 MB** | Client-only SPAs (pure React Vite, Vue SPA, dashboard portals) |
+
+::tip
+Always use default HTTP streaming first! If your framework uses Server-Side Rendering (SSR) or Static Site Generation (SSG), search engines like Googlebot receive the HTML directly—meaning `--render-js` is not needed.
+::
+
+---
+
+## Running with Chrome CDP
+
+```bash [Terminal]
+# Auto-detect local Chrome and render JS
+sparrow audit https://spa.example.com --render-js --max-pages 100
+
+# Connect to a remote Headless Chrome container running on port 9222
+sparrow audit https://spa.example.com --render-js --chrome-ws ws://127.0.0.1:9222
+```

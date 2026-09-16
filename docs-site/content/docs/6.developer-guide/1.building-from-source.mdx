@@ -1,0 +1,85 @@
+---
+title: Building from Source
+description: Setup your local Rust development environment and compile Black Sparrow.
+icon: i-lucide-hammer
+---
+
+Black Sparrow is written in standard **Rust (2021 edition)** and uses a 2-member Cargo workspace.
+
+---
+
+## Prerequisites
+
+- **Rust Toolchain**: Rust 1.80 or later ([rustup.rs](https://rustup.rs/)).
+- **C Compiler & System Libraries**:
+  - **Ubuntu / Debian**: `sudo apt update && sudo apt install build-essential pkg-config libssl-dev`
+  - **Fedora / RHEL**: `sudo dnf groupinstall "Development Tools" && sudo dnf install openssl-devel`
+  - **macOS**: `xcode-select --install`
+  - **Windows**: [Visual Studio C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+
+---
+
+## 1. Clone the Repository
+
+```bash [Terminal]
+git clone https://github.com/Shantodotdev/blacksparrow.git
+cd blacksparrow
+```
+
+---
+
+## 2. Workspace Layout
+
+The repository is structured as a Cargo workspace:
+
+- **Root (`.`)**:
+  - `src/lib.rs`: The core engine library (`blacksparrow`).
+  - `src/main.rs`: The headless command-line binary (`blacksparrow`).
+- **Desktop Shell (`src-tauri/`)**:
+  - Native Tauri v2 desktop window wrapper.
+- **Documentation (`docs-site/`)**:
+  - This Docora documentation site (Next.js 16 + React 19 + Tailwind CSS 4).
+- **Tests (`tests/`)**:
+  - Comprehensive integration test suites and synthetic HTML fixtures (`tests/fixtures/`).
+
+---
+
+## 3. Compiling the Binary
+
+### Development Build (Fast Compilation)
+
+```bash [Terminal]
+cargo build
+```
+
+The executable is placed in `./target/debug/blacksparrow`.
+
+### Optimized Release Binary (Maximum Speed)
+
+```bash [Terminal]
+cargo build --release
+```
+
+The release build enables link-time optimization (LTO) and code generation tuning. The resulting binary in `./target/release/blacksparrow` is fully optimized and under 15 MB.
+
+### Global Installation
+
+To install `blacksparrow` directly to your `~/.cargo/bin`:
+
+```bash [Terminal]
+cargo install --path .
+```
+
+---
+
+## 4. Code Standards & Linting
+
+Before opening a pull request, ensure the codebase is formatted and passes clippy checks:
+
+```bash [Terminal]
+# Format all workspace files
+cargo fmt --all
+
+# Run clippy with strict warnings
+cargo clippy --all-targets -- -D warnings
+```

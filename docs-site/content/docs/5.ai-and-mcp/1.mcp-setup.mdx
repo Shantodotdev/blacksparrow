@@ -1,0 +1,105 @@
+---
+title: Model Context Protocol (MCP) Setup
+description: Connect Black Sparrow's native MCP server to Claude Desktop, Cursor, and Windsurf.
+icon: i-lucide-plug
+---
+
+Black Sparrow features a native, pure-Rust **Model Context Protocol (MCP)** server over standard input/output (`stdio`).
+
+This allows AI coding agents in **Claude Desktop**, **Cursor**, **Windsurf**, and **Antigravity** to run technical SEO audits, query issues, validate schemas, and fix bugs autonomously directly inside your codebase!
+
+```
+┌─────────────────────────┐          JSON-RPC 2.0 (stdio)         ┌─────────────────────────┐
+│     AI Coding Agent     │ ◄───────────────────────────────────► │   Black Sparrow Engine  │
+│ (Claude/Cursor/Windsurf)│       seo_start_audit, query, ...     │     (sparrow mcp)       │
+└─────────────────────────┘                                       └─────────────────────────┘
+```
+
+---
+
+## 1. Quick Prompt Setup
+
+If your AI assistant supports adding MCP tools via natural language, simply tell your agent:
+
+> *"Add a local MCP server named `blacksparrow` with the command `blacksparrow` and arguments `['mcp']`."*
+
+---
+
+## 2. Manual Configuration by Client
+
+::tabs
+:::tabs-item{label="Claude Desktop" icon="i-lucide-bot"}
+
+Open your Claude Desktop configuration file:
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+- **Linux**: `~/.config/Claude/claude_desktop_config.json`
+
+Add the `blacksparrow` server definition:
+
+```json [claude_desktop_config.json]
+{
+  "mcpServers": {
+    "blacksparrow": {
+      "command": "blacksparrow",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+Restart Claude Desktop. You will see a hammer icon indicating that Black Sparrow's 8 SEO tools are active!
+:::
+
+:::tabs-item{label="Cursor" icon="i-lucide-mouse-pointer"}
+
+In Cursor:
+1. Open **Cursor Settings** → **Features** → **MCP Servers**.
+2. Click **+ Add New MCP Server**.
+3. Fill in:
+   - **Name**: `blacksparrow`
+   - **Type**: `stdio`
+   - **Command**: `blacksparrow mcp`
+
+Or add it to `.cursor/mcp.json` in your project root:
+
+```json [.cursor/mcp.json]
+{
+  "mcpServers": {
+    "blacksparrow": {
+      "command": "blacksparrow",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+:::
+
+:::tabs-item{label="Windsurf" icon="i-lucide-terminal"}
+
+Edit `~/.codeium/windsurf/mcp_config.json`:
+
+```json [mcp_config.json]
+{
+  "mcpServers": {
+    "blacksparrow": {
+      "command": "blacksparrow",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+:::
+::
+
+---
+
+## Verifying the MCP Server
+
+You can verify that the MCP server starts cleanly by running:
+
+```bash [Terminal]
+sparrow mcp
+```
+
+The process listens on `stdio` waiting for JSON-RPC 2.0 messages. Press `Ctrl+C` to exit.

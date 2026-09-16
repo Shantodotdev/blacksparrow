@@ -1,0 +1,121 @@
+---
+title: Native MCP Tools Reference
+description: Complete specification of all 8 native MCP tools exposed by Black Sparrow.
+icon: i-lucide-wrench
+---
+
+When connected to an AI client via MCP, Black Sparrow exposes **8 high-level tools**. These allow AI models to perform multi-step audits, retrieve context-efficient summaries, and diagnose issues without leaving the chat interface.
+
+---
+
+## The 8 MCP Tools
+
+### 1. `seo_start_audit`
+Spawns a non-blocking background website crawl and immediately returns a `session_id` in under 1 second.
+
+```json [Arguments]
+{
+  "url": "https://example.com",
+  "max_pages": 100,
+  "concurrency": 10
+}
+```
+
+---
+
+### 2. `seo_audit_status`
+Polls the live progress of an ongoing crawl session.
+
+```json [Arguments]
+{
+  "session_id": "crawl_20260915_a7f9b2"
+}
+```
+
+Returns:
+- `status`: `"running"` or `"completed"`
+- `pages_crawled`: Current count
+- `score`: Real-time health score
+- `findings_count`: Breakdown of critical, alert, and warning issues
+
+---
+
+### 3. `seo_get_markdown_report`
+Generates a clean, token-efficient executive Markdown report optimized specifically for LLM context windows.
+
+```json [Arguments]
+{
+  "session_id": "crawl_20260915_a7f9b2"
+}
+```
+
+---
+
+### 4. `seo_query_issues`
+Drills down and filters specific issue findings for an audit session.
+
+```json [Arguments]
+{
+  "session_id": "crawl_20260915_a7f9b2",
+  "severity": "critical",
+  "category": "links",
+  "limit": 20
+}
+```
+
+---
+
+### 5. `seo_quick_page_check`
+Instantly audits a single webpage without running a full site crawl.
+
+```json [Arguments]
+{
+  "url": "http://localhost:3000/pricing"
+}
+```
+
+---
+
+### 6. `seo_check_ai_readiness`
+Audits whether `/llms.txt` is present and verifies that AI bot user agents (`GPTBot`, `ClaudeBot`, `PerplexityBot`) are not blocked.
+
+```json [Arguments]
+{
+  "url": "https://example.com"
+}
+```
+
+---
+
+### 7. `seo_validate_schema`
+Extracts and validates JSON-LD structured data against Google Rich Results standards.
+
+```json [Arguments]
+{
+  "url": "https://example.com/products/headphones"
+}
+```
+
+---
+
+### 8. `seo_cleanup_session`
+Deletes a temporary crawl session and reclaims database disk space.
+
+```json [Arguments]
+{
+  "session_id": "crawl_20260915_a7f9b2"
+}
+```
+
+---
+
+## Example Agent Prompt Workflows
+
+You can interact with your AI assistant using natural language:
+
+> **Developer**: *"Check http://localhost:3000 with Black Sparrow and let me know if there are any broken links or missing title tags before I submit this pull request."*
+
+The AI agent will:
+1. Call `seo_quick_page_check(url: "http://localhost:3000")`.
+2. Inspect the returned issues array.
+3. Automatically find the offending file in your repo and write a code fix!

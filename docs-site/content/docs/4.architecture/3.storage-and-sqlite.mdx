@@ -1,0 +1,81 @@
+---
+title: Storage & SQLite Schema
+description: Local-first persistence layer, WAL-mode database architecture, and SQL query recipes.
+icon: i-lucide-database
+---
+
+Black Sparrow stores all crawl sessions, page metadata, discovered link edges, and issue findings in an embedded SQLite database (`seolens.db`).
+
+---
+
+## WAL-Mode Architecture
+
+SQLite operates in **Write-Ahead Logging (WAL)** mode with `PRAGMA synchronous = NORMAL`:
+
+- **Concurrent Reads & Writes**: Audit queries and report exporters can read from the database in real time without blocking crawler insert transactions.
+- **Batch Writer Actor**: Crawler tasks send page reports and findings over a non-blocking `tokio::sync::mpsc` channel to a dedicated SQLite writer thread, which commits batches inside atomic transactions.
+
+---
+
+## Relational Schema (Core Tables)
+
+```
+┌────────────────────┐       ┌────────────────────┐
+│   crawl_sessions   │◄──────┤   crawled_pages    │
+└─────────┬──────────┘       └─────────┬──────────┘
+          │                            │
+          ▼                            ▼
+┌────────────────────┐       ┌────────────────────┐
+│   issue_findings   │       │  discovered_links  │
+└────────────────────┘       └────────────────────┘
+```
+
+1. **`crawl_sessions`**: High-level audit metadata (start URL, crawl configuration, health score, duration, timestamp).
+2. **`crawled_pages`**: Page-level data (URL, HTTP status, title, meta description, H1, word count, TTFB, canonical target, SimHash).
+3. **`issue_findings`**: All 120-rule violations detected, linked to session ID, URL, severity tier, and fix instructions.
+4. **`discovered_links`**: Graph edges representing every link found on the site (source URL, target URL, anchor text, `nofollow` flag).
+5. **`schema_records`**: Extracted JSON-LD and Microdata blocks with validation status.
+
+---
+
+## Power-User SQL Query Recipes
+
+Because your data is stored in standard SQLite, you can query `seolens.db` using any SQLite client:
+
+### Find Top 10 Pages with the Most Internal Inlinks
+
+```sql
+SELECT 
+  target_url, 
+  COUNT(*) AS incoming_links 
+FROM discovered_links 
+WHERE is_internal = 1 
+GROUP BY target_url 
+ORDER BY incoming_links DESC 
+LIMIT 10;
+```
+
+### List All 404 Broken Internal Links with Referring Source
+
+```sql
+SELECT 
+  d.source_url AS found_on_page,
+  p.url AS broken_link_target,
+  d.anchor_text
+FROM crawled_pages p
+JOIN discovered_links d ON d.target_url = p.url
+WHERE p.status_code = 404;
+```
+
+### Count Issues by Category for the Latest Session
+
+```sql
+SELECT 
+  category, 
+  severity, 
+  COUNT(*) AS total_issues 
+FROM issue_findings 
+WHERE session_id = (SELECT session_id FROM crawl_sessions ORDER BY created_at DESC LIMIT 1)
+GROUP BY category, severity
+ORDER BY total_issues DESC;
+```

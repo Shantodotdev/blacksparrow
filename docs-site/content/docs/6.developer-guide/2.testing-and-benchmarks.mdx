@@ -1,0 +1,62 @@
+---
+title: Testing & Benchmarks
+description: How to run unit, integration, and doc tests using cargo-nextest and synthetic fixtures.
+icon: i-lucide-check-circle
+---
+
+Black Sparrow follows strict **Test-Driven Development (TDD)**. All 120 rules, URL normalization edge cases, and parser components are backed by automated tests.
+
+---
+
+## Preferred Test Runner: `cargo-nextest`
+
+We strongly recommend using **`cargo-nextest`** for running tests. It executes test cases in parallel with process isolation and clear terminal output:
+
+```bash [Terminal]
+# Install cargo-nextest if not already installed
+cargo install cargo-nextest --locked
+
+# Run all workspace unit and integration tests
+cargo nextest run
+```
+
+If `nextest` is not installed, standard `cargo test` works as a fallback:
+
+```bash [Terminal]
+cargo test
+```
+
+### Running Documentation Tests
+
+`nextest` runs unit and integration tests. To execute doctests defined in `src/` comments:
+
+```bash [Terminal]
+cargo test --doc
+```
+
+---
+
+## Test Suites & Fixtures
+
+The test suite is organized under `tests/`:
+
+- `tests/url_normalization_test.rs`: Validates RFC 3986 compliance, parameter stripping, and canonical resolution.
+- `tests/lol_html_parser_test.rs`: Tests zero-copy HTML parsing on messy real-world markup.
+- `tests/crawler_engine_test.rs`: Spins up local mock HTTP servers using `wiremock` to test AIMD congestion, redirects, and robots.txt.
+- `tests/fixtures/`: Contains synthetic HTML documents modeling edge cases (e.g. malformed JSON-LD, circular hreflang, missing H1 tags).
+
+---
+
+## Running Specific Test Suites
+
+To run only the SEO rule validation tests:
+
+```bash [Terminal]
+cargo nextest run --test rules_test
+```
+
+To run a specific test by name:
+
+```bash [Terminal]
+cargo nextest run test_canonical_loop_detection
+```

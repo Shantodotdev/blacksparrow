@@ -1,0 +1,89 @@
+---
+title: Adding Custom SEO Rules
+description: Step-by-step guide to implementing new in-flight or graph rules in Black Sparrow.
+icon: i-lucide-plus-circle
+---
+
+We welcome community contributions! This guide walks you through implementing a new SEO rule and adding it to the engine.
+
+---
+
+## 1. Register the Rule in the Catalog
+
+Open `src/rules/catalog.rs` and add your rule definition to the catalog:
+
+```rust [src/rules/catalog.rs]
+RuleDefinition {
+    code: "IMG-007",
+    name: "Missing Loading Attribute",
+    category: RuleCategory::Images,
+    severity: RuleSeverity::Warning,
+    description: "Images below the fold should specify loading='lazy' to improve initial page load performance.",
+    fix_advice: "Add loading='lazy' to non-hero images.",
+}
+```
+
+---
+
+## 2. Write a Failing Test First (TDD)
+
+Per our project standards, always write a test before writing implementation code:
+
+```rust [tests/rules_test.rs]
+#[test]
+fn test_image_missing_lazy_loading() {
+    let html = r#"<html><body><img src="footer.jpg"></body></html>"#;
+    let page = parse_html(html, "https://example.com").unwrap();
+    let findings = evaluate_page_rules(&page);
+    
+    assert!(findings.iter().any(|f| f.rule_code == "IMG-007"));
+}
+```
+
+Run `cargo nextest run` to verify that the test fails as expected.
+
+---
+
+## 3. Implement the Heuristic
+
+Open the corresponding module under `src/rules/page/` (e.g. `src/rules/page/images.rs`):
+
+```rust [src/rules/page/images.rs]
+pub fn check_image_lazy_loading(page: &PageReport, findings: &mut Vec<IssueFinding>) {
+    for img in &page.images {
+        if !img.is_hero && img.loading.as_deref() != Some("lazy") {
+            findings.push(IssueFinding {
+                rule_code: "IMG-007".into(),
+                severity: RuleSeverity::Warning,
+                url: page.url.clone(),
+                message: format!("Image '{}' is missing loading='lazy' attribute", img.src),
+            });
+        }
+    }
+}
+```
+
+---
+
+## 4. Run the Test Suite and Format
+
+```bash [Terminal]
+# Verify that your new test passes cleanly
+cargo nextest run
+
+# Format code
+cargo fmt --all
+
+# Run clippy
+cargo clippy --all-targets -- -D warnings
+```
+
+---
+
+## 5. Submit a Pull Request
+
+Commit your changes following the conventional format:
+```bash [Terminal]
+git commit -m "feat(rules): add IMG-007 check for lazy loading images"
+```
+And open a PR on [GitHub](https://github.com/Shantodotdev/blacksparrow)!

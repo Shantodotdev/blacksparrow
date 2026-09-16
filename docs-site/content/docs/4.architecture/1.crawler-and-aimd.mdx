@@ -1,0 +1,60 @@
+---
+title: Crawler Engine & AIMD Politeness
+description: Deep dive into Black Sparrow's asynchronous Tokio architecture and dynamic congestion control.
+icon: i-lucide-activity
+---
+
+Web crawling is fundamentally a balance between speed and server politeness. An aggressive crawler can trigger rate limits or inadvertently crash a client's production server.
+
+Black Sparrow solves this with an **Additive-Increase / Multiplicative-Decrease (AIMD)** congestion control algorithm inspired by TCP congestion avoidance.
+
+---
+
+## The Asynchronous Crawler Architecture
+
+Black Sparrow is powered by Rust's `tokio` runtime, leveraging asynchronous I/O and green tasks:
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                       BLACK SPARROW PIPELINE                     │
+│                                                                  │
+│  [URL Frontier]  ──►  [AIMD Rate Controller] ──► [Tokio Workers] │
+│         ▲                                               │        │
+│         │                                               ▼        │
+│   [Normalizer]   ◄──   [Link Extractor]      ◄──  [lol_html]     │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+1. **URL Frontier Queue**: Manages pending crawl URLs prioritized by click depth. Employs SwissTable (`hashbrown`) with 64-bit hashing (`ahash`) for instant O(1) deduplication.
+2. **8-Stage URL Normalizer**: Strips analytics parameters (`utm_*`, `fbclid`, `gclid`), normalizes percent-encoding, removes trailing slash ambiguities, and discards URL fragment hashes (`#section`).
+3. **Adaptive Workers**: Tokio tasks fetch pages concurrently without thread-per-connection overhead.
+
+---
+
+## How AIMD Congestion Control Works
+
+Instead of enforcing a rigid, fixed delay between requests, Black Sparrow constantly monitors server health through response latency and HTTP status codes.
+
+### The Algorithm
+
+1. **Additive Increase (Speeding Up)**:
+   When consecutive responses arrive quickly (under 250 ms) with HTTP 200 OK:
+   ```text
+   Delay = max(MinDelay, Delay - AdditiveStep)
+   ```
+   The crawler gradually accelerates to complete the crawl efficiently.
+
+2. **Multiplicative Decrease (Backing Off)**:
+   If the target server returns an HTTP `429 Too Many Requests`, `503 Service Unavailable`, or if latency suddenly spikes above 1,500 ms:
+   ```text
+   Delay = min(MaxDelay, Delay * 2.0)
+   ```
+   Black Sparrow immediately doubles the request delay and halves concurrency, giving the target server time to recover.
+
+### Respecting `robots.txt` Crawl-Delay
+
+If the website's `robots.txt` specifies an explicit `Crawl-delay:` directive (e.g. `Crawl-delay: 2`), Black Sparrow strictly honours the directive as the floor boundary for inter-request delays.
+
+::tip
+Auditing a local dev server (`http://localhost:3000`)? You can disable AIMD throttling completely for maximum raw speed using `--no-aimd`!
+::

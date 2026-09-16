@@ -1,0 +1,89 @@
+---
+title: Generative Engine Optimization (GEO)
+description: How to optimize your website for AI search engines, ChatGPT, Perplexity, and Claude.
+icon: i-lucide-sparkles
+---
+
+For two decades, SEO focused on ranking 10 blue links on Google search result pages. Today, millions of users search using conversational AI answer engines: **ChatGPT Search**, **Perplexity AI**, **Claude**, and **Google AI Overviews**.
+
+**Generative Engine Optimization (GEO)** is the practice of structuring your web content so Large Language Models can discover, comprehend, and cite your website as an authoritative source.
+
+---
+
+## The 4 Pillars of GEO
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                 GENERATIVE ENGINE OPTIMIZATION              │
+│                                                             │
+│   1. Clean Content Standards     ──►  /llms.txt             │
+│   2. Crawler Accessibility       ──►  AI Robots Directives  │
+│   3. High Semantic Density       ──►  Structured Data       │
+│   4. Server Politeness & Speed   ──►  Fast TTFB & Clean DOM │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 1. Implement `/llms.txt`
+
+The [`/llms.txt`](https://llmstxt.org/) specification is an emerging standard that provides LLM crawlers with a lightweight, Markdown-formatted index of your website.
+
+Place a file at your domain root: `https://example.com/llms.txt`.
+
+### Example `/llms.txt` Format
+
+```markdown
+# My SaaS Documentation
+
+> A modern billing platform for developer tools.
+
+## Core Documentation
+- [Quickstart Guide](https://example.com/docs/quickstart): Get up and running in 5 minutes.
+- [API Reference](https://example.com/docs/api): Complete REST API endpoints.
+- [Pricing](https://example.com/pricing): Tier breakdown and enterprise plans.
+```
+
+### Full Dump: `/llms-full.txt`
+You can also provide `/llms-full.txt`, which concatenates all your primary documentation into one single Markdown document. AI models can read this in a single fetch without recursive scraping!
+
+---
+
+## 2. Configure AI Robots Directives
+
+Ensure your `robots.txt` does not inadvertently block leading AI crawlers from citing your content:
+
+```text [robots.txt]
+# OpenAI ChatGPT Search
+User-agent: GPTBot
+Allow: /
+
+# Anthropic Claude
+User-agent: ClaudeBot
+Allow: /
+
+# Perplexity AI Search
+User-agent: PerplexityBot
+Allow: /
+```
+
+---
+
+## 3. High Semantic Density & Schema
+
+AI models rely on structured entity graphs to provide accurate factual answers.
+- Use explicit JSON-LD schemas (`Organization`, `Product`, `FAQPage`, `Article`).
+- State key facts directly in introductory paragraphs rather than burying answers under fluff.
+- Use distinct HTML headings (`<h2>`, `<h3>`) with clear phrasing.
+
+---
+
+## Auditing with Black Sparrow
+
+You can verify your website's GEO health anytime using:
+
+```bash [Terminal]
+sparrow check-ai https://example.com
+```
+
+Black Sparrow immediately verifies `/llms.txt` presence, parses AI bot permissions, and alerts you if any firewall screens interfere with AI ingestion!
