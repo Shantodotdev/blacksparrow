@@ -1,0 +1,88 @@
+---
+title: Black Sparrow — Fast, Local-First Website Crawler & AI-Native SEO Auditor
+description: Modern, local-first website crawler, 120-rule technical SEO audit engine, and AI-native auditor built in Rust.
+layout: landing
+---
+
+::hero{announcement="Introducing Black Sparrow v0.1" announcement-to="/docs/getting-started/introduction" title="High-Speed Technical SEO Auditing, Right in Your Terminal." description="Crawl hundreds of pages per second, audit 120 technical SEO checks, and connect AI coding agents natively via MCP. Zero telemetry, zero cloud lock-in, 100% private."}
+
+:::hero-actions
+::::cta{label="Get Started" to="/docs/getting-started/introduction" icon="i-lucide-rocket"}
+::::
+
+::::cta{label="Install Now" to="/docs/getting-started/installation" variant="secondary" icon="i-lucide-download"}
+::::
+
+::::cta{label="CLI Reference" to="/docs/cli-reference/overview" variant="secondary" icon="i-lucide-terminal"}
+::::
+:::
+
+:::hero-preview{filename="Terminal"}
+
+```bash [Terminal]
+# 1. Install Black Sparrow (sparrow)
+curl -fsSL https://raw.githubusercontent.com/Shantodotdev/blacksparrow/main/install.sh | bash
+
+# 2. Run your first high-speed audit (500 pages)
+sparrow audit https://example.com --max-pages 500
+
+# 3. Inspect a single URL instantly
+sparrow inspect https://example.com/pricing
+
+# 4. Check AI readiness and /llms.txt
+sparrow check-ai https://example.com
+```
+
+:::
+
+::
+
+## Why Choose Black Sparrow?
+
+Legacy website crawlers can be slow, consume gigabytes of memory, require paid desktop licenses, or force your proprietary client data into third-party cloud servers. Black Sparrow changes that.
+
+::card-group
+:::card{title="500–800 Pages/sec" icon="i-lucide-zap" to="/docs/architecture/streaming-parser"}
+Powered by Cloudflare's streaming `lol_html` parser and Tokio green tasks. Consumes less than 50 MB RAM even on large crawls.
+:::
+
+:::card{title="100% Local & Private" icon="i-lucide-shield-check" to="/docs/architecture/storage-and-sqlite"}
+All audit sessions, links, and issue findings stay on your own machine in an embedded SQLite database. Zero telemetry or external accounts.
+:::
+
+:::card{title="120 Technical Rules" icon="i-lucide-check-circle" to="/docs/seo-rules/overview"}
+Validates HTTP transport, metadata, headings, directives, canonicalization, broken links, security headers, CLS image dimensions, and schema.org.
+:::
+
+:::card{title="AI-Native with MCP" icon="i-lucide-bot" to="/docs/ai-and-mcp/mcp-setup"}
+Exposes a native Model Context Protocol (MCP) server over `stdio`. Claude Desktop, Cursor, and Windsurf can launch and diagnose audits autonomously.
+:::
+
+:::card{title="Polite AIMD Engine" icon="i-lucide-gauge" to="/docs/architecture/crawler-and-aimd"}
+Dynamic Additive-Increase / Multiplicative-Decrease congestion control actively prevents server overload or rate-limiting.
+:::
+
+:::card{title="Rich Multi-Exporters" icon="i-lucide-file-spreadsheet" to="/docs/cli-reference/reports"}
+Generate interactive HTML dashboards, Screaming Frog-compatible CSV suites, Markdown summaries for LLMs, and structured JSON.
+:::
+::
+
+---
+
+## Choose Your Pathway
+
+Whether you're an SEO specialist, a full-stack developer, or building autonomous AI workflows, Black Sparrow fits your toolkit:
+
+::card-group
+:::card{title="For SEO Specialists" icon="i-lucive-search" to="/docs/getting-started/quickstart"}
+Run deep site crawls, inspect canonical tags, detect orphan pages, evaluate internal PageRank equity, and export reports to CSV.
+:::
+
+:::card{title="For Developers & DevOps" icon="i-lucide-code" to="/docs/cli-reference/audit"}
+Gate pull requests with `--fail-on critical` in CI/CD pipelines, inspect single URLs locally before shipping, and validate schema.org markup.
+:::
+
+:::card{title="For AI & Agentic Engineers" icon="i-lucide-sparkles" to="/docs/ai-and-mcp/mcp-setup"}
+Connect your AI agents to the native MCP server so they can crawl staging sites, find broken links, and fix SEO defects on the fly.
+:::
+::
