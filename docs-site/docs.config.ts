@@ -10,6 +10,11 @@ export default defineDocsConfig({
   },
 
   header: {
+    logo: {
+      light: "/logo.png",
+      dark: "/logo.png",
+      alt: "Black Sparrow",
+    },
     links: [
       { label: "Documentation", href: "/docs/getting-started/introduction" },
       { label: "CLI Reference", href: "/docs/cli-reference/overview" },

@@ -1,8 +1,23 @@
-# Black Sparrow
+<p align="center">
+  <a href="https://github.com/Shantodotdev/blacksparrow">
+    <img src="./docs/assets/logo.png" alt="Black Sparrow Logo" width="160" height="160">
+  </a>
+</p>
 
-**High-performance, local-first website crawler, 120-rule technical SEO audit engine, and AI-native auditor written in Rust.**
+<h1 align="center">Black Sparrow</h1>
 
-[![Release](https://img.shields.io/github/v/release/Shantodotdev/blacksparrow?include_prereleases&color=e11d48&logo=github)](https://github.com/Shantodotdev/blacksparrow/releases) [![Downloads](https://img.shields.io/github/downloads/Shantodotdev/blacksparrow/total?color=ec4899&logo=github&label=downloads)](https://github.com/Shantodotdev/blacksparrow/releases) [![CI](https://img.shields.io/github/actions/workflow/status/Shantodotdev/blacksparrow/ci.yml?branch=main&label=CI&logo=github-actions)](https://github.com/Shantodotdev/blacksparrow/actions) [![Rust 2021](https://img.shields.io/badge/rust-2021_edition-f97316.svg)](https://www.rust-lang.org/) [![Model Context Protocol](https://img.shields.io/badge/mcp-compliant-be185d.svg)](./docs/mcp.md) [![License: MIT / Apache-2.0](https://img.shields.io/badge/license-MIT%2FApache--2.0-831843.svg)](./LICENSE-MIT)
+<p align="center">
+  <strong>High-performance, local-first website crawler, 120-rule technical SEO audit engine, and AI-native auditor written in Rust.</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Shantodotdev/blacksparrow/releases"><img src="https://img.shields.io/github/v/release/Shantodotdev/blacksparrow?include_prereleases&color=e11d48&logo=github" alt="Release"></a>
+  <a href="https://github.com/Shantodotdev/blacksparrow/releases"><img src="https://img.shields.io/github/downloads/Shantodotdev/blacksparrow/total?color=ec4899&logo=github&label=downloads" alt="Downloads"></a>
+  <a href="https://github.com/Shantodotdev/blacksparrow/actions"><img src="https://img.shields.io/github/actions/workflow/status/Shantodotdev/blacksparrow/ci.yml?branch=main&label=CI&logo=github-actions" alt="CI"></a>
+  <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/rust-2021_edition-f97316.svg" alt="Rust 2021"></a>
+  <a href="./docs/mcp.md"><img src="https://img.shields.io/badge/mcp-compliant-be185d.svg" alt="Model Context Protocol"></a>
+  <a href="./LICENSE-MIT"><img src="https://img.shields.io/badge/license-MIT%2FApache--2.0-831843.svg" alt="License: MIT / Apache-2.0"></a>
+</p>
 
 ---
 
@@ -12,9 +27,7 @@
 
 Built from the ground up in Rust, Black Sparrow streams HTML responses through Cloudflare's zero-copy `lol_html` parser, dynamically adjusts crawl speed using network congestion algorithms (AIMD), persists audit history in an embedded SQLite database, and exposes a native **Model Context Protocol (MCP)** server for autonomous AI coding agents.
 
-![Black Sparrow CLI Audit in Terminal](./docs/assets/cli_terminal_audit.png)
-
-![Black Sparrow Interactive HTML Report](./docs/assets/html_report_dashboard.png)
+![Black Sparrow CLI Audit in Terminal](./docs/assets/report.png)
 
 ---
 

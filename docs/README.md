@@ -1,6 +1,12 @@
-# SEO Lens Documentation Hub
+<p align="center">
+  <a href="../README.md">
+    <img src="./assets/logo.png" alt="Black Sparrow Logo" width="140" height="140">
+  </a>
+</p>
 
-Welcome to the technical documentation for **SEO Lens**—a high-performance, local-first website crawler, 120-rule technical SEO audit engine, and AI-native auditor written in Rust.
+# Black Sparrow Documentation Hub
+
+Welcome to the technical documentation for **Black Sparrow**—a high-performance, local-first website crawler, 120-rule technical SEO audit engine, and AI-native auditor written in Rust.
 
 Whether you are auditing a client website, connecting an AI coding agent via MCP, or contributing new features to the core engine, the guides below cover every aspect of the system.
 
@@ -8,14 +14,14 @@ Whether you are auditing a client website, connecting an AI coding agent via MCP
 
 ## Documentation Guides
 
-| Guide | Description | Target Audience |
-| --- | --- | --- |
-| [**Architecture & Roadmap**](./architecture.md) | 2-member workspace layout, asynchronous pipeline design, streaming parser (`lol_html`), and milestone progress. | Contributors, Systems Engineers |
-| [**CLI Commands & Flags**](./cli.md) | Reference for all 10 CLI subcommands (`audit`, `inspect`, `mcp`, `report`, `issues`, etc.), flags, and exporters. | Users, DevOps, Automation |
-| [**Crawler Engine & AIMD**](./crawler.md) | Asynchronous crawler mechanics, AIMD rate tuning, 8-stage URL normalization, RFC 9309 robots, and streaming XML sitemaps. | Contributors, Network Engineers |
-| [**Model Context Protocol (MCP)**](./mcp.md) | Pure Rust stdio MCP server for AI coding agents (Claude, Cursor, Windsurf) with 8 tools and one-click setup prompt. | AI Engineers, Agent Developers |
-| [**120 SEO Rules Catalog**](./rules.md) | Complete dictionary of all 120 technical SEO checks across 13 categories, detection heuristics, and remediation guidance. | SEO Specialists, Web Developers |
-| [**Storage & SQLite Schema**](./storage.md) | Local-first persistence layer, asynchronous batch writer actor, 7 relational tables, and power-user SQL query cheatsheet. | Database Admins, Power Users |
+| Guide                                           | Description                                                                                                               | Target Audience                 |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| [**Architecture & Roadmap**](./architecture.md) | 2-member workspace layout, asynchronous pipeline design, streaming parser (`lol_html`), and milestone progress.           | Contributors, Systems Engineers |
+| [**CLI Commands & Flags**](./cli.md)            | Reference for all 10 CLI subcommands (`audit`, `inspect`, `mcp`, `report`, `issues`, etc.), flags, and exporters.         | Users, DevOps, Automation       |
+| [**Crawler Engine & AIMD**](./crawler.md)       | Asynchronous crawler mechanics, AIMD rate tuning, 8-stage URL normalization, RFC 9309 robots, and streaming XML sitemaps. | Contributors, Network Engineers |
+| [**Model Context Protocol (MCP)**](./mcp.md)    | Pure Rust stdio MCP server for AI coding agents (Claude, Cursor, Windsurf) with 8 tools and one-click setup prompt.       | AI Engineers, Agent Developers  |
+| [**120 SEO Rules Catalog**](./rules.md)         | Complete dictionary of all 120 technical SEO checks across 13 categories, detection heuristics, and remediation guidance. | SEO Specialists, Web Developers |
+| [**Storage & SQLite Schema**](./storage.md)     | Local-first persistence layer, asynchronous batch writer actor, 7 relational tables, and power-user SQL query cheatsheet. | Database Admins, Power Users    |
 
 ---
 

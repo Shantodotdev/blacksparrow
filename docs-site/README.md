@@ -1,6 +1,10 @@
-# My Docs
+<p align="center">
+  <img src="../docs/assets/logo.png" alt="Black Sparrow Logo" width="140" height="140">
+</p>
 
-Documentation built with [Docora](https://github.com/StaticMania/docora).
+# Black Sparrow Documentation Site
+
+Documentation site built with [Docora](https://github.com/StaticMania/docora) and Next.js.
 
 ## Develop
 
