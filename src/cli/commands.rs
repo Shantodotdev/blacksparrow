@@ -714,6 +714,7 @@ async fn handle_schema(args: SchemaArgs) -> Result<(), Box<dyn std::error::Error
         let client = HttpClient::new(FetchOptions {
             user_agent: args.user_agent,
             timeout: Duration::from_secs(15),
+            allow_all_private_ips: false,
             ..Default::default()
         })?;
         let res = client.fetch(&args.target).await?;
