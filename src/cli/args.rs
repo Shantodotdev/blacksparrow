@@ -174,6 +174,15 @@ pub struct AuditArgs {
     /// Optional audit or project name
     #[arg(long)]
     pub name: Option<String>,
+
+    /// Specific private host or host:port allowed to be crawled (can be repeated, e.g. -a localhost:3000 or --allow-host localhost:3000)
+    #[arg(
+        short = 'a',
+        long = "allow-host",
+        visible_alias = "allow",
+        value_name = "HOST"
+    )]
+    pub allowed_hosts: Vec<String>,
 }
 
 impl Default for AuditArgs {
@@ -203,6 +212,7 @@ impl Default for AuditArgs {
             sitemap: None,
             quiet: false,
             name: None,
+            allowed_hosts: Vec::new(),
         }
     }
 }
@@ -228,6 +238,15 @@ pub struct InspectArgs {
     /// Custom HTTP request header(s) (e.g. -H "Authorization: Bearer xyz")
     #[arg(short = 'H', long = "header")]
     pub headers: Vec<String>,
+
+    /// Specific private host or host:port allowed to be inspected (can be repeated, e.g. -a localhost:3000 or --allow-host localhost:3000)
+    #[arg(
+        short = 'a',
+        long = "allow-host",
+        visible_alias = "allow",
+        value_name = "HOST"
+    )]
+    pub allowed_hosts: Vec<String>,
 }
 
 /// Command-line arguments for the `mcp` subcommand.
@@ -248,6 +267,19 @@ pub struct McpArgs {
     /// Force database persistence to project-local `.seolens/seolens.db`
     #[arg(short = 'L', long, default_value_t = false)]
     pub local: bool,
+
+    /// Allow auditing local and private network addresses (default: false). Cloud metadata endpoints remain permanently blocked.
+    #[arg(long, default_value_t = false)]
+    pub allow_local_network: bool,
+
+    /// Specific private host or host:port allowed for MCP tools (can be repeated, e.g. -a localhost:3000 or --allow-host localhost:3000)
+    #[arg(
+        short = 'a',
+        long = "allow-host",
+        visible_alias = "allow",
+        value_name = "HOST"
+    )]
+    pub allowed_hosts: Vec<String>,
 }
 
 /// Command-line arguments for the `report` subcommand.

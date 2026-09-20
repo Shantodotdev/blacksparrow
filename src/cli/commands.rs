@@ -12,7 +12,7 @@ use crate::core::models::{IssueCategory, Severity};
 use crate::crawler::ai_check::audit_ai_readiness;
 use crate::crawler::client::{FetchOptions, HttpClient};
 use crate::crawler::engine::{run_crawl_with_options, CrawlResult, ProgressCallback};
-use crate::crawler::inspector::inspect_url_with_options;
+use crate::crawler::inspector::inspect_url_with_options_ext;
 use crate::graph::{compute_pagerank, SiteGraph};
 use crate::report::{
     clear_post_crawl_status, create_crawl_progress_bar, export_csv_suite, export_html_report,
@@ -69,6 +69,15 @@ async fn handle_audit(args: AuditArgs) -> Result<(), Box<dyn std::error::Error>>
     config.exclude_regex = args.exclude;
     config.quiet = args.quiet;
     config.crawl_name = args.name;
+    for h in args.allowed_hosts {
+        if !config
+            .allowed_private_hosts
+            .iter()
+            .any(|existing| existing.eq_ignore_ascii_case(&h))
+        {
+            config.allowed_private_hosts.push(h);
+        }
+    }
 
     if let Some(sm) = args.sitemap {
         config.explicit_sitemaps.push(sm);
@@ -303,7 +312,16 @@ async fn handle_inspect(args: InspectArgs) -> Result<(), Box<dyn std::error::Err
         }
     }
 
-    match inspect_url_with_options(&args.url, &args.user_agent, timeout, custom_headers).await {
+    match inspect_url_with_options_ext(
+        &args.url,
+        &args.user_agent,
+        timeout,
+        custom_headers,
+        false,
+        args.allowed_hosts,
+    )
+    .await
+    {
         Ok((page, fetch, issues)) => {
             if args.format.eq_ignore_ascii_case("json") {
                 let json_output = serde_json::json!({
@@ -355,7 +373,10 @@ async fn handle_inspect(args: InspectArgs) -> Result<(), Box<dyn std::error::Err
 async fn handle_mcp(args: McpArgs) -> Result<(), Box<dyn std::error::Error>> {
     let db_path = resolve_db_path(args.db_path, args.local);
     if args.transport.eq_ignore_ascii_case("stdio") {
-        crate::mcp::run_mcp_server(Some(db_path)).await?;
+        let ctx = crate::mcp::McpContext::new(Some(db_path))?
+            .with_allow_local_network(args.allow_local_network)
+            .with_allowed_hosts(args.allowed_hosts);
+        crate::mcp::run_mcp_server_with_context(ctx).await?;
     } else {
         eprintln!(
             "❌ Transport '{}' is not currently supported. Please use '--transport stdio'.",
