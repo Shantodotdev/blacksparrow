@@ -176,6 +176,37 @@ pub struct AuditArgs {
     pub name: Option<String>,
 }
 
+impl Default for AuditArgs {
+    fn default() -> Self {
+        Self {
+            url: String::new(),
+            max_pages: 500,
+            max_depth: None,
+            concurrency: 10,
+            delay: 0,
+            render_js: false,
+            chrome_ws: "auto".to_string(),
+            user_agent: crate::core::branding::DEFAULT_USER_AGENT.to_string(),
+            format: "terminal,json,md".to_string(),
+            output_dir: PathBuf::from("./reports"),
+            fail_on: "none".to_string(),
+            no_robots: false,
+            ephemeral: false,
+            no_aimd: false,
+            max_query_params: 2,
+            ignore_sorting_facets: true,
+            db_path: None,
+            local: false,
+            include: None,
+            exclude: None,
+            headers: Vec::new(),
+            sitemap: None,
+            quiet: false,
+            name: None,
+        }
+    }
+}
+
 /// Command-line arguments for the `inspect` subcommand.
 #[derive(Args, Debug, Clone)]
 pub struct InspectArgs {

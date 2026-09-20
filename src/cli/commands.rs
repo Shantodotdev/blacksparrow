@@ -83,8 +83,14 @@ async fn handle_audit(args: AuditArgs) -> Result<(), Box<dyn std::error::Error>>
 
     config.validate()?;
 
-    let db_path = resolve_db_path(args.db_path.clone(), args.local);
-    config.db_path = Some(db_path.clone());
+    let db_path = if !args.ephemeral {
+        let p = resolve_db_path(args.db_path.clone(), args.local);
+        config.db_path = Some(p.clone());
+        Some(p)
+    } else {
+        config.db_path = None;
+        None
+    };
 
     let session_id = format!(
         "crawl_{}",
@@ -95,8 +101,8 @@ async fn handle_audit(args: AuditArgs) -> Result<(), Box<dyn std::error::Error>>
     );
     config.session_id = Some(session_id.clone());
 
-    let (writer_handle, writer_task) = if !args.ephemeral {
-        let db = Database::open(&db_path)?;
+    let (writer_handle, writer_task) = if let Some(ref path) = db_path {
+        let db = Database::open(path)?;
         db.init_crawl_session(&CrawlSessionInit {
             session_id: session_id.clone(),
             target_url: config.start_url.clone(),
@@ -156,16 +162,6 @@ async fn handle_audit(args: AuditArgs) -> Result<(), Box<dyn std::error::Error>>
         }
         let _ = handle.shutdown().await;
         let _ = task.await;
-    }
-
-    if args.ephemeral && db_path.exists() {
-        let _ = std::fs::remove_file(&db_path);
-        let mut shm = db_path.clone();
-        shm.set_extension("db-shm");
-        let _ = std::fs::remove_file(shm);
-        let mut wal = db_path.clone();
-        wal.set_extension("db-wal");
-        let _ = std::fs::remove_file(wal);
     }
 
     // Handle file exports concurrently across CPU cores
