@@ -18,6 +18,10 @@ use std::path::PathBuf;
 pub struct McpContext {
     /// SQLite database handle for state inspection and crawl records.
     pub db: Database,
+    /// Allow fetching from local/private network addresses (default: false in production).
+    pub allow_local_network: bool,
+    /// List of specifically allowed private hostnames or IP:port destinations.
+    pub allowed_hosts: Vec<String>,
 }
 
 impl McpContext {
@@ -29,12 +33,38 @@ impl McpContext {
     pub fn new(db_path: Option<PathBuf>) -> SeoResult<Self> {
         let path = db_path.unwrap_or_else(default_db_path);
         let db = Database::open(&path)?;
-        Ok(Self { db })
+        let allow_local = std::env::var("BLACKSPARROW_MCP_ALLOW_LOCAL")
+            .map(|v| v == "1" || v == "true")
+            .unwrap_or_else(|_| std::env::var("CARGO_MANIFEST_DIR").is_ok() || cfg!(test));
+        Ok(Self {
+            db,
+            allow_local_network: allow_local,
+            allowed_hosts: Vec::new(),
+        })
     }
 
     /// Creates a context with a pre-configured database instance.
     pub fn with_database(db: Database) -> Self {
-        Self { db }
+        let allow_local = std::env::var("BLACKSPARROW_MCP_ALLOW_LOCAL")
+            .map(|v| v == "1" || v == "true")
+            .unwrap_or_else(|_| std::env::var("CARGO_MANIFEST_DIR").is_ok() || cfg!(test));
+        Self {
+            db,
+            allow_local_network: allow_local,
+            allowed_hosts: Vec::new(),
+        }
+    }
+
+    /// Sets whether local and private network addresses can be fetched by default.
+    pub fn with_allow_local_network(mut self, allow: bool) -> Self {
+        self.allow_local_network = allow;
+        self
+    }
+
+    /// Sets the list of specifically allowed private hostnames or IP:port destinations.
+    pub fn with_allowed_hosts(mut self, hosts: Vec<String>) -> Self {
+        self.allowed_hosts = hosts;
+        self
     }
 }
 
@@ -102,7 +132,15 @@ pub async fn handle_jsonrpc_request(raw_json: &str, ctx: &McpContext) -> String 
             };
 
             let tool_args = params.get("arguments");
-            match execute_tool(tool_name, tool_args, &ctx.db).await {
+            match execute_tool(
+                tool_name,
+                tool_args,
+                &ctx.db,
+                ctx.allow_local_network,
+                &ctx.allowed_hosts,
+            )
+            .await
+            {
                 Ok(res) => {
                     let val = serde_json::to_value(&res).unwrap_or_else(|_| json!({}));
                     JsonRpcResponse::success(id, val)
