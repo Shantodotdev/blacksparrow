@@ -14,6 +14,14 @@ use std::time::Duration;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
+#[test]
+fn test_fetch_options_default_disables_private_network_access() {
+    assert!(
+        !FetchOptions::default().allow_all_private_ips,
+        "FetchOptions::default() must not enable unrestricted private-network access"
+    );
+}
+
 #[tokio::test]
 async fn test_http_fetch_success() {
     let mock_server = MockServer::start().await;
@@ -34,6 +42,7 @@ async fn test_http_fetch_success() {
         user_agent: "SEOLens/1.0".to_string(),
         timeout: Duration::from_secs(5),
         max_redirects: 10,
+        allow_all_private_ips: true,
         ..Default::default()
     })
     .expect("Failed to create HTTP client");
@@ -91,6 +100,7 @@ async fn test_redirect_chain_tracking() {
         user_agent: "SEOLens/1.0".to_string(),
         timeout: Duration::from_secs(5),
         max_redirects: 10,
+        allow_all_private_ips: true,
         ..Default::default()
     })
     .expect("Failed to create HTTP client");
@@ -140,6 +150,7 @@ async fn test_redirect_loop_prevention() {
         user_agent: "SEOLens/1.0".to_string(),
         timeout: Duration::from_secs(5),
         max_redirects: 5,
+        allow_all_private_ips: true,
         ..Default::default()
     })
     .expect("Failed to create HTTP client");
@@ -175,7 +186,11 @@ async fn test_waf_challenge_fingerprint_detection() {
         .mount(&mock_server)
         .await;
 
-    let client = HttpClient::new(FetchOptions::default()).expect("Client creation failed");
+    let client = HttpClient::new(FetchOptions {
+        allow_all_private_ips: true,
+        ..Default::default()
+    })
+    .expect("Client creation failed");
     let url = format!("{}/waf-blocked", mock_server.uri());
     let result = client
         .fetch(&url)
@@ -572,6 +587,7 @@ async fn test_custom_headers_dropped_on_cross_origin_redirect() {
     let client = HttpClient::new(FetchOptions {
         custom_headers,
         max_redirects: 3,
+        allow_all_private_ips: true,
         ..Default::default()
     })
     .expect("Client creation");
