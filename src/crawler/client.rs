@@ -4,7 +4,7 @@
 //! custom redirect policy handling, redirect loop detection, TTFB latency measurement,
 //! and transport error classification.
 
-use crate::core::url::resolve_relative;
+use crate::core::url::{resolve_relative, validate_url_safety};
 use crate::crawler::waf::detect_waf;
 use crate::error::{SeoError, SeoResult};
 use compact_str::CompactString;
@@ -29,6 +29,10 @@ pub struct FetchOptions {
     pub custom_headers: Vec<(String, String)>,
     /// Optional proxy URL (HTTP, HTTPS, SOCKS5).
     pub proxy: Option<String>,
+    /// Allow fetching all private/local network addresses (except cloud metadata).
+    pub allow_all_private_ips: bool,
+    /// Specific private hosts or host:port combinations allowed when private IP fetching is restricted.
+    pub allowed_private_hosts: Vec<String>,
 }
 
 impl Default for FetchOptions {
@@ -40,6 +44,8 @@ impl Default for FetchOptions {
             max_redirects: 10,
             custom_headers: Vec::new(),
             proxy: None,
+            allow_all_private_ips: true,
+            allowed_private_hosts: Vec::new(),
         }
     }
 }
@@ -124,6 +130,13 @@ impl HttpClient {
     ///
     /// Returns [`SeoError::Network`] on DNS failure, connection refused, timeout, or redirect loops.
     pub async fn fetch(&self, url: &str) -> SeoResult<FetchResult> {
+        validate_url_safety(
+            url,
+            self.options.allow_all_private_ips,
+            &self.options.allowed_private_hosts,
+        )
+        .await?;
+
         let mut current_url = url.to_string();
         let mut redirect_chain = Vec::new();
         let initial_start = Instant::now();
@@ -177,6 +190,13 @@ impl HttpClient {
                 if let Some(loc_header) = headers.get(LOCATION) {
                     if let Ok(loc_str) = loc_header.to_str() {
                         let target_url = resolve_relative(&current_url, loc_str)?;
+
+                        validate_url_safety(
+                            &target_url,
+                            self.options.allow_all_private_ips,
+                            &self.options.allowed_private_hosts,
+                        )
+                        .await?;
 
                         // Check for circular redirect
                         if redirect_chain.contains(&current_url) || current_url == target_url {

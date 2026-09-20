@@ -607,6 +607,8 @@ pub async fn run_crawl_with_options(
         max_redirects: 10,
         custom_headers: config.headers.clone(),
         proxy: config.proxy.clone(),
+        allow_all_private_ips: config.allow_all_private_ips,
+        allowed_private_hosts: config.allowed_private_hosts.clone(),
         ..Default::default()
     })?);
 
