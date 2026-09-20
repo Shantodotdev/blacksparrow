@@ -93,6 +93,12 @@ print_error() {
   exit 1
 }
 
+# Emit a shell-safe representation for paths written into startup files.
+# Bash's %q escapes shell metacharacters without evaluating the path.
+shell_quote_path() {
+  printf '%q' "$1"
+}
+
 # ------------------------------------------------------------------------------
 # 2. Architecture & Platform Detection
 # ------------------------------------------------------------------------------
@@ -360,14 +366,19 @@ main() {
         ;;
     esac
 
-    local export_line="export PATH=\"${INSTALL_DIR}:\$PATH\""
+    local quoted_install_dir
+    quoted_install_dir="$(shell_quote_path "$INSTALL_DIR")"
+    local export_line="export PATH=${quoted_install_dir}:\$PATH"
     if [ "$user_shell" = "fish" ]; then
-      export_line="fish_add_path ${INSTALL_DIR}"
+      export_line="fish_add_path -- ${quoted_install_dir}"
     fi
 
     local added=0
     if [ "$modify_path" -eq 1 ] && [ -n "$rc_file" ]; then
-      if [ ! -f "$rc_file" ] || ! grep -qF "$INSTALL_DIR" "$rc_file"; then
+      if [ ! -f "$rc_file" ] || {
+        ! grep -qF "$INSTALL_DIR" "$rc_file" &&
+        ! grep -qF "$quoted_install_dir" "$rc_file"
+      }; then
         printf "\n# Added by Black Sparrow installer\n%s\n" "$export_line" >> "$rc_file"
         print_success_step "Automatically configured ${rc_file}"
         added=1
