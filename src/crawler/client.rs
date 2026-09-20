@@ -44,7 +44,7 @@ impl Default for FetchOptions {
             max_redirects: 10,
             custom_headers: Vec::new(),
             proxy: None,
-            allow_all_private_ips: true,
+            allow_all_private_ips: false,
             allowed_private_hosts: Vec::new(),
         }
     }
