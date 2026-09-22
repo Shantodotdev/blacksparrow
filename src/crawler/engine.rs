@@ -18,6 +18,7 @@ use crate::core::url::{
 use crate::crawler::aimd::AimdController;
 use crate::crawler::client::{FetchOptions, FetchResult, HttpClient};
 use crate::crawler::frontier::{Frontier, FrontierEntry};
+use crate::crawler::render::JsRenderer;
 use crate::crawler::robots::RobotsTxt;
 use crate::crawler::sitemap::{parse_sitemap, SitemapDocument};
 use crate::error::{SeoError, SeoResult};
@@ -25,7 +26,7 @@ use crate::graph::{compute_pagerank, SiteGraph};
 use crate::parser::{parse_html, ParsedPage};
 use crate::report::score::calculate_health_score;
 use crate::rules::catalog::get_rule;
-use crate::rules::{evaluate_graph, evaluate_page};
+use crate::rules::{evaluate_graph, evaluate_js_diff, evaluate_page};
 use crate::storage::DbWriterHandle;
 use compact_str::CompactString;
 use hashbrown::{HashMap, HashSet};
@@ -95,6 +96,7 @@ struct WorkerConfig {
     max_query_params: usize,
     include_re: Option<regex::Regex>,
     exclude_re: Option<regex::Regex>,
+    renderer: Option<Arc<Mutex<JsRenderer>>>,
 }
 
 #[derive(Debug)]
@@ -402,17 +404,59 @@ async fn fetch_and_audit_page(
                 }
             }
 
-            let parsed = if is_html_document(&res.content_type, &res.body) {
-                parse_html(&res.body, &res.final_url).ok()
+            let (parsed, js_issues) = if is_html_document(&res.content_type, &res.body) {
+                let raw_parsed = parse_html(&res.body, &res.final_url).ok();
+                if let (Some(raw), Some(renderer)) = (raw_parsed.as_ref(), &worker_cfg.renderer) {
+                    let rendered = renderer.lock().await.render(&res.final_url).await;
+                    match rendered {
+                        Ok(document) => match parse_html(&document.html, &document.final_url) {
+                            Ok(rendered_page) => {
+                                let issues = evaluate_js_diff(
+                                    raw,
+                                    &rendered_page,
+                                    &res.final_url,
+                                    &document.final_url,
+                                    &document.runtime_errors,
+                                );
+                                (Some(rendered_page), issues)
+                            }
+                            Err(error) => {
+                                let fallback = ParsedPage::default();
+                                let issues = evaluate_js_diff(
+                                    raw,
+                                    &fallback,
+                                    &res.final_url,
+                                    &res.final_url,
+                                    &[format!("Unable to parse Chrome-rendered DOM: {error}")],
+                                );
+                                (Some(fallback), issues)
+                            }
+                        },
+                        Err(error) => {
+                            let fallback = ParsedPage::default();
+                            let issues = evaluate_js_diff(
+                                raw,
+                                &fallback,
+                                &res.final_url,
+                                &res.final_url,
+                                &[format!("Chrome rendering failed: {error}")],
+                            );
+                            (Some(fallback), issues)
+                        }
+                    }
+                } else {
+                    (raw_parsed, Vec::new())
+                }
             } else {
-                None
+                (None, Vec::new())
             };
 
-            let page_issues = if let Some(ref p) = parsed {
+            let mut page_issues = if let Some(ref p) = parsed {
                 evaluate_page(p, &res)
             } else {
                 Vec::new()
             };
+            page_issues.extend(js_issues);
 
             let depth = entry.depth;
 
@@ -612,6 +656,20 @@ pub async fn run_crawl_with_options(
         ..Default::default()
     })?);
 
+    let js_renderer = if config.render_js {
+        Some(Arc::new(Mutex::new(
+            JsRenderer::new(
+                config.chrome_ws.as_deref(),
+                config.user_agent.clone(),
+                config.headers.clone(),
+                config.proxy.as_deref(),
+            )
+            .await?,
+        )))
+    } else {
+        None
+    };
+
     let (robots_txt, sitemap_urls, site_issues) = discover_robots_and_sitemaps(
         &client,
         &normalized_start,
@@ -646,6 +704,7 @@ pub async fn run_crawl_with_options(
         max_query_params: config.max_query_params,
         include_re: include_re.clone(),
         exclude_re: exclude_re.clone(),
+        renderer: js_renderer.clone(),
     });
 
     let frontier = Arc::new(Mutex::new(Frontier::new(
@@ -913,6 +972,13 @@ pub async fn run_crawl_with_options(
             } else {
                 break;
             }
+        }
+    }
+
+    drop(worker_config);
+    if let Some(renderer) = js_renderer {
+        if let Ok(renderer) = Arc::try_unwrap(renderer) {
+            renderer.into_inner().shutdown().await?;
         }
     }
 

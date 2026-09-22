@@ -185,6 +185,16 @@ impl CrawlConfig {
         if self.user_agent.trim().is_empty() {
             return Err(SeoError::Config("User-Agent cannot be empty".to_string()));
         }
+        if let Some(endpoint) = self.chrome_ws.as_deref() {
+            let parsed = url::Url::parse(endpoint).map_err(|error| {
+                SeoError::Config(format!("Invalid Chrome CDP endpoint '{endpoint}': {error}"))
+            })?;
+            if !matches!(parsed.scheme(), "ws" | "wss" | "http" | "https") {
+                return Err(SeoError::Config(format!(
+                    "Chrome CDP endpoint must use ws, wss, http, or https: {endpoint}"
+                )));
+            }
+        }
         if let Some(ref pat) = self.include_regex {
             regex::Regex::new(pat).map_err(|e| {
                 SeoError::Config(format!("Invalid --include regex pattern '{pat}': {e}"))

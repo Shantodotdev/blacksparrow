@@ -19,6 +19,7 @@ pub mod engine;
 pub mod frontier;
 pub mod inspector;
 pub mod priority;
+pub mod render;
 pub mod robots;
 pub mod sitemap;
 pub mod waf;
@@ -35,6 +36,7 @@ pub use engine::{
 pub use frontier::{Frontier, FrontierEntry};
 pub use inspector::{inspect_url, inspect_url_with_options, inspect_url_with_options_ext};
 pub use priority::{calculate_url_importance, is_pagination_url, parse_url_segments};
+pub use render::{JsRenderer, RenderedDocument};
 pub use robots::RobotsTxt;
 pub use sitemap::{parse_sitemap, SitemapDocument, SitemapEntry, SitemapIndexEntry};
 pub use waf::detect_waf;

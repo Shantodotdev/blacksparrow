@@ -59,6 +59,8 @@ async fn handle_audit(args: AuditArgs) -> Result<(), Box<dyn std::error::Error>>
     };
     config.concurrency = args.concurrency;
     config.delay_ms = args.delay;
+    config.render_js = args.render_js;
+    config.chrome_ws = (args.chrome_ws != "auto").then_some(args.chrome_ws);
     config.user_agent = args.user_agent;
     config.respect_robots = !args.no_robots;
     config.no_aimd = args.no_aimd;
