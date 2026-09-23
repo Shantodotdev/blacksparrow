@@ -75,7 +75,13 @@ pub struct FetchResult {
     pub redirect_chain: Vec<String>,
     /// WAF / Bot challenge detected on the response, if any.
     pub waf_detected: Option<&'static str>,
+    /// Whether the response payload exceeded the maximum streaming limit (15 MB) and was truncated.
+    pub is_truncated: bool,
 }
+
+/// Default maximum response size in bytes before streaming is truncated (15 MiB = 15,728,640 bytes).
+/// Directly aligned with Googlebot's official indexing boundary.
+pub const DEFAULT_MAX_RESPONSE_BYTES: usize = 15 * 1024 * 1024;
 
 /// Asynchronous HTTP client configured for technical SEO crawling.
 #[derive(Debug, Clone)]
@@ -220,18 +226,43 @@ impl HttpClient {
                 }
             }
 
-            // Read response payload
+            // Read response payload with streaming 15 MB limit
             let content_type = headers
                 .get(CONTENT_TYPE)
                 .and_then(|v| v.to_str().ok())
                 .map(CompactString::new)
                 .unwrap_or_else(|| CompactString::new(""));
 
-            let body_bytes = response
-                .bytes()
+            let content_length = response.content_length();
+            let has_excessive_content_length =
+                content_length.is_some_and(|len| len > DEFAULT_MAX_RESPONSE_BYTES as u64);
+
+            let initial_capacity = content_length
+                .map(|len| (len as usize).min(DEFAULT_MAX_RESPONSE_BYTES))
+                .unwrap_or(8192);
+
+            let mut body_bytes = Vec::with_capacity(initial_capacity);
+            let mut is_truncated = has_excessive_content_length;
+
+            let mut response = response;
+            while let Some(chunk) = response
+                .chunk()
                 .await
-                .map_err(|e| SeoError::Network(format!("Failed to read response body: {e}")))?
-                .to_vec();
+                .map_err(|e| SeoError::Network(format!("Failed to stream response body: {e}")))?
+            {
+                let remaining = DEFAULT_MAX_RESPONSE_BYTES.saturating_sub(body_bytes.len());
+                if remaining == 0 {
+                    is_truncated = true;
+                    break;
+                }
+                if chunk.len() > remaining {
+                    body_bytes.extend_from_slice(&chunk[..remaining]);
+                    is_truncated = true;
+                    break;
+                } else {
+                    body_bytes.extend_from_slice(&chunk);
+                }
+            }
 
             let size_bytes = body_bytes.len() as u32;
             let body = String::from_utf8_lossy(&body_bytes).to_string();
@@ -250,6 +281,7 @@ impl HttpClient {
                 ttfb_ms,
                 redirect_chain,
                 waf_detected,
+                is_truncated,
             });
         }
     }

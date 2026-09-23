@@ -36,6 +36,7 @@ fn make_mock_fetch_result(
         ttfb_ms,
         redirect_chain: Vec::new(),
         waf_detected,
+        is_truncated: false,
     }
 }
 
