@@ -194,6 +194,18 @@ impl CrawlJobs {
         })
     }
 
+    /// Jobs in this process that have not finished yet.
+    pub fn active_count(&self) -> usize {
+        self.jobs
+            .lock()
+            .map(|jobs| {
+                jobs.values()
+                    .filter(|job| !job.control.progress().state.is_terminal())
+                    .count()
+            })
+            .unwrap_or(0)
+    }
+
     /// Requests cancellation. Returns `false` for an unknown or already finished job.
     pub fn cancel(&self, id: &str) -> bool {
         let job = self.jobs.lock().ok().and_then(|j| j.get(id).cloned());

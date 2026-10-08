@@ -78,6 +78,8 @@ pub mod mcp;
 pub mod parser;
 pub mod report;
 pub mod rules;
+#[cfg(feature = "serve")]
+pub mod serve;
 pub mod storage;
 
 pub use error::{SeoError, SeoResult};
