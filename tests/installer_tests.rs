@@ -8,15 +8,34 @@ use std::process::Command;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
+/// `bash` for running `install.sh`. On Windows, `Command::new("bash")` resolves to the WSL
+/// launcher in System32 before Git Bash on `PATH`, so Git for Windows' bash is used directly.
+fn bash() -> Command {
+    #[cfg(windows)]
+    for candidate in [
+        r"C:\Program Files\Git\bin\bash.exe",
+        r"C:\Program Files\Git\usr\bin\bash.exe",
+    ] {
+        if std::path::Path::new(candidate).exists() {
+            return Command::new(candidate);
+        }
+    }
+    Command::new("bash")
+}
+
 #[test]
 fn test_installer_help_flag() {
-    let output = Command::new("bash")
+    let output = bash()
         .arg("install.sh")
         .arg("--help")
         .output()
         .expect("Execute install.sh --help");
 
-    assert!(output.status.success(), "install.sh --help should exit 0");
+    assert!(
+        output.status.success(),
+        "install.sh --help should exit 0: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Usage: install.sh [OPTIONS]"));
     assert!(stdout.contains("--dir <path>"));
@@ -26,7 +45,7 @@ fn test_installer_help_flag() {
 
 #[test]
 fn test_installer_rejects_missing_dir_argument() {
-    let output = Command::new("bash")
+    let output = bash()
         .arg("install.sh")
         .arg("--dir")
         .output()
@@ -45,7 +64,7 @@ fn test_installer_rejects_missing_dir_argument() {
 
 #[test]
 fn test_installer_rejects_missing_version_argument() {
-    let output = Command::new("bash")
+    let output = bash()
         .arg("install.sh")
         .arg("--version")
         .output()
@@ -64,7 +83,7 @@ fn test_installer_rejects_missing_version_argument() {
 
 #[test]
 fn test_installer_rejects_unknown_argument() {
-    let output = Command::new("bash")
+    let output = bash()
         .arg("install.sh")
         .arg("--unknown-flag-12345")
         .output()
