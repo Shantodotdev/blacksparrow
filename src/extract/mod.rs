@@ -18,6 +18,7 @@
 //! - [`sink`]: memory, NDJSON and Markdown-directory outputs.
 //! - [`paths`]: include / exclude path patterns (globs and regexes).
 //! - [`find`]: BM25 passage ranking, selector and regex matching.
+//! - [`synonyms`]: field-word synonyms shared by `find` and `extract`.
 
 pub mod boilerplate;
 pub mod chunk;
@@ -34,6 +35,7 @@ pub mod paths;
 pub mod pdf;
 pub mod scrape;
 pub mod sink;
+pub mod synonyms;
 pub mod tokens;
 pub mod types;
 

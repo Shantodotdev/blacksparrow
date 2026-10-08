@@ -1,0 +1,14 @@
+[
+  {"file": "article.html", "question": "How much can a shallow pool warm up in an afternoon?", "expected": "ten degrees Celsius"},
+  {"file": "article.html", "question": "How do barnacles seal their plates?", "expected": "operculum"},
+  {"file": "article.html", "question": "How often do researchers log the temperature?", "expected": "every ten minutes"},
+  {"file": "docs.html", "question": "What is the default retry limit?", "expected": "The default is 3"},
+  {"file": "docs.html", "question": "Is HTTP 429 retried?", "expected": "Retry-After"},
+  {"file": "docs.html", "question": "How long is the maximum backoff?", "expected": "capped at 10 seconds"},
+  {"file": "product.html", "question": "How much does the backpack weigh?", "expected": "1.2 kg"},
+  {"file": "product.html", "question": "What does the Trailhead pack cost?", "expected": "$129.00"},
+  {"file": "product_sibling.html", "question": "Is the Ridge pack available?", "expected": "Only 3 left"},
+  {"file": "forum.html", "question": "Why does my starter smell like acetone?", "expected": "yeast is hungry"},
+  {"file": "hidden_prompt.html", "question": "What is the price of the Team plan?", "expected": "$20 per user"},
+  {"file": "hidden_prompt.html", "question": "How much is enterprise?", "expected": "available on request"}
+]

@@ -171,13 +171,14 @@ pub struct ChunkHit {
 /// Ranks stored passages with SQLite's `bm25()`, weighting heading matches twice as much as
 /// body matches. Query terms are OR-ed so questions match passages holding only some words.
 pub fn search_chunks(conn: &Connection, q: &ChunkQuery) -> SeoResult<Vec<ChunkHit>> {
-    let terms = crate::extract::find::query_terms(&q.query, true);
+    // Query words plus their synonyms; porter stemming in the index handles inflections.
+    let terms = crate::extract::find::weighted_terms(&q.query);
     if terms.is_empty() {
         return Ok(Vec::new());
     }
     let match_expr = terms
         .iter()
-        .map(|t| format!("\"{}\"", t.replace('"', "")))
+        .map(|(t, _)| format!("\"{}\"", t.replace('"', "")))
         .collect::<Vec<_>>()
         .join(" OR ");
     let top_k = if q.top_k == 0 { 5 } else { q.top_k };
