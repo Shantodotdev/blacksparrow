@@ -3,6 +3,7 @@
 //! Implements execution logic for `audit`, `inspect`, `mcp`, `report`, `list`,
 //! `issues`, `check-ai`, `delete`, `clean`, and `schema` commands.
 
+use crate::cli::agent;
 use crate::cli::args::{
     AuditArgs, CheckAiArgs, CleanArgs, Cli, Commands, DeleteArgs, InspectArgs, IssuesArgs,
     ListArgs, McpArgs, ReportArgs, SchemaArgs,
@@ -40,6 +41,14 @@ pub async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         Commands::Delete(args) => handle_delete(args).await,
         Commands::Clean(args) => handle_clean(args).await,
         Commands::Schema(args) => handle_schema(args).await,
+        Commands::Scrape(args) => agent::handle_scrape(args).await,
+        Commands::Map(args) => agent::handle_map(args).await,
+        Commands::Crawl(args) => agent::handle_crawl(args).await,
+        Commands::Find(args) => agent::handle_find(args).await,
+        Commands::Extract(args) => agent::handle_extract(args).await,
+        Commands::Interact(args) => agent::handle_interact(args).await,
+        #[cfg(feature = "serve")]
+        Commands::Serve(args) => agent::handle_serve(args).await,
     }
 }
 
@@ -375,9 +384,17 @@ async fn handle_inspect(args: InspectArgs) -> Result<(), Box<dyn std::error::Err
 async fn handle_mcp(args: McpArgs) -> Result<(), Box<dyn std::error::Error>> {
     let db_path = resolve_db_path(args.db_path, args.local);
     if args.transport.eq_ignore_ascii_case("stdio") {
+        let toolset = crate::mcp::Toolset::parse(&args.tools)
+            .ok_or_else(|| format!("Unknown --tools '{}': use seo, web or all", args.tools))?;
+        let scraper_config = crate::extract::scrape::ScraperConfig {
+            chrome_ws: args.chrome_ws.clone(),
+            ..Default::default()
+        };
         let ctx = crate::mcp::McpContext::new(Some(db_path))?
             .with_allow_local_network(args.allow_local_network)
-            .with_allowed_hosts(args.allowed_hosts);
+            .with_allowed_hosts(args.allowed_hosts)
+            .with_toolset(toolset)
+            .with_scraper_config(scraper_config);
         crate::mcp::run_mcp_server_with_context(ctx).await?;
     } else {
         eprintln!(

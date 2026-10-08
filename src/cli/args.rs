@@ -55,6 +55,355 @@ pub enum Commands {
     Clean(CleanArgs),
     /// Validate JSON-LD / schema against Google Rich Results guidelines
     Schema(SchemaArgs),
+    /// Fetch one page as clean Markdown for AI agents
+    Scrape(ScrapeArgs),
+    /// List a site's URLs from links, robots.txt and sitemaps
+    Map(MapArgs),
+    /// Scrape many pages of a site into Markdown files or NDJSON
+    Crawl(CrawlArgs),
+    /// Find passages by question, CSS selector or regex
+    Find(FindArgs),
+    /// Extract schema-shaped JSON from pages without an LLM
+    Extract(ExtractArgs),
+    /// Run browser steps (click, type, scroll) and read the page
+    Interact(InteractArgs),
+    /// Serve the Firecrawl-compatible HTTP API
+    #[cfg(feature = "serve")]
+    Serve(ServeArgs),
+}
+
+/// Network, identity and storage flags shared by the agent commands.
+#[derive(Args, Debug, Clone, Default)]
+pub struct WebArgs {
+    /// Custom User-Agent string
+    #[arg(short = 'u', long)]
+    pub user_agent: Option<String>,
+
+    /// Custom HTTP request header(s) (e.g. -H "Authorization: Bearer xyz")
+    #[arg(short = 'H', long = "header")]
+    pub headers: Vec<String>,
+
+    /// Specific private host or host:port that may be fetched (can be repeated)
+    #[arg(short = 'a', long = "allow-host", value_name = "HOST")]
+    pub allowed_hosts: Vec<String>,
+
+    /// Allow local and private network addresses (cloud metadata stays blocked)
+    #[arg(long, default_value_t = false)]
+    pub allow_local_network: bool,
+
+    /// Remote Chrome WebSocket URL (default: launch a local Chrome when needed)
+    #[arg(long)]
+    pub chrome_ws: Option<String>,
+
+    /// Maximum Chrome tabs rendering at once
+    #[arg(long, default_value_t = 4)]
+    pub render_concurrency: usize,
+
+    /// Ignore /robots.txt disallow rules
+    #[arg(long, default_value_t = false)]
+    pub no_robots: bool,
+
+    /// Per-request timeout in seconds
+    #[arg(long, default_value_t = 30)]
+    pub timeout: u64,
+
+    /// Custom path to SQLite persistence database
+    #[arg(long)]
+    pub db_path: Option<PathBuf>,
+
+    /// Force database persistence to project-local `.seolens/seolens.db`
+    #[arg(short = 'L', long, default_value_t = false)]
+    pub local: bool,
+
+    /// Do not store pages (no cache, change tracking or crawl-wide find)
+    #[arg(long, default_value_t = false)]
+    pub no_store: bool,
+}
+
+/// Page conversion flags shared by `scrape` and `crawl`.
+#[derive(Args, Debug, Clone, Default)]
+pub struct PageArgs {
+    /// Comma-separated outputs: markdown,json,text,links,metadata,html,raw_html,screenshot
+    #[arg(short = 'f', long, default_value = "markdown")]
+    pub format: String,
+
+    /// Keep navigation, headers and footers (default: main content only)
+    #[arg(long, default_value_t = false)]
+    pub full_page: bool,
+
+    /// Chrome policy: auto (only empty app shells), never, always
+    #[arg(long, default_value = "auto")]
+    pub render: String,
+
+    /// CSS selector to wait for before reading (renders the page)
+    #[arg(long)]
+    pub wait_for: Option<String>,
+
+    /// CSS selector(s) whose elements form the content
+    #[arg(long = "include-selector")]
+    pub include_selectors: Vec<String>,
+
+    /// CSS selector(s) removed before extraction
+    #[arg(long = "exclude-selector")]
+    pub exclude_selectors: Vec<String>,
+
+    /// Trim Markdown to about this many tokens, keeping every heading
+    #[arg(long)]
+    pub max_tokens: Option<usize>,
+
+    /// Reuse a stored copy younger than this many seconds
+    #[arg(long)]
+    pub max_age: Option<u64>,
+}
+
+/// Command-line arguments for the `scrape` subcommand.
+#[derive(Args, Debug, Clone)]
+pub struct ScrapeArgs {
+    /// Page URL
+    pub url: String,
+
+    #[command(flatten)]
+    pub page: PageArgs,
+
+    /// Print the whole document as JSON instead of Markdown
+    #[arg(long, default_value_t = false)]
+    pub json: bool,
+
+    /// Write the output to this file instead of stdout
+    #[arg(short = 'o', long)]
+    pub output: Option<PathBuf>,
+
+    #[command(flatten)]
+    pub web: WebArgs,
+}
+
+/// Command-line arguments for the `map` subcommand.
+#[derive(Args, Debug, Clone)]
+pub struct MapArgs {
+    /// Site start URL
+    pub url: String,
+
+    /// Rank URLs by relevance to these words
+    #[arg(short = 's', long)]
+    pub search: Option<String>,
+
+    /// Maximum URLs returned
+    #[arg(short = 'n', long, default_value_t = 5000)]
+    pub limit: usize,
+
+    /// Only keep paths matching these glob or regex patterns
+    #[arg(long = "include-path")]
+    pub include_paths: Vec<String>,
+
+    /// Drop paths matching these glob or regex patterns
+    #[arg(long = "exclude-path")]
+    pub exclude_paths: Vec<String>,
+
+    /// Sitemap usage: include, skip or only
+    #[arg(long, default_value = "include")]
+    pub sitemap: String,
+
+    /// Keep URLs on subdomains of the start host
+    #[arg(long, default_value_t = false)]
+    pub subdomains: bool,
+
+    /// Print JSON (URL, title, source, score) instead of one URL per line
+    #[arg(long, default_value_t = false)]
+    pub json: bool,
+
+    #[command(flatten)]
+    pub web: WebArgs,
+}
+
+/// Command-line arguments for the `crawl` subcommand.
+#[derive(Args, Debug, Clone)]
+pub struct CrawlArgs {
+    /// Start URL
+    pub url: String,
+
+    /// Maximum pages scraped
+    #[arg(short = 'n', long, default_value_t = 100)]
+    pub limit: usize,
+
+    /// Maximum link depth from the start URL
+    #[arg(short = 'd', long, default_value_t = 5)]
+    pub max_depth: u16,
+
+    /// Only scrape paths matching these glob or regex patterns
+    #[arg(long = "include-path")]
+    pub include_paths: Vec<String>,
+
+    /// Never scrape paths matching these glob or regex patterns
+    #[arg(long = "exclude-path")]
+    pub exclude_paths: Vec<String>,
+
+    /// Sitemap usage: include, skip or only
+    #[arg(long, default_value = "include")]
+    pub sitemap: String,
+
+    /// Follow links to subdomains of the start host
+    #[arg(long, default_value_t = false)]
+    pub subdomains: bool,
+
+    /// Pages fetched at once
+    #[arg(short = 'c', long, default_value_t = 4)]
+    pub concurrency: usize,
+
+    /// Fixed delay between requests in milliseconds (0 = adaptive)
+    #[arg(long, default_value_t = 0)]
+    pub delay: u64,
+
+    /// Keep text repeated on most pages (navigation, banners)
+    #[arg(long, default_value_t = false)]
+    pub keep_boilerplate: bool,
+
+    /// Write one Markdown file per page under this directory (default: NDJSON to stdout)
+    #[arg(short = 'o', long)]
+    pub out: Option<PathBuf>,
+
+    #[command(flatten)]
+    pub page: PageArgs,
+
+    #[command(flatten)]
+    pub web: WebArgs,
+}
+
+/// Command-line arguments for the `find` subcommand.
+#[derive(Args, Debug, Clone)]
+pub struct FindArgs {
+    /// Page to search (omit with --crawl)
+    pub url: Option<String>,
+
+    /// Search the stored pages of this crawl id
+    #[arg(long)]
+    pub crawl: Option<String>,
+
+    /// Restrict stored pages to URLs starting with this prefix
+    #[arg(long)]
+    pub url_prefix: Option<String>,
+
+    /// Question or keywords
+    #[arg(short = 'q', long)]
+    pub query: Option<String>,
+
+    /// CSS selector (page only)
+    #[arg(short = 's', long)]
+    pub selector: Option<String>,
+
+    /// Regular expression
+    #[arg(short = 'r', long)]
+    pub regex: Option<String>,
+
+    /// Passages returned for a query
+    #[arg(short = 'k', long, default_value_t = 5)]
+    pub top_k: usize,
+
+    /// Attribute(s) returned for selector matches (e.g. --attr href)
+    #[arg(long = "attr")]
+    pub attributes: Vec<String>,
+
+    #[command(flatten)]
+    pub web: WebArgs,
+}
+
+/// Command-line arguments for the `extract` subcommand.
+#[derive(Args, Debug, Clone)]
+pub struct ExtractArgs {
+    /// Page URL(s)
+    pub urls: Vec<String>,
+
+    /// Extract from every stored page of this crawl id
+    #[arg(long)]
+    pub crawl: Option<String>,
+
+    /// JSON schema: a file path or inline JSON
+    #[arg(long)]
+    pub schema: String,
+
+    /// Selector rules ({"base": …, "fields": {…}}): a file path or inline JSON
+    #[arg(long)]
+    pub rules: Option<String>,
+
+    /// Fields below this confidence are reported as low confidence
+    #[arg(long, default_value_t = 0.6)]
+    pub min_confidence: f64,
+
+    /// Do not learn selectors from pages with structured data
+    #[arg(long, default_value_t = false)]
+    pub no_learn: bool,
+
+    /// Pages processed at most
+    #[arg(short = 'n', long, default_value_t = 100)]
+    pub limit: usize,
+
+    #[command(flatten)]
+    pub web: WebArgs,
+}
+
+/// Command-line arguments for the `interact` subcommand.
+#[derive(Args, Debug, Clone)]
+pub struct InteractArgs {
+    /// Page URL
+    pub url: String,
+
+    /// Steps as a JSON array (file path or inline), e.g. '[{"type":"click","target":"e3"}]'
+    #[arg(long)]
+    pub steps: Option<String>,
+
+    /// Selector that must appear before the first step
+    #[arg(long)]
+    pub wait_for: Option<String>,
+
+    /// Save a full-page PNG screenshot to this file
+    #[arg(long)]
+    pub screenshot: Option<PathBuf>,
+
+    /// Print the whole result as JSON
+    #[arg(long, default_value_t = false)]
+    pub json: bool,
+
+    #[command(flatten)]
+    pub web: WebArgs,
+}
+
+/// Command-line arguments for the `serve` subcommand.
+#[cfg(feature = "serve")]
+#[derive(Args, Debug, Clone)]
+pub struct ServeArgs {
+    /// Address to listen on (non-loopback addresses require API keys)
+    #[arg(long, default_value = "127.0.0.1")]
+    pub host: String,
+
+    /// Port to listen on
+    #[arg(short = 'p', long, default_value_t = 3002)]
+    pub port: u16,
+
+    /// Accepted API key(s); also read from BLACKSPARROW_API_KEYS (comma-separated)
+    #[arg(long = "api-key")]
+    pub api_keys: Vec<String>,
+
+    /// Requests per key per minute (0 = unlimited)
+    #[arg(long, default_value_t = 120)]
+    pub rate_limit: u32,
+
+    /// Most pages one crawl or extract request may process
+    #[arg(long, default_value_t = 1000)]
+    pub max_crawl_pages: usize,
+
+    /// Most crawls running at once
+    #[arg(long, default_value_t = 4)]
+    pub max_concurrent_crawls: usize,
+
+    /// Largest accepted request body in bytes
+    #[arg(long, default_value_t = 1024 * 1024)]
+    pub max_body_bytes: usize,
+
+    /// External base URL used in crawl status links (e.g. https://crawl.example.com)
+    #[arg(long)]
+    pub public_url: Option<String>,
+
+    #[command(flatten)]
+    pub web: WebArgs,
 }
 
 /// Command-line arguments for the `list` subcommand.
@@ -280,6 +629,14 @@ pub struct McpArgs {
         value_name = "HOST"
     )]
     pub allowed_hosts: Vec<String>,
+
+    /// Tool families to expose: seo (audit tools), web (scrape, crawl, find, extract), or all
+    #[arg(long, default_value = "all")]
+    pub tools: String,
+
+    /// Remote Chrome WebSocket URL for the web tools
+    #[arg(long)]
+    pub chrome_ws: Option<String>,
 }
 
 /// Command-line arguments for the `report` subcommand.

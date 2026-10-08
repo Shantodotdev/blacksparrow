@@ -2,6 +2,7 @@
 //!
 //! Exposes the CLI parser, subcommand structures, and execution orchestration for the `seolens` binary.
 
+pub mod agent;
 pub mod args;
 pub mod commands;
 
