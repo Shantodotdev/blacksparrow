@@ -3,7 +3,9 @@
 
 /// Groups of interchangeable words. Every word in a group expands to the others.
 const GROUPS: &[&[&str]] = &[
-    &["price", "cost", "costs", "pricing", "fee", "fees", "charge", "amount", "rate"],
+    &[
+        "price", "cost", "costs", "pricing", "fee", "fees", "charge", "amount", "rate",
+    ],
     &["phone", "telephone", "tel", "mobile", "call"],
     &["address", "location", "street", "located"],
     &["email", "e-mail", "mail"],

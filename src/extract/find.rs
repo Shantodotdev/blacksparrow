@@ -14,6 +14,7 @@ use crate::error::{SeoError, SeoResult};
 use crate::extract::chunk::chunk_blocks;
 use crate::extract::clean::{clean_document, node_name, try_select, CleanOptions};
 use crate::extract::convert::css_path;
+use crate::extract::fields::records::visible_text;
 use crate::extract::scrape::Scraper;
 use crate::extract::synonyms::expand_term;
 use crate::extract::types::{OutputFormat, PageDocument, PageStatus, ScrapeOptions};
@@ -215,12 +216,18 @@ enum Mode<'a> {
 impl FindRequest {
     fn mode(&self) -> SeoResult<Mode<'_>> {
         let set: Vec<Mode<'_>> = [
-            self.query.as_deref().filter(|q| !q.trim().is_empty()).map(Mode::Query),
+            self.query
+                .as_deref()
+                .filter(|q| !q.trim().is_empty())
+                .map(Mode::Query),
             self.selector
                 .as_deref()
                 .filter(|q| !q.trim().is_empty())
                 .map(Mode::Selector),
-            self.regex.as_deref().filter(|q| !q.is_empty()).map(Mode::Regex),
+            self.regex
+                .as_deref()
+                .filter(|q| !q.is_empty())
+                .map(Mode::Regex),
         ]
         .into_iter()
         .flatten()
@@ -417,10 +424,9 @@ pub fn select_in_html(
                 if let Some(value) = node.attr(name) {
                     let value = value.trim().to_string();
                     let value = match (&base, name.as_str()) {
-                        (Some(base), "href" | "src" | "action" | "poster" | "data-src") => base
-                            .join(&value)
-                            .map(|u| u.to_string())
-                            .unwrap_or(value),
+                        (Some(base), "href" | "src" | "action" | "poster" | "data-src") => {
+                            base.join(&value).map(|u| u.to_string()).unwrap_or(value)
+                        }
                         _ => value,
                     };
                     attributes.insert(name.clone(), value);
@@ -437,36 +443,6 @@ pub fn select_in_html(
             }
         })
         .collect())
-}
-
-const INLINE_TAGS: &[&str] = &[
-    "a", "abbr", "b", "bdi", "bdo", "cite", "code", "data", "del", "dfn", "em", "i", "img", "ins",
-    "kbd", "label", "mark", "q", "s", "samp", "small", "span", "strong", "sub", "sup", "time",
-    "u", "var",
-];
-
-/// Text of an element with spaces between block-level children (table cells, list items).
-fn visible_text(node: &NodeRef) -> String {
-    fn walk(node: &NodeRef, out: &mut String) {
-        for child in node.children() {
-            if child.is_text() {
-                out.push_str(&child.text());
-            } else if child.is_element() {
-                let name = node_name(&child);
-                let block = !INLINE_TAGS.contains(&name.as_str());
-                if name == "br" || block {
-                    out.push(' ');
-                }
-                walk(&child, out);
-                if block {
-                    out.push(' ');
-                }
-            }
-        }
-    }
-    let mut out = String::new();
-    walk(node, &mut out);
-    out.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 /// Heading path (outermost first) in effect at each target element, in document order.

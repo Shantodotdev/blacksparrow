@@ -146,3 +146,103 @@ fn main_content_f1_per_page_type() {
         );
     }
 }
+
+/// Share of labelled fields extracted with exactly the labelled value.
+fn field_accuracy(data: &serde_json::Value, expected: &serde_json::Value) -> f64 {
+    match (data, expected) {
+        (serde_json::Value::Array(got), serde_json::Value::Array(want)) => {
+            let total: usize = want
+                .iter()
+                .map(|w| w.as_object().map_or(0, |o| o.len()))
+                .sum();
+            let correct: usize = want
+                .iter()
+                .enumerate()
+                .map(|(i, w)| {
+                    let g = got.get(i).cloned().unwrap_or_default();
+                    w.as_object().map_or(0, |o| {
+                        o.iter()
+                            .filter(|(k, v)| g.get(k.as_str()) == Some(v))
+                            .count()
+                    })
+                })
+                .sum();
+            correct as f64 / total.max(1) as f64
+        }
+        (got, serde_json::Value::Object(want)) => {
+            let correct = want
+                .iter()
+                .filter(|(k, v)| got.get(k.as_str()) == Some(v))
+                .count();
+            correct as f64 / want.len().max(1) as f64
+        }
+        _ => 0.0,
+    }
+}
+
+#[test]
+fn field_accuracy_per_page_type() {
+    use blacksparrow::extract::fields::Extractor;
+    let dir = corpus_dir();
+    let read = |f: &str| std::fs::read_to_string(dir.join(f)).unwrap();
+    let product_schema = serde_json::json!({"type": "object", "properties": {
+        "name": {"type": "string"}, "price": {"type": "number"}, "currency": {"type": "string"},
+        "sku": {"type": "string"}, "gtin": {"type": "string"}, "rating": {"type": "number"},
+        "brand": {"type": "string"}}});
+    let listing_schema = serde_json::json!({"type": "array", "items": {"type": "object",
+        "properties": {"name": {"type": "string"}, "price": {"type": "number"},
+        "url": {"type": "string", "format": "uri"}}}});
+
+    // The sibling page is extracted after the JSON-LD page, so it can use learned rules.
+    let mut extractor = Extractor::default();
+    let cases = [
+        (
+            "product.html",
+            "https://shop.example/packs/trailhead-40",
+            &product_schema,
+            "product.fields.json",
+        ),
+        (
+            "product_sibling.html",
+            "https://shop.example/packs/ridge-30",
+            &product_schema,
+            "product_sibling.fields.json",
+        ),
+        (
+            "listing.html",
+            "https://shop.example/packs",
+            &listing_schema,
+            "listing.records.json",
+        ),
+    ];
+    let mut scores = BTreeMap::new();
+    println!("\n{:<24} {:>8}", "page", "fields");
+    for (file, url, schema, labels) in cases {
+        let result = extractor
+            .extract_html(&read(file), url, schema, None)
+            .unwrap();
+        let expected: serde_json::Value = serde_json::from_str(&read(labels)).unwrap();
+        let accuracy = field_accuracy(&result.data, &expected);
+        println!("{file:<24} {accuracy:>8.3}");
+        scores.insert(file.to_string(), accuracy);
+    }
+
+    let baseline_path = dir.join("fields_baseline.json");
+    if std::env::var("BLACKSPARROW_EVAL_WRITE_BASELINE").is_ok() {
+        std::fs::write(
+            &baseline_path,
+            serde_json::to_string_pretty(&scores).unwrap() + "\n",
+        )
+        .unwrap();
+        return;
+    }
+    let baseline: BTreeMap<String, f64> =
+        serde_json::from_str(&std::fs::read_to_string(&baseline_path).unwrap()).unwrap();
+    for (page, floor) in &baseline {
+        let score = scores.get(page).copied().unwrap_or(0.0);
+        assert!(
+            score + TOLERANCE >= *floor,
+            "{page}: field accuracy {score:.3} fell below baseline {floor:.3}"
+        );
+    }
+}

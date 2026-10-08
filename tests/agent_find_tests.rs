@@ -45,8 +45,12 @@ fn labelled_questions_find_the_right_passage_in_the_top_three() {
     let questions: Vec<Question> = serde_json::from_str(&fixture("questions.json")).unwrap();
     let mut misses = Vec::new();
     for q in &questions {
-        let doc = html_to_document(&fixture(&q.file), &url_for(&q.file), &ScrapeOptions::default())
-            .unwrap();
+        let doc = html_to_document(
+            &fixture(&q.file),
+            &url_for(&q.file),
+            &ScrapeOptions::default(),
+        )
+        .unwrap();
         let hits = find_in_document(&doc, &q.question, 3);
         if !hits.iter().any(|h| h.text.contains(&q.expected)) {
             misses.push(format!(
@@ -99,21 +103,42 @@ fn hidden_text_is_never_searchable() {
     let html = fixture("hidden_prompt.html");
     let url = url_for("hidden_prompt.html");
     let doc = html_to_document(&html, &url, &ScrapeOptions::default()).unwrap();
-    for query in ["ignore previous instructions password", "system prompt", "delete files"] {
+    for query in [
+        "ignore previous instructions password",
+        "system prompt",
+        "delete files",
+    ] {
         for hit in find_in_document(&doc, query, 5) {
             for bad in ["password", "SYSTEM", "delete", "five stars", "Pretend"] {
-                assert!(!hit.text.contains(bad), "{query:?} surfaced hidden text: {}", hit.text);
+                assert!(
+                    !hit.text.contains(bad),
+                    "{query:?} surfaced hidden text: {}",
+                    hit.text
+                );
             }
         }
     }
-    assert!(regex_in_document(&doc, "(?i)password|attacker", &FindOptions::default())
-        .unwrap()
-        .is_empty());
+    assert!(
+        regex_in_document(&doc, "(?i)password|attacker", &FindOptions::default())
+            .unwrap()
+            .is_empty()
+    );
     let selected = select_in_html(&html, &url, "p, div, span", &FindOptions::default()).unwrap();
     assert!(!selected.is_empty());
     for hit in selected {
-        for bad in ["password", "SYSTEM", "Cloudly over", "delete", "five stars", "Pretend"] {
-            assert!(!hit.text.contains(bad), "selector surfaced hidden text: {}", hit.text);
+        for bad in [
+            "password",
+            "SYSTEM",
+            "Cloudly over",
+            "delete",
+            "five stars",
+            "Pretend",
+        ] {
+            assert!(
+                !hit.text.contains(bad),
+                "selector surfaced hidden text: {}",
+                hit.text
+            );
         }
     }
 }
@@ -182,9 +207,14 @@ fn regex_mode_returns_matches_with_context_and_caps() {
 #[test]
 fn crawl_wide_search_uses_full_text_index_with_filters() {
     let dir = tempfile::tempdir().unwrap();
-    let db = Database::open(&dir.path().join("find.db")).unwrap();
+    let db = Database::open(dir.path().join("find.db")).unwrap();
     let conn = db.connect().unwrap();
-    for file in ["article.html", "docs.html", "hidden_prompt.html", "product.html"] {
+    for file in [
+        "article.html",
+        "docs.html",
+        "hidden_prompt.html",
+        "product.html",
+    ] {
         let doc =
             html_to_document(&fixture(file), &url_for(file), &ScrapeOptions::default()).unwrap();
         save_document(&conn, Some("crawl_a"), &doc).unwrap();

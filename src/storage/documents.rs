@@ -318,7 +318,7 @@ pub fn get_content_crawl(conn: &Connection, id: &str) -> SeoResult<Option<Conten
 pub struct StoredRule {
     /// Host the rule applies to.
     pub host: String,
-    /// Template id (see [`crate::extract::learn::template_id`]).
+    /// Template id (see [`crate::extract::fields::learn::template_id`]).
     pub template_id: String,
     /// Field name.
     pub field: String,

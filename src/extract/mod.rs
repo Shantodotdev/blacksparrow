@@ -18,6 +18,8 @@
 //! - [`sink`]: memory, NDJSON and Markdown-directory outputs.
 //! - [`paths`]: include / exclude path patterns (globs and regexes).
 //! - [`find`]: BM25 passage ranking, selector and regex matching.
+//! - [`fields`]: `extract` — schema-shaped data from structured data, learned rules, records
+//!   and typed recognizers, with per-field confidence.
 //! - [`synonyms`]: field-word synonyms shared by `find` and `extract`.
 
 pub mod boilerplate;
@@ -26,6 +28,7 @@ pub mod clean;
 pub mod convert;
 pub mod crawl;
 pub mod document;
+pub mod fields;
 pub mod find;
 pub mod jobs;
 pub mod main_content;
