@@ -294,20 +294,31 @@ async fn pages_render_in_parallel_tabs() {
         .await
         .unwrap();
 
+    let wait = Duration::from_millis(1_500);
     let request = RenderRequest {
-        wait_ms: Some(1_500),
+        wait_ms: Some(wait.as_millis() as u64),
         ..Default::default()
     };
-    let started = Instant::now();
     let urls: Vec<String> = (0..3).map(|i| format!("{}/p{i}", server.uri())).collect();
-    let outputs = futures::future::join_all(urls.iter().map(|u| pool.render(u, &request))).await;
-    let elapsed = started.elapsed();
-    for (i, out) in outputs.into_iter().enumerate() {
+    let outputs = futures::future::join_all(urls.iter().map(|u| async {
+        let out = pool.render(u, &request).await;
+        (out, Instant::now())
+    }))
+    .await;
+    let mut finished = Vec::new();
+    for (i, (out, at)) in outputs.into_iter().enumerate() {
         assert!(out.unwrap().html.contains(&format!("Page {i}")));
+        finished.push(at);
     }
+    // One tab at a time would finish the renders at least `wait` apart (2 × wait from first
+    // to last). Comparing finish times instead of total time keeps the check meaningful on
+    // slow, busy CI machines.
+    let first = finished.iter().min().copied().unwrap();
+    let last = finished.iter().max().copied().unwrap();
+    let spread = last - first;
     assert!(
-        elapsed < Duration::from_millis(4_000),
-        "three 1.5 s renders took {elapsed:?}; tabs are not running in parallel"
+        spread < wait * 2,
+        "renders finished {spread:?} apart; tabs are not running in parallel"
     );
     pool.shutdown().await.unwrap();
 }

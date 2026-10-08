@@ -1,0 +1,8 @@
+# Tests that start a real Chrome run one binary-test at a time so parallel browser
+# launches do not starve each other on small CI runners.
+[test-groups]
+chrome = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = "binary(agent_render_tests) | binary(render_js_tests)"
+test-group = "chrome"

@@ -38,6 +38,10 @@ pub const REF_ATTR: &str = "data-bs-ref";
 
 /// Extra time after the render limit to read a page whose steps ran out of time.
 const READ_GRACE: Duration = Duration::from_secs(5);
+/// How long a local Chrome may take to start.
+const LAUNCH_TIMEOUT: Duration = Duration::from_secs(45);
+/// Local Chrome start attempts before giving up.
+const LAUNCH_ATTEMPTS: u32 = 2;
 
 const TRACKER_HOSTS: &[&str] = &[
     "google-analytics.com",
@@ -173,28 +177,43 @@ impl RenderPool {
         let connection = match config.chrome_ws.as_deref() {
             Some(endpoint) => Browser::connect(endpoint.to_string()).await,
             None => {
-                let profile = tempfile::Builder::new()
-                    .prefix("blacksparrow-agent-chrome-")
-                    .tempdir()
-                    .map_err(SeoError::Io)?;
-                let mut builder = BrowserConfig::builder()
-                    .new_headless_mode()
-                    .no_sandbox()
-                    .user_data_dir(profile.path())
-                    .arg("--disable-gpu")
-                    .arg("--disable-dev-shm-usage")
-                    .arg("--mute-audio");
-                if let Some(proxy_url) = config.proxy.as_deref() {
-                    builder = builder.arg(format!("--proxy-server={proxy_url}"));
+                // A cold Chrome on a busy machine can take longer than chromiumoxide's 20 s
+                // default to print its DevTools URL, so wait longer and try a second time.
+                let mut attempt = 0;
+                loop {
+                    attempt += 1;
+                    let profile = tempfile::Builder::new()
+                        .prefix("blacksparrow-agent-chrome-")
+                        .tempdir()
+                        .map_err(SeoError::Io)?;
+                    let mut builder = BrowserConfig::builder()
+                        .new_headless_mode()
+                        .no_sandbox()
+                        .launch_timeout(LAUNCH_TIMEOUT)
+                        .user_data_dir(profile.path())
+                        .arg("--disable-gpu")
+                        .arg("--disable-dev-shm-usage")
+                        .arg("--mute-audio")
+                        // Tabs render side by side; stop Chrome from throttling the ones
+                        // that are not in front.
+                        .arg("--disable-background-timer-throttling")
+                        .arg("--disable-backgrounding-occluded-windows")
+                        .arg("--disable-renderer-backgrounding");
+                    if let Some(proxy_url) = config.proxy.as_deref() {
+                        builder = builder.arg(format!("--proxy-server={proxy_url}"));
+                    }
+                    let browser_config = builder.build().map_err(|error| {
+                        SeoError::Config(format!("Invalid Chrome configuration: {error}"))
+                    })?;
+                    match Browser::launch(browser_config).await {
+                        Ok(launched) => {
+                            profile_dir = Some(profile);
+                            break Ok(launched);
+                        }
+                        Err(error) if attempt >= LAUNCH_ATTEMPTS => break Err(error),
+                        Err(_) => continue,
+                    }
                 }
-                let browser_config = builder.build().map_err(|error| {
-                    SeoError::Config(format!("Invalid Chrome configuration: {error}"))
-                })?;
-                let launched = Browser::launch(browser_config).await;
-                if launched.is_ok() {
-                    profile_dir = Some(profile);
-                }
-                launched
             }
         }
         .map_err(|error| {

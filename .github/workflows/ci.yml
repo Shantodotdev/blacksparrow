@@ -54,7 +54,7 @@ jobs:
         uses: taiki-e/install-action@nextest
 
       - name: Run unit & integration tests
-        run: cargo nextest run --workspace --all-features
+        run: cargo nextest run --workspace --all-features --no-fail-fast
 
       - name: Run documentation tests
         run: cargo test --doc
