@@ -8,17 +8,16 @@ use crate::mcp::protocol::{handle_jsonrpc_request, McpContext};
 use std::path::PathBuf;
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWrite, AsyncWriteExt};
 
-/// Runs the MCP JSON-RPC 2.0 server over generic asynchronous reader and writer streams.
-pub async fn run_mcp_server_io<R, W>(
+/// Runs the MCP JSON-RPC 2.0 server over generic asynchronous reader and writer streams with a custom context.
+pub async fn run_mcp_server_io_with_context<R, W>(
     reader: R,
     mut writer: W,
-    db_path: Option<PathBuf>,
+    ctx: McpContext,
 ) -> SeoResult<()>
 where
     R: AsyncBufRead + Unpin,
     W: AsyncWrite + Unpin,
 {
-    let ctx = McpContext::new(db_path)?;
     let mut lines = reader.lines();
 
     while let Some(line) = lines.next_line().await? {
@@ -38,12 +37,32 @@ where
     Ok(())
 }
 
+/// Runs the MCP JSON-RPC 2.0 server over generic asynchronous reader and writer streams.
+pub async fn run_mcp_server_io<R, W>(
+    reader: R,
+    writer: W,
+    db_path: Option<PathBuf>,
+) -> SeoResult<()>
+where
+    R: AsyncBufRead + Unpin,
+    W: AsyncWrite + Unpin,
+{
+    let ctx = McpContext::new(db_path)?;
+    run_mcp_server_io_with_context(reader, writer, ctx).await
+}
+
+/// Runs the MCP server with a custom context over standard input (`stdin`) and standard output (`stdout`).
+pub async fn run_mcp_server_with_context(ctx: McpContext) -> SeoResult<()> {
+    let stdin = tokio::io::stdin();
+    let stdout = tokio::io::stdout();
+    let reader = tokio::io::BufReader::new(stdin);
+    run_mcp_server_io_with_context(reader, stdout, ctx).await
+}
+
 /// Runs the MCP server over standard input (`stdin`) and standard output (`stdout`).
 ///
 /// Log messages and diagnostics are sent to `stderr` so as not to corrupt JSON-RPC frames on `stdout`.
 pub async fn run_mcp_server(db_path: Option<PathBuf>) -> SeoResult<()> {
-    let stdin = tokio::io::stdin();
-    let stdout = tokio::io::stdout();
-    let reader = tokio::io::BufReader::new(stdin);
-    run_mcp_server_io(reader, stdout, db_path).await
+    let ctx = McpContext::new(db_path)?;
+    run_mcp_server_with_context(ctx).await
 }

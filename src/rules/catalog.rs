@@ -864,6 +864,56 @@ pub static RULE_CATALOG: &[RuleDefinition] = &[
         description: "Page contains high internal out-degree (50+ outgoing links) but receives very low PageRank equity, indicating an isolated navigation hub.",
         fix_advice: "Strengthen incoming internal link pathways to this hub from the homepage, main navigation, or high-equity category pages.",
     },
+
+    // --- Category 13: JavaScript SEO Diffing ---
+    RuleDefinition {
+        id: RuleId::ErrJsDiffCanonicalAltered,
+        category: IssueCategory::JsDiff,
+        severity: Severity::Critical,
+        title: "Canonical Altered by JavaScript",
+        description: "The canonical URL in the client-rendered DOM differs from the raw server HTML.",
+        fix_advice: "Render the same canonical URL on the server and preserve it during client hydration.",
+    },
+    RuleDefinition {
+        id: RuleId::ErrJsDiffNoindexInjected,
+        category: IssueCategory::JsDiff,
+        severity: Severity::Critical,
+        title: "Noindex Injected by JavaScript",
+        description: "JavaScript added a noindex directive that is absent from the raw server HTML.",
+        fix_advice: "Remove client-side logic that dynamically injects noindex directives.",
+    },
+    RuleDefinition {
+        id: RuleId::WarnJsDiffTitleMetaDesync,
+        category: IssueCategory::JsDiff,
+        severity: Severity::Alert,
+        title: "Title and Meta Description Desynchronized",
+        description: "Client-side navigation changed the URL while leaving the title and meta description unchanged.",
+        fix_advice: "Update route metadata through the application's head-management integration.",
+    },
+    RuleDefinition {
+        id: RuleId::AlertJsDiffVanishingContent,
+        category: IssueCategory::JsDiff,
+        severity: Severity::Alert,
+        title: "Content Vanishes After JavaScript Rendering",
+        description: "Substantial raw editorial content disappears from the client-rendered DOM.",
+        fix_advice: "Resolve the hydration mismatch or client-side replacement that removes crawlable content.",
+    },
+    RuleDefinition {
+        id: RuleId::AlertJsDiffLateRenderedLinks,
+        category: IssueCategory::JsDiff,
+        severity: Severity::Warning,
+        title: "Links Appear Only After JavaScript Rendering",
+        description: "Internal links are absent from raw HTML but appear in the client-rendered DOM.",
+        fix_advice: "Render important navigation and contextual links in the initial server HTML response.",
+    },
+    RuleDefinition {
+        id: RuleId::ErrJsDiffHydrationCrash,
+        category: IssueCategory::JsDiff,
+        severity: Severity::Critical,
+        title: "JavaScript Hydration Crash",
+        description: "An uncaught client-side error left the rendered page without meaningful content.",
+        fix_advice: "Fix the runtime exception or hydration failure and verify the page in a headless browser.",
+    },
 ];
 
 /// Retrieves the metadata definition for a technical SEO rule by its strongly typed [`RuleId`].

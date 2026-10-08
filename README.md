@@ -179,6 +179,23 @@ _(See [Model Context Protocol Guide](./docs/mcp.md) for full tool schemas and co
 
 ---
 
+## Web Content for AI Agents
+
+The same binary turns pages into clean Markdown and structured data for agents, without an
+LLM, as CLI commands, `web_*` MCP tools and a self-hosted Firecrawl-compatible HTTP API:
+
+```bash
+blacksparrow scrape https://example.com/pricing            # one page to Markdown
+blacksparrow crawl https://docs.example.com --out ./md     # a site to Markdown files
+blacksparrow find https://example.com/faq --query "refund policy"
+blacksparrow extract https://shop.example.com/p/1 --schema schema.json
+docker compose up -d                                       # HTTP API on :3002
+```
+
+_(See [Agent Mode](./docs/agent-mode.md) for every command, tool, endpoint and limit)._
+
+---
+
 ## Documentation
 
 Explore the complete technical documentation in [`docs/`](./docs/README.md):
@@ -191,6 +208,7 @@ Explore the complete technical documentation in [`docs/`](./docs/README.md):
 | [**Model Context Protocol (MCP)**](./docs/mcp.md)    | Agent configuration, stdio JSON-RPC architecture, and 8 structured tools.       |
 | [**120 SEO Rules Catalog**](./docs/rules.md)         | Complete reference of all 120 technical checks, heuristics, and fix advice.     |
 | [**Storage & SQLite Schema**](./docs/storage.md)     | Database architecture, WAL mode, 7 relational tables, and SQL query recipes.    |
+| [**Agent Mode**](./docs/agent-mode.md)               | Scrape, map, crawl, find, extract and interact; web MCP tools; HTTP API; Docker. |
 
 ---
 

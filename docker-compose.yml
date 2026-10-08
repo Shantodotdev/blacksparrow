@@ -1,0 +1,44 @@
+# Self-hosted Black Sparrow API with a headless Chrome sidecar for JavaScript pages.
+#
+#   BLACKSPARROW_API_KEYS=change-me docker compose up -d
+#   curl -H "Authorization: Bearer change-me" -H "Content-Type: application/json" \
+#        -d '{"url":"https://example.com"}' http://localhost:3002/v1/scrape
+
+services:
+  api:
+    build: .
+    ports:
+      - "3002:3002"
+    environment:
+      BLACKSPARROW_API_KEYS: ${BLACKSPARROW_API_KEYS:?set BLACKSPARROW_API_KEYS to one or more comma-separated keys}
+      RUST_LOG: ${RUST_LOG:-warn,blacksparrow::serve=info}
+    # Chrome's DevTools endpoint only answers requests addressed to an IP or localhost,
+    # so the sidecar gets a fixed address on a private network.
+    command: ["serve", "--host", "0.0.0.0", "--port", "3002", "--chrome-ws", "http://172.29.0.10:9222"]
+    volumes:
+      - data:/data
+    depends_on:
+      - chrome
+    networks:
+      - crawl
+    restart: unless-stopped
+
+  chrome:
+    image: chromedp/headless-shell:stable
+    # Only reachable from the api service; never publish the DevTools port.
+    expose:
+      - "9222"
+    shm_size: "1gb"
+    networks:
+      crawl:
+        ipv4_address: 172.29.0.10
+    restart: unless-stopped
+
+networks:
+  crawl:
+    ipam:
+      config:
+        - subnet: 172.29.0.0/24
+
+volumes:
+  data:

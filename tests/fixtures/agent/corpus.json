@@ -1,0 +1,9 @@
+[
+  {"file": "article.html", "url": "https://coastal.example/articles/tide-pools", "page_type": "article"},
+  {"file": "docs.html", "url": "https://relay.example/docs/retries", "page_type": "docs"},
+  {"file": "product.html", "url": "https://shop.example/packs/trailhead-40", "page_type": "product"},
+  {"file": "product_sibling.html", "url": "https://shop.example/packs/ridge-30", "page_type": "product"},
+  {"file": "listing.html", "url": "https://shop.example/packs", "page_type": "listing"},
+  {"file": "forum.html", "url": "https://bread.example/t/acetone-starter", "page_type": "forum"},
+  {"file": "hidden_prompt.html", "url": "https://cloudly.example/pricing", "page_type": "hidden_text"}
+]

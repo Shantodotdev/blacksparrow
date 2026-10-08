@@ -12,10 +12,10 @@
 
 use crate::core::config::CrawlConfig;
 use crate::core::models::{IssueCategory, Severity};
-use crate::core::url::normalize_url;
-use crate::crawler::ai_check::audit_ai_readiness;
+use crate::core::url::{normalize_url, validate_url_safety};
+use crate::crawler::ai_check::audit_ai_readiness_with_options;
 use crate::crawler::engine::run_crawl_with_options;
-use crate::crawler::inspector::inspect_url_with_options;
+use crate::crawler::inspector::inspect_url_with_options_ext;
 use crate::error::SeoResult;
 use crate::mcp::formatter::format_llm_markdown_report;
 use crate::mcp::types::{CallToolResult, ToolDefinition};
@@ -61,6 +61,16 @@ pub fn get_tool_definitions() -> Vec<ToolDefinition> {
                         "type": "boolean",
                         "default": true,
                         "description": "Whether to fetch and obey /robots.txt rules."
+                    },
+                    "allow_local_network": {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "Allow auditing local, private, or loopback network addresses (e.g. localhost, 127.0.0.1, 192.168.x.x). Cloud metadata endpoints remain permanently blocked."
+                    },
+                    "allowed_private_hosts": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Optional list of specific private hosts/ports allowed for this audit (e.g. ['localhost:3000', '127.0.0.1:8080'])."
                     }
                 },
                 "required": ["url"]
@@ -114,6 +124,16 @@ pub fn get_tool_definitions() -> Vec<ToolDefinition> {
                         "type": "string",
                         "format": "uri",
                         "description": "Single URL to fetch and audit."
+                    },
+                    "allow_local_network": {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "Allow auditing local, private, or loopback network addresses (e.g. localhost, 127.0.0.1). Cloud metadata endpoints remain permanently blocked."
+                    },
+                    "allowed_private_hosts": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Optional list of specific private hosts/ports allowed for this check (e.g. ['localhost:3000', '127.0.0.1:8080'])."
                     }
                 },
                 "required": ["url"]
@@ -162,6 +182,16 @@ pub fn get_tool_definitions() -> Vec<ToolDefinition> {
                         "type": "string",
                         "format": "uri",
                         "description": "The website base URL."
+                    },
+                    "allow_local_network": {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "Allow auditing local, private, or loopback network addresses (e.g. localhost, 127.0.0.1). Cloud metadata endpoints remain permanently blocked."
+                    },
+                    "allowed_private_hosts": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Optional list of specific private hosts/ports allowed for this check (e.g. ['localhost:3000', '127.0.0.1:8080'])."
                     }
                 },
                 "required": ["url"]
@@ -202,31 +232,82 @@ pub fn get_tool_definitions() -> Vec<ToolDefinition> {
     ]
 }
 
+fn merge_allowed_hosts(args_val: &Value, context_allowed_hosts: &[String]) -> Vec<String> {
+    let mut allowed_hosts = context_allowed_hosts.to_vec();
+    if let Some(arr) = args_val["allowed_private_hosts"].as_array() {
+        for v in arr {
+            if let Some(s) = v.as_str() {
+                let trimmed = s.trim();
+                if !trimmed.is_empty()
+                    && !allowed_hosts
+                        .iter()
+                        .any(|h| h.eq_ignore_ascii_case(trimmed))
+                {
+                    allowed_hosts.push(trimmed.to_string());
+                }
+            }
+        }
+    }
+    allowed_hosts
+}
+
 /// Dispatches an MCP tool call to its corresponding handler.
 pub async fn execute_tool(
     name: &str,
     args: Option<&Value>,
     db: &Database,
+    allow_local_default: bool,
+    context_allowed_hosts: &[String],
 ) -> SeoResult<CallToolResult> {
     match name {
-        "seo_start_audit" => tool_start_audit(args, db).await,
+        "seo_start_audit" => {
+            tool_start_audit(args, db, allow_local_default, context_allowed_hosts).await
+        }
         "seo_audit_status" => tool_audit_status(args, db).await,
         "seo_get_markdown_report" => tool_get_markdown_report(args, db).await,
-        "seo_quick_page_check" => tool_quick_page_check(args).await,
+        "seo_quick_page_check" => {
+            tool_quick_page_check(args, allow_local_default, context_allowed_hosts).await
+        }
         "seo_query_issues" => tool_query_issues(args, db).await,
-        "seo_check_ai_readiness" => tool_check_ai_readiness(args).await,
+        "seo_check_ai_readiness" => {
+            tool_check_ai_readiness(args, allow_local_default, context_allowed_hosts).await
+        }
         "seo_validate_schema" => tool_validate_schema(args).await,
         "seo_cleanup_session" => tool_cleanup_session(args, db).await,
         _ => Ok(CallToolResult::error(format!("Unknown tool: '{name}'"))),
     }
 }
 
-async fn tool_start_audit(args: Option<&Value>, db: &Database) -> SeoResult<CallToolResult> {
+async fn tool_start_audit(
+    args: Option<&Value>,
+    db: &Database,
+    allow_local_default: bool,
+    context_allowed_hosts: &[String],
+) -> SeoResult<CallToolResult> {
     let args_val = args.cloned().unwrap_or_else(|| json!({}));
     let raw_url = match args_val["url"].as_str() {
         Some(u) if !u.trim().is_empty() => u.trim(),
         _ => return Ok(CallToolResult::error("Missing required parameter 'url'")),
     };
+
+    let allow_local = args_val["allow_local_network"]
+        .as_bool()
+        .unwrap_or(allow_local_default);
+    let mut allowed_hosts = merge_allowed_hosts(&args_val, context_allowed_hosts);
+    for h in crate::core::url::extract_host_and_port_allowlist(raw_url) {
+        if !allowed_hosts
+            .iter()
+            .any(|existing| existing.eq_ignore_ascii_case(&h))
+        {
+            allowed_hosts.push(h);
+        }
+    }
+
+    if let Err(e) = validate_url_safety(raw_url, allow_local, &allowed_hosts).await {
+        return Ok(CallToolResult::error(format!(
+            "URL blocked for security reasons: {e}"
+        )));
+    }
 
     let target_url = match normalize_url(raw_url) {
         Ok(u) => u,
@@ -259,6 +340,8 @@ async fn tool_start_audit(args: Option<&Value>, db: &Database) -> SeoResult<Call
     let background_db = db.clone();
     let background_url = target_url.clone();
     let background_session_id = session_id.clone();
+    let background_allow_local = allow_local;
+    let background_allowed_hosts = allowed_hosts;
     tokio::spawn(async move {
         let run_result: SeoResult<crate::crawler::engine::CrawlResult> = async {
             let mut config = CrawlConfig::new(&background_url)?;
@@ -267,6 +350,8 @@ async fn tool_start_audit(args: Option<&Value>, db: &Database) -> SeoResult<Call
             config.max_depth = max_depth;
             config.respect_robots = respect_robots;
             config.render_js = render_js;
+            config.allow_all_private_ips = background_allow_local;
+            config.allowed_private_hosts = background_allowed_hosts;
             config.quiet = true; // headless background task
 
             let (writer_handle, writer_task) = background_db.spawn_writer(
@@ -413,18 +498,43 @@ async fn tool_get_markdown_report(
     Ok(CallToolResult::success_text(report_md))
 }
 
-async fn tool_quick_page_check(args: Option<&Value>) -> SeoResult<CallToolResult> {
+async fn tool_quick_page_check(
+    args: Option<&Value>,
+    allow_local_default: bool,
+    context_allowed_hosts: &[String],
+) -> SeoResult<CallToolResult> {
     let args_val = args.cloned().unwrap_or_else(|| json!({}));
     let raw_url = match args_val["url"].as_str() {
         Some(u) if !u.trim().is_empty() => u.trim(),
         _ => return Ok(CallToolResult::error("Missing required parameter 'url'")),
     };
 
-    let (parsed_page, fetch_result, issues) = match inspect_url_with_options(
+    let allow_local = args_val["allow_local_network"]
+        .as_bool()
+        .unwrap_or(allow_local_default);
+    let mut allowed_hosts = merge_allowed_hosts(&args_val, context_allowed_hosts);
+    for h in crate::core::url::extract_host_and_port_allowlist(raw_url) {
+        if !allowed_hosts
+            .iter()
+            .any(|existing| existing.eq_ignore_ascii_case(&h))
+        {
+            allowed_hosts.push(h);
+        }
+    }
+
+    if let Err(e) = validate_url_safety(raw_url, allow_local, &allowed_hosts).await {
+        return Ok(CallToolResult::error(format!(
+            "URL blocked for security reasons: {e}"
+        )));
+    }
+
+    let (parsed_page, fetch_result, issues) = match inspect_url_with_options_ext(
         raw_url,
         crate::core::branding::MCP_BOT_USER_AGENT,
         Duration::from_secs(15),
         vec![],
+        allow_local,
+        allowed_hosts,
     )
     .await
     {
@@ -529,17 +639,42 @@ async fn tool_query_issues(args: Option<&Value>, db: &Database) -> SeoResult<Cal
     Ok(CallToolResult::success_json(&res))
 }
 
-async fn tool_check_ai_readiness(args: Option<&Value>) -> SeoResult<CallToolResult> {
+async fn tool_check_ai_readiness(
+    args: Option<&Value>,
+    allow_local_default: bool,
+    context_allowed_hosts: &[String],
+) -> SeoResult<CallToolResult> {
     let args_val = args.cloned().unwrap_or_else(|| json!({}));
     let raw_url = match args_val["url"].as_str() {
         Some(u) if !u.trim().is_empty() => u.trim(),
         _ => return Ok(CallToolResult::error("Missing required parameter 'url'")),
     };
 
-    let report = match audit_ai_readiness(
+    let allow_local = args_val["allow_local_network"]
+        .as_bool()
+        .unwrap_or(allow_local_default);
+    let mut allowed_hosts = merge_allowed_hosts(&args_val, context_allowed_hosts);
+    for h in crate::core::url::extract_host_and_port_allowlist(raw_url) {
+        if !allowed_hosts
+            .iter()
+            .any(|existing| existing.eq_ignore_ascii_case(&h))
+        {
+            allowed_hosts.push(h);
+        }
+    }
+
+    if let Err(e) = validate_url_safety(raw_url, allow_local, &allowed_hosts).await {
+        return Ok(CallToolResult::error(format!(
+            "URL blocked for security reasons: {e}"
+        )));
+    }
+
+    let report = match audit_ai_readiness_with_options(
         raw_url,
         crate::core::branding::MCP_BOT_USER_AGENT,
         Duration::from_secs(15),
+        allow_local,
+        allowed_hosts,
     )
     .await
     {

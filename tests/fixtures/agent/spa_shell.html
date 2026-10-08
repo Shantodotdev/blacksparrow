@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Loading…</title>
+  <script type="module" src="/assets/app.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <noscript>You need to enable JavaScript to run this app.</noscript>
+  <script>
+    setTimeout(function () {
+      document.title = 'Rendered SPA';
+      document.getElementById('root').innerHTML =
+        '<main><h1>Rendered dashboard</h1><p>This text only exists after JavaScript runs.</p><a href="/settings">Settings</a></main>';
+    }, 50);
+  </script>
+</body>
+</html>

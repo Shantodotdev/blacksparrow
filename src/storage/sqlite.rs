@@ -11,8 +11,21 @@ use crate::error::{SeoError, SeoResult};
 use rusqlite::Connection;
 use std::path::{Path, PathBuf};
 
-/// Embedded authoritative SQLite DDL schema.
+/// Embedded authoritative SQLite DDL schema for the SEO audit tables (migration 1).
 pub const SCHEMA: &str = include_str!("schema.sql");
+
+/// Ordered schema migrations, applied by [`apply_schema`] according to `PRAGMA user_version`.
+///
+/// Migration 1 is the original SEO schema (idempotent `IF NOT EXISTS` DDL), so databases created
+/// before versioning existed upgrade cleanly from `user_version = 0`.
+pub const MIGRATIONS: &[(i64, &str)] = &[
+    (1, SCHEMA),
+    (2, include_str!("migrations/0002_documents.sql")),
+    (3, include_str!("migrations/0003_extraction_rules.sql")),
+];
+
+/// Schema version a fully migrated database reports through `PRAGMA user_version`.
+pub const LATEST_SCHEMA_VERSION: i64 = 3;
 
 /// Returns the local database path in the current working directory: `.blacksparrow/blacksparrow.db` (or legacy `.seolens/seolens.db`).
 pub fn local_db_path() -> PathBuf {
@@ -136,9 +149,26 @@ pub fn configure_connection(conn: &Connection) -> SeoResult<()> {
     Ok(())
 }
 
-/// Executes authoritative DDL schema migrations.
+/// Applies every migration newer than the database's `PRAGMA user_version`.
 pub fn apply_schema(conn: &Connection) -> SeoResult<()> {
-    conn.execute_batch(SCHEMA)?;
+    let current: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    for &(version, sql) in MIGRATIONS {
+        if version <= current {
+            continue;
+        }
+        if version == 1 {
+            // Migration 1 carries journal-mode PRAGMAs, which SQLite rejects inside a transaction.
+            conn.execute_batch(sql)?;
+            conn.pragma_update(None, "user_version", version)?;
+        } else {
+            conn.execute_batch(&format!(
+                "BEGIN IMMEDIATE;\n{sql}\nPRAGMA user_version = {version};\nCOMMIT;"
+            ))
+            .inspect_err(|_| {
+                let _ = conn.execute_batch("ROLLBACK;");
+            })?;
+        }
+    }
     Ok(())
 }
 

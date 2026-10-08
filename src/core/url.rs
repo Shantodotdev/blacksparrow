@@ -60,6 +60,7 @@
 use crate::error::{SeoError, SeoResult};
 use serde::{Deserialize, Serialize};
 use std::hash::Hasher;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use url::Url;
 
 /// Known marketing, analytics, session, and e-commerce tracking parameters to strip.
@@ -443,4 +444,197 @@ pub fn contains_ignore_ascii_case(haystack: &str, needle: &str) -> bool {
         .as_bytes()
         .windows(needle_bytes.len())
         .any(|window| window.eq_ignore_ascii_case(needle_bytes))
+}
+
+/// Checks if an IP address is a cloud instance metadata endpoint
+/// (e.g. AWS/GCP/Azure link-local `169.254.169.254` or IPv6 equivalent).
+///
+/// These addresses are strictly prohibited from being crawled under any circumstance.
+pub fn is_cloud_metadata_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ipv4) => ipv4.is_link_local(),
+        IpAddr::V6(ipv6) => {
+            if let Some(mapped_v4) = ipv6.to_ipv4_mapped() {
+                mapped_v4.is_link_local()
+            } else {
+                let seg = ipv6.segments();
+                (seg[0] & 0xffc0) == 0xfe80
+            }
+        }
+    }
+}
+
+/// Determines whether an IP address belongs to a private, loopback, link-local,
+/// cloud metadata, multicast, or otherwise restricted network range.
+pub fn is_private_or_restricted_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ipv4) => is_restricted_ipv4(ipv4),
+        IpAddr::V6(ipv6) => {
+            if let Some(mapped_v4) = ipv6.to_ipv4_mapped() {
+                is_restricted_ipv4(mapped_v4)
+            } else {
+                is_restricted_ipv6(ipv6)
+            }
+        }
+    }
+}
+
+fn is_restricted_ipv4(ip: Ipv4Addr) -> bool {
+    let octets = ip.octets();
+    ip.is_loopback()
+        || ip.is_private()
+        || ip.is_link_local()
+        || ip.is_broadcast()
+        || ip.is_documentation()
+        || ip.is_unspecified()
+        || octets[0] == 0
+        || (octets[0] == 100 && (octets[1] & 0xc0) == 64)
+        || octets[0] >= 224
+}
+
+fn is_restricted_ipv6(ip: Ipv6Addr) -> bool {
+    let segments = ip.segments();
+    ip.is_loopback()
+        || ip.is_unspecified()
+        || ip.is_multicast()
+        || ((segments[0] & 0xfe00) == 0xfc00)
+        || ((segments[0] & 0xffc0) == 0xfe80)
+        || ((segments[0] & 0xffc0) == 0xfec0)
+        || (segments[0] == 0x2001 && segments[1] == 0x0db8)
+}
+
+/// Validates whether a target URL is safe for outbound requests.
+///
+/// Enforces:
+/// 1. HTTP or HTTPS protocol scheme only.
+/// 2. Cloud instance metadata endpoints (`169.254.169.254`, `metadata.google.internal`) are permanently blocked.
+/// 3. Private and loopback destinations are blocked unless `allow_all_private_ips` is true or the target
+///    is present in `allowed_private_hosts`.
+pub async fn validate_url_safety(
+    url_str: &str,
+    allow_all_private_ips: bool,
+    allowed_private_hosts: &[String],
+) -> Result<Url, SeoError> {
+    let parsed = Url::parse(url_str).map_err(|e| SeoError::Url(format!("Invalid URL: {e}")))?;
+
+    match parsed.scheme() {
+        "http" | "https" => {}
+        other => {
+            return Err(SeoError::Url(format!(
+                "Unsupported protocol scheme: '{other}'. Only http and https are allowed."
+            )))
+        }
+    }
+
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| SeoError::Url("URL has no host".to_string()))?;
+    let host_lower = host.to_ascii_lowercase();
+
+    // 1. Permanent non-bypassable block on cloud metadata
+    if host_lower == "169.254.169.254"
+        || host_lower == "metadata.google.internal"
+        || host_lower.ends_with(".metadata.google.internal")
+    {
+        return Err(SeoError::Network(
+            "Access to cloud instance metadata endpoint is permanently prohibited.".to_string(),
+        ));
+    }
+
+    // 2. Check if host or host:port is in allowed_private_hosts
+    let port = parsed.port_or_known_default();
+    let is_explicitly_allowed = allowed_private_hosts.iter().any(|allowed| {
+        let a = allowed.trim().to_ascii_lowercase();
+        if let Some((allowed_host, allowed_port_str)) = a.split_once(':') {
+            if let Ok(allowed_port) = allowed_port_str.parse::<u16>() {
+                return allowed_host == host_lower && port == Some(allowed_port);
+            }
+        }
+        if a == host_lower {
+            return parsed.port().is_none();
+        }
+        false
+    });
+
+    if is_explicitly_allowed || allow_all_private_ips {
+        if let Ok(ip) = host.parse::<IpAddr>() {
+            if is_cloud_metadata_ip(ip) {
+                return Err(SeoError::Network(
+                    "Access to cloud instance metadata endpoint is permanently prohibited."
+                        .to_string(),
+                ));
+            }
+        }
+        return Ok(parsed);
+    }
+
+    // 3. Block localhost domain patterns
+    if host_lower == "localhost"
+        || host_lower.ends_with(".localhost")
+        || host_lower.ends_with(".local")
+    {
+        return Err(SeoError::Network(format!(
+            "Blocked: Access to local/private hostname '{host}' is prohibited by default."
+        )));
+    }
+
+    // 4. Inspect IP literal
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        if is_cloud_metadata_ip(ip) {
+            return Err(SeoError::Network(
+                "Access to cloud instance metadata endpoint is permanently prohibited.".to_string(),
+            ));
+        }
+        if is_private_or_restricted_ip(ip) {
+            return Err(SeoError::Network(format!(
+                "Blocked: Access to private or restricted IP address '{ip}' is prohibited by default."
+            )));
+        }
+        return Ok(parsed);
+    }
+
+    // 5. Asynchronous DNS lookup to inspect resolved IPs
+    let port = parsed.port_or_known_default().unwrap_or(80);
+    if let Ok(socket_addrs) = tokio::net::lookup_host((host, port)).await {
+        for addr in socket_addrs {
+            let ip = addr.ip();
+            if is_cloud_metadata_ip(ip) {
+                return Err(SeoError::Network(
+                    "Access to cloud instance metadata endpoint is permanently prohibited."
+                        .to_string(),
+                ));
+            }
+            if is_private_or_restricted_ip(ip) {
+                return Err(SeoError::Network(format!(
+                    "Blocked: Host '{host}' resolves to restricted private IP address '{ip}'."
+                )));
+            }
+        }
+    }
+
+    Ok(parsed)
+}
+
+/// Extracts the hostname or host:port from a URL string for automatic allowlist scoping.
+///
+/// Cloud metadata addresses are strictly excluded from auto-allowlisting.
+pub fn extract_host_and_port_allowlist(url_str: &str) -> Vec<String> {
+    let mut hosts = Vec::new();
+    let parsed = Url::parse(url_str).or_else(|_| Url::parse(&format!("https://{}", url_str)));
+    if let Ok(u) = parsed {
+        if let Some(h) = u.host_str() {
+            let h_lower = h.to_ascii_lowercase();
+            if h_lower != "169.254.169.254"
+                && h_lower != "metadata.google.internal"
+                && !h_lower.ends_with(".metadata.google.internal")
+            {
+                if let Some(port) = u.port() {
+                    hosts.push(format!("{}:{}", h_lower, port));
+                } else {
+                    hosts.push(h_lower);
+                }
+            }
+        }
+    }
+    hosts
 }

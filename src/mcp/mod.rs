@@ -9,8 +9,9 @@ pub mod resources;
 pub mod server;
 pub mod tools;
 pub mod types;
+pub mod web_tools;
 
-pub use protocol::{handle_jsonrpc_request, McpContext};
-pub use server::{run_mcp_server, run_mcp_server_io};
+pub use protocol::{handle_jsonrpc_request, McpContext, Toolset};
+pub use server::{run_mcp_server, run_mcp_server_io, run_mcp_server_with_context};
 pub use tools::get_tool_definitions;
 pub use types::*;

@@ -88,6 +88,10 @@ pub struct CrawlConfig {
     pub quiet: bool,
     /// Optional human-friendly audit name or project label.
     pub crawl_name: Option<String>,
+    /// Allow fetching all private/local network addresses (except cloud metadata).
+    pub allow_all_private_ips: bool,
+    /// Specific private hosts or host:port combinations allowed when private IP fetching is restricted.
+    pub allowed_private_hosts: Vec<String>,
 }
 
 impl CrawlConfig {
@@ -123,6 +127,8 @@ impl CrawlConfig {
     /// ```
     pub fn new(start_url: &str) -> SeoResult<Self> {
         let normalized = normalize_url(start_url)?;
+        let allowed_private_hosts = crate::core::url::extract_host_and_port_allowlist(&normalized);
+
         Ok(Self {
             start_url: normalized,
             max_pages: 500,
@@ -146,6 +152,8 @@ impl CrawlConfig {
             explicit_sitemaps: Vec::new(),
             quiet: false,
             crawl_name: None,
+            allow_all_private_ips: false,
+            allowed_private_hosts,
         })
     }
 
@@ -176,6 +184,16 @@ impl CrawlConfig {
         }
         if self.user_agent.trim().is_empty() {
             return Err(SeoError::Config("User-Agent cannot be empty".to_string()));
+        }
+        if let Some(endpoint) = self.chrome_ws.as_deref() {
+            let parsed = url::Url::parse(endpoint).map_err(|error| {
+                SeoError::Config(format!("Invalid Chrome CDP endpoint '{endpoint}': {error}"))
+            })?;
+            if !matches!(parsed.scheme(), "ws" | "wss" | "http" | "https") {
+                return Err(SeoError::Config(format!(
+                    "Chrome CDP endpoint must use ws, wss, http, or https: {endpoint}"
+                )));
+            }
         }
         if let Some(ref pat) = self.include_regex {
             regex::Regex::new(pat).map_err(|e| {

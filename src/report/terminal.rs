@@ -1067,6 +1067,18 @@ pub fn print_cli_help() {
     println!("  {ANSI_GREEN}{ANSI_BOLD}delete{ANSI_RESET} {ANSI_CYAN}<ID>{ANSI_RESET}          Purge a specific crawl session and cascading records");
     println!("  {ANSI_GREEN}{ANSI_BOLD}clean{ANSI_RESET}                Clean historical crawl sessions older than N days\n");
 
+    print_badge("WEB CONTENT FOR AI AGENTS");
+    println!("  {ANSI_GREEN}{ANSI_BOLD}scrape{ANSI_RESET} {ANSI_CYAN}<URL>{ANSI_RESET}         Fetch one page as clean Markdown (PDFs and JavaScript apps too)");
+    println!("  {ANSI_GREEN}{ANSI_BOLD}map{ANSI_RESET} {ANSI_CYAN}<URL>{ANSI_RESET}            List a site's URLs from links, robots.txt and sitemaps");
+    println!("  {ANSI_GREEN}{ANSI_BOLD}crawl{ANSI_RESET} {ANSI_CYAN}<URL>{ANSI_RESET}          Scrape many pages into Markdown files (--out) or NDJSON");
+    println!("  {ANSI_GREEN}{ANSI_BOLD}find{ANSI_RESET} {ANSI_CYAN}<URL>{ANSI_RESET}           Find passages by question (--query), selector or regex");
+    println!("  {ANSI_GREEN}{ANSI_BOLD}extract{ANSI_RESET} {ANSI_CYAN}<URL>{ANSI_RESET}        Extract JSON matching a schema without an LLM");
+    println!("  {ANSI_GREEN}{ANSI_BOLD}interact{ANSI_RESET} {ANSI_CYAN}<URL>{ANSI_RESET}       Click, type and scroll in Chrome, then read the page");
+    if cfg!(feature = "serve") {
+        println!("  {ANSI_GREEN}{ANSI_BOLD}serve{ANSI_RESET}                Serve the Firecrawl-compatible HTTP API");
+    }
+    println!();
+
     print_badge("AI AGENT PROTOCOL");
     println!("  {ANSI_GREEN}{ANSI_BOLD}mcp{ANSI_RESET}                  Start native Model Context Protocol server (stdio for AI agents)\n");
 
@@ -1087,6 +1099,8 @@ pub fn print_cli_help() {
     println!("  {BINARY_ALIAS} check-ai https://example.com\n");
     println!("  {ANSI_DIM}# Filter critical issues from a previous crawl session:{ANSI_RESET}");
     println!("  {BINARY_NAME} issues <SESSION_ID> --severity critical\n");
+    println!("  {ANSI_DIM}# Turn a docs site into Markdown files for an agent:{ANSI_RESET}");
+    println!("  {BINARY_NAME} crawl https://docs.example.com --limit 200 --out ./docs-md\n");
     println!("  {ANSI_DIM}# Start MCP server for AI coding agents:{ANSI_RESET}");
     println!("  {BINARY_NAME} mcp\n");
 }

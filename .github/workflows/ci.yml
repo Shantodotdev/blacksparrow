@@ -31,7 +31,7 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Run Clippy lints
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
   test:
     name: Test Suite (${{ matrix.os }})
@@ -54,7 +54,24 @@ jobs:
         uses: taiki-e/install-action@nextest
 
       - name: Run unit & integration tests
-        run: cargo nextest run --workspace
+        run: cargo nextest run --workspace --all-features --no-fail-fast
 
       - name: Run documentation tests
         run: cargo test --doc
+
+  docker:
+    name: Docker Image Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t blacksparrow:ci .
+
+      - name: Smoke test the API
+        run: |
+          docker run -d --name bs -p 3002:3002 -e BLACKSPARROW_API_KEYS=ci-key blacksparrow:ci
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:3002/health && break; sleep 1; done
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:3002/v1/scrape -H 'Content-Type: application/json' -d '{"url":"https://example.com"}')" = "401"
+          docker logs bs

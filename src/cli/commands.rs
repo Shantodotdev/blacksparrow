@@ -3,6 +3,7 @@
 //! Implements execution logic for `audit`, `inspect`, `mcp`, `report`, `list`,
 //! `issues`, `check-ai`, `delete`, `clean`, and `schema` commands.
 
+use crate::cli::agent;
 use crate::cli::args::{
     AuditArgs, CheckAiArgs, CleanArgs, Cli, Commands, DeleteArgs, InspectArgs, IssuesArgs,
     ListArgs, McpArgs, ReportArgs, SchemaArgs,
@@ -12,7 +13,7 @@ use crate::core::models::{IssueCategory, Severity};
 use crate::crawler::ai_check::audit_ai_readiness;
 use crate::crawler::client::{FetchOptions, HttpClient};
 use crate::crawler::engine::{run_crawl_with_options, CrawlResult, ProgressCallback};
-use crate::crawler::inspector::inspect_url_with_options;
+use crate::crawler::inspector::inspect_url_with_options_ext;
 use crate::graph::{compute_pagerank, SiteGraph};
 use crate::report::{
     clear_post_crawl_status, create_crawl_progress_bar, export_csv_suite, export_html_report,
@@ -40,6 +41,14 @@ pub async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         Commands::Delete(args) => handle_delete(args).await,
         Commands::Clean(args) => handle_clean(args).await,
         Commands::Schema(args) => handle_schema(args).await,
+        Commands::Scrape(args) => agent::handle_scrape(args).await,
+        Commands::Map(args) => agent::handle_map(args).await,
+        Commands::Crawl(args) => agent::handle_crawl(args).await,
+        Commands::Find(args) => agent::handle_find(args).await,
+        Commands::Extract(args) => agent::handle_extract(args).await,
+        Commands::Interact(args) => agent::handle_interact(args).await,
+        #[cfg(feature = "serve")]
+        Commands::Serve(args) => agent::handle_serve(args).await,
     }
 }
 
@@ -59,6 +68,8 @@ async fn handle_audit(args: AuditArgs) -> Result<(), Box<dyn std::error::Error>>
     };
     config.concurrency = args.concurrency;
     config.delay_ms = args.delay;
+    config.render_js = args.render_js;
+    config.chrome_ws = (args.chrome_ws != "auto").then_some(args.chrome_ws);
     config.user_agent = args.user_agent;
     config.respect_robots = !args.no_robots;
     config.no_aimd = args.no_aimd;
@@ -69,6 +80,15 @@ async fn handle_audit(args: AuditArgs) -> Result<(), Box<dyn std::error::Error>>
     config.exclude_regex = args.exclude;
     config.quiet = args.quiet;
     config.crawl_name = args.name;
+    for h in args.allowed_hosts {
+        if !config
+            .allowed_private_hosts
+            .iter()
+            .any(|existing| existing.eq_ignore_ascii_case(&h))
+        {
+            config.allowed_private_hosts.push(h);
+        }
+    }
 
     if let Some(sm) = args.sitemap {
         config.explicit_sitemaps.push(sm);
@@ -83,8 +103,14 @@ async fn handle_audit(args: AuditArgs) -> Result<(), Box<dyn std::error::Error>>
 
     config.validate()?;
 
-    let db_path = resolve_db_path(args.db_path.clone(), args.local);
-    config.db_path = Some(db_path.clone());
+    let db_path = if !args.ephemeral {
+        let p = resolve_db_path(args.db_path.clone(), args.local);
+        config.db_path = Some(p.clone());
+        Some(p)
+    } else {
+        config.db_path = None;
+        None
+    };
 
     let session_id = format!(
         "crawl_{}",
@@ -95,8 +121,8 @@ async fn handle_audit(args: AuditArgs) -> Result<(), Box<dyn std::error::Error>>
     );
     config.session_id = Some(session_id.clone());
 
-    let (writer_handle, writer_task) = if !args.ephemeral {
-        let db = Database::open(&db_path)?;
+    let (writer_handle, writer_task) = if let Some(ref path) = db_path {
+        let db = Database::open(path)?;
         db.init_crawl_session(&CrawlSessionInit {
             session_id: session_id.clone(),
             target_url: config.start_url.clone(),
@@ -156,16 +182,6 @@ async fn handle_audit(args: AuditArgs) -> Result<(), Box<dyn std::error::Error>>
         }
         let _ = handle.shutdown().await;
         let _ = task.await;
-    }
-
-    if args.ephemeral && db_path.exists() {
-        let _ = std::fs::remove_file(&db_path);
-        let mut shm = db_path.clone();
-        shm.set_extension("db-shm");
-        let _ = std::fs::remove_file(shm);
-        let mut wal = db_path.clone();
-        wal.set_extension("db-wal");
-        let _ = std::fs::remove_file(wal);
     }
 
     // Handle file exports concurrently across CPU cores
@@ -307,7 +323,16 @@ async fn handle_inspect(args: InspectArgs) -> Result<(), Box<dyn std::error::Err
         }
     }
 
-    match inspect_url_with_options(&args.url, &args.user_agent, timeout, custom_headers).await {
+    match inspect_url_with_options_ext(
+        &args.url,
+        &args.user_agent,
+        timeout,
+        custom_headers,
+        false,
+        args.allowed_hosts,
+    )
+    .await
+    {
         Ok((page, fetch, issues)) => {
             if args.format.eq_ignore_ascii_case("json") {
                 let json_output = serde_json::json!({
@@ -359,7 +384,18 @@ async fn handle_inspect(args: InspectArgs) -> Result<(), Box<dyn std::error::Err
 async fn handle_mcp(args: McpArgs) -> Result<(), Box<dyn std::error::Error>> {
     let db_path = resolve_db_path(args.db_path, args.local);
     if args.transport.eq_ignore_ascii_case("stdio") {
-        crate::mcp::run_mcp_server(Some(db_path)).await?;
+        let toolset = crate::mcp::Toolset::parse(&args.tools)
+            .ok_or_else(|| format!("Unknown --tools '{}': use seo, web or all", args.tools))?;
+        let scraper_config = crate::extract::scrape::ScraperConfig {
+            chrome_ws: args.chrome_ws.clone(),
+            ..Default::default()
+        };
+        let ctx = crate::mcp::McpContext::new(Some(db_path))?
+            .with_allow_local_network(args.allow_local_network)
+            .with_allowed_hosts(args.allowed_hosts)
+            .with_toolset(toolset)
+            .with_scraper_config(scraper_config);
+        crate::mcp::run_mcp_server_with_context(ctx).await?;
     } else {
         eprintln!(
             "❌ Transport '{}' is not currently supported. Please use '--transport stdio'.",
@@ -697,6 +733,7 @@ async fn handle_schema(args: SchemaArgs) -> Result<(), Box<dyn std::error::Error
         let client = HttpClient::new(FetchOptions {
             user_agent: args.user_agent,
             timeout: Duration::from_secs(15),
+            allow_all_private_ips: false,
             ..Default::default()
         })?;
         let res = client.fetch(&args.target).await?;

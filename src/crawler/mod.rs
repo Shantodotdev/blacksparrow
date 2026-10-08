@@ -19,11 +19,16 @@ pub mod engine;
 pub mod frontier;
 pub mod inspector;
 pub mod priority;
+pub mod processor;
+pub mod render;
+pub mod render_pool;
 pub mod robots;
 pub mod sitemap;
 pub mod waf;
 
-pub use ai_check::{audit_ai_readiness, AiReadinessReport, AiSearchRisk};
+pub use ai_check::{
+    audit_ai_readiness, audit_ai_readiness_with_options, AiReadinessReport, AiSearchRisk,
+};
 
 pub use aimd::AimdController;
 pub use client::{FetchOptions, FetchResult, HttpClient};
@@ -31,8 +36,10 @@ pub use engine::{
     run_crawl, run_crawl_with_options, CrawlResult, ProgressCallback, ProgressUpdate,
 };
 pub use frontier::{Frontier, FrontierEntry};
-pub use inspector::{inspect_url, inspect_url_with_options};
+pub use inspector::{inspect_url, inspect_url_with_options, inspect_url_with_options_ext};
 pub use priority::{calculate_url_importance, is_pagination_url, parse_url_segments};
+pub use processor::{FetchedPage, PageProcessor, SeoProcessor};
+pub use render::{JsRenderer, RenderedDocument};
 pub use robots::RobotsTxt;
 pub use sitemap::{parse_sitemap, SitemapDocument, SitemapEntry, SitemapIndexEntry};
 pub use waf::detect_waf;

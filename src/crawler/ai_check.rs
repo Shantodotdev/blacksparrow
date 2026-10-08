@@ -87,6 +87,26 @@ pub async fn audit_ai_readiness(
     user_agent: &str,
     timeout: Duration,
 ) -> SeoResult<AiReadinessReport> {
+    let allowed_hosts = crate::core::url::extract_host_and_port_allowlist(target_url);
+    audit_ai_readiness_with_options(target_url, user_agent, timeout, false, allowed_hosts).await
+}
+
+/// Probes a website's `/robots.txt` and `/llms.txt` with SSRF access controls.
+pub async fn audit_ai_readiness_with_options(
+    target_url: &str,
+    user_agent: &str,
+    timeout: Duration,
+    allow_all_private_ips: bool,
+    mut allowed_private_hosts: Vec<String>,
+) -> SeoResult<AiReadinessReport> {
+    for h in crate::core::url::extract_host_and_port_allowlist(target_url) {
+        if !allowed_private_hosts
+            .iter()
+            .any(|existing| existing.eq_ignore_ascii_case(&h))
+        {
+            allowed_private_hosts.push(h);
+        }
+    }
     let parsed = Url::parse(target_url)
         .map_err(|e| SeoError::Url(format!("Invalid target URL '{target_url}': {e}")))?;
 
@@ -104,6 +124,8 @@ pub async fn audit_ai_readiness(
         timeout,
         connect_timeout: Duration::from_secs(5),
         max_redirects: 5,
+        allow_all_private_ips,
+        allowed_private_hosts,
         ..Default::default()
     })?;
 

@@ -72,11 +72,14 @@ pub mod cli;
 pub mod core;
 pub mod crawler;
 pub mod error;
+pub mod extract;
 pub mod graph;
 pub mod mcp;
 pub mod parser;
 pub mod report;
 pub mod rules;
+#[cfg(feature = "serve")]
+pub mod serve;
 pub mod storage;
 
 pub use error::{SeoError, SeoResult};
