@@ -12,12 +12,12 @@
 use crate::core::config::CrawlConfig;
 use crate::core::models::{IssueFinding, PageReport, RuleId, Severity};
 use crate::core::url::{
-    contains_ignore_ascii_case, count_content_facets, has_sorting_facets, is_internal,
-    is_static_asset_url, normalize_url, url_hash,
+    count_content_facets, has_sorting_facets, is_internal, is_static_asset_url, normalize_url,
 };
 use crate::crawler::aimd::AimdController;
-use crate::crawler::client::{FetchOptions, FetchResult, HttpClient};
+use crate::crawler::client::{FetchOptions, HttpClient};
 use crate::crawler::frontier::{Frontier, FrontierEntry};
+use crate::crawler::processor::{FetchedPage, PageProcessor, SeoProcessor};
 use crate::crawler::render::JsRenderer;
 use crate::crawler::robots::RobotsTxt;
 use crate::crawler::sitemap::{parse_sitemap, SitemapDocument};
@@ -26,7 +26,7 @@ use crate::graph::{compute_pagerank, SiteGraph};
 use crate::parser::{parse_html, ParsedPage};
 use crate::report::score::calculate_health_score;
 use crate::rules::catalog::get_rule;
-use crate::rules::{evaluate_graph, evaluate_js_diff, evaluate_page};
+use crate::rules::evaluate_graph;
 use crate::storage::DbWriterHandle;
 use compact_str::CompactString;
 use hashbrown::{HashMap, HashSet};
@@ -91,11 +91,7 @@ pub struct CrawlResult {
 struct WorkerConfig {
     no_aimd: bool,
     static_delay: u64,
-    max_depth: u16,
-    ignore_sorting_facets: bool,
-    max_query_params: usize,
-    include_re: Option<regex::Regex>,
-    exclude_re: Option<regex::Regex>,
+    links: LinkFilter,
     renderer: Option<Arc<Mutex<JsRenderer>>>,
 }
 
@@ -106,7 +102,7 @@ struct WorkerPageOutcome {
     depth: u16,
 }
 
-fn is_html_document(content_type: &str, body: &str) -> bool {
+pub(crate) fn is_html_document(content_type: &str, body: &str) -> bool {
     let ct = content_type.to_lowercase();
     if ct.contains("text/html") || ct.contains("application/xhtml+xml") {
         return true;
@@ -123,70 +119,6 @@ fn is_html_document(content_type: &str, body: &str) -> bool {
     false
 }
 
-fn build_page_report(
-    session_id: &str,
-    url: &str,
-    depth: u16,
-    res: &FetchResult,
-    parsed: Option<ParsedPage>,
-    issues: Vec<IssueFinding>,
-) -> PageReport {
-    let mut report = PageReport {
-        crawl_id: CompactString::new(session_id),
-        url: url.to_string(),
-        url_hash: url_hash(url),
-        final_url: Some(res.final_url.clone()),
-        status_code: res.status_code,
-        content_type: CompactString::new(&res.content_type),
-        size_bytes: res.size_bytes,
-        ttfb_ms: res.ttfb_ms,
-        crawl_depth: depth,
-        is_internal: true,
-        // Allocation-free case-insensitive substring search over raw body bytes
-        // avoids allocating full lowercased copies of HTML documents (up to 2.5GB across 50k pages).
-        has_lorem_ipsum: contains_ignore_ascii_case(&res.body, "lorem ipsum"),
-        is_https: url.starts_with("https://"),
-        has_hsts: res.headers.contains_key("strict-transport-security"),
-        has_csp: res.headers.contains_key("content-security-policy"),
-        has_x_frame: res.headers.contains_key("x-frame-options"),
-        has_x_content_type: res.headers.contains_key("x-content-type-options"),
-        issues,
-        ..Default::default()
-    };
-
-    // Zero-copy move semantics: transfer ownership of parsed structures (links, headings,
-    // images, JSON-LD schemas, hreflangs) directly into the page report without cloning.
-    if let Some(p) = parsed {
-        report.title = p.title;
-        report.title_length = report.title.as_ref().map(|t| t.len() as u16).unwrap_or(0);
-        report.meta_description = p.meta_description;
-        report.meta_desc_length = report
-            .meta_description
-            .as_ref()
-            .map(|d| d.len() as u16)
-            .unwrap_or(0);
-        report.canonical_url = p.canonical_url;
-        report.html_lang = p.html_lang;
-        report.charset = p.charset;
-        report.viewport = p.viewport;
-        report.robots_flags = p.robots_flags;
-        report.h1_primary = p.h1_primary;
-        report.h1_count = p.h1_count;
-        report.h2_headings = p.h2_headings;
-        report.h3_headings = p.h3_headings;
-        report.word_count = p.word_count;
-        report.content_hash = p.content_hash;
-        report.simhash = p.simhash;
-        report.links = p.links;
-        report.images = p.images;
-        report.schemas = p.schemas;
-        report.hreflangs = p.hreflangs;
-        report.page_intent = p.page_intent;
-    }
-
-    report
-}
-
 /// Discovers and parses robots.txt and XML sitemaps before crawling starts.
 ///
 /// 1. Probes `/robots.txt` and extracts sitemap declarations.
@@ -195,7 +127,7 @@ fn build_page_report(
 /// 4. If no sitemaps are declared in robots.txt, falls back to probing convention paths
 ///    (`/sitemap.xml`, `/sitemap_index.xml`, `/wp-sitemap.xml`) per docs/crawler.md §5.2.
 /// 5. Recursively resolves nested sitemap index feeds up to 3 levels deep.
-async fn discover_robots_and_sitemaps(
+pub(crate) async fn discover_robots_and_sitemaps(
     client: &HttpClient,
     seed_url: &str,
     respect_robots: bool,
@@ -367,6 +299,190 @@ async fn discover_robots_and_sitemaps(
     (robots, discovered_pages, site_issues)
 }
 
+/// Sleeps for the politeness delay owed before the next request (static delay or AIMD).
+pub(crate) async fn politeness_wait(
+    aimd: &Mutex<AimdController>,
+    no_aimd: bool,
+    static_delay: u64,
+) {
+    if !no_aimd && static_delay == 0 {
+        let delay_ms = {
+            let a = aimd.lock().await;
+            a.current_delay_ms()
+        };
+        if delay_ms > 0 {
+            tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+        }
+    } else if static_delay > 0 {
+        tokio::time::sleep(Duration::from_millis(static_delay)).await;
+    }
+}
+
+/// Feeds a fetch outcome back into the AIMD controller (`None` = transport failure).
+pub(crate) async fn record_politeness(
+    aimd: &Mutex<AimdController>,
+    no_aimd: bool,
+    static_delay: u64,
+    outcome: Option<(u16, u32)>,
+) {
+    if no_aimd || static_delay != 0 {
+        return;
+    }
+    let mut a = aimd.lock().await;
+    match outcome {
+        Some((status, _)) if status >= 400 => a.record_failure(Some(status), status == 429),
+        Some((_, ttfb_ms)) => a.record_success(ttfb_ms),
+        None => a.record_failure(None, false),
+    }
+}
+
+/// Shared fetch step: politeness delay, HTTP fetch, AIMD feedback, optional Chrome render and
+/// HTML parse. Returns `None` when the request failed at the transport level.
+async fn fetch_page(
+    entry: FrontierEntry,
+    client: Arc<HttpClient>,
+    aimd: Arc<Mutex<AimdController>>,
+    worker_cfg: Arc<WorkerConfig>,
+) -> Option<FetchedPage> {
+    politeness_wait(&aimd, worker_cfg.no_aimd, worker_cfg.static_delay).await;
+
+    let res = match client.fetch(entry.url.as_str()).await {
+        Ok(res) => res,
+        Err(_) => {
+            record_politeness(&aimd, worker_cfg.no_aimd, worker_cfg.static_delay, None).await;
+            return None;
+        }
+    };
+    record_politeness(
+        &aimd,
+        worker_cfg.no_aimd,
+        worker_cfg.static_delay,
+        Some((res.status_code, res.ttfb_ms)),
+    )
+    .await;
+
+    if !is_html_document(&res.content_type, &res.body) {
+        return Some(FetchedPage {
+            entry,
+            fetch: res,
+            rendered: None,
+            parsed: None,
+            raw_parsed: None,
+        });
+    }
+
+    let raw_parsed = parse_html(&res.body, &res.final_url).ok();
+    let (parsed, raw_parsed, rendered) = match (raw_parsed, &worker_cfg.renderer) {
+        (Some(raw), Some(renderer)) => {
+            let rendered = renderer.lock().await.render(&res.final_url).await;
+            match rendered {
+                Ok(document) => match parse_html(&document.html, &document.final_url) {
+                    Ok(rendered_page) => (Some(rendered_page), Some(raw), Some(Ok(document))),
+                    Err(error) => (
+                        Some(ParsedPage::default()),
+                        Some(raw),
+                        Some(Err(format!("Unable to parse Chrome-rendered DOM: {error}"))),
+                    ),
+                },
+                Err(error) => (
+                    Some(ParsedPage::default()),
+                    Some(raw),
+                    Some(Err(format!("Chrome rendering failed: {error}"))),
+                ),
+            }
+        }
+        (raw, _) => (raw, None, None),
+    };
+
+    Some(FetchedPage {
+        entry,
+        fetch: res,
+        rendered,
+        parsed,
+        raw_parsed,
+    })
+}
+
+/// Link-filter settings shared by every crawl mode.
+#[derive(Clone, Default)]
+pub(crate) struct LinkFilter {
+    pub(crate) max_depth: u16,
+    pub(crate) ignore_sorting_facets: bool,
+    pub(crate) max_query_params: usize,
+    pub(crate) include_re: Option<regex::Regex>,
+    pub(crate) exclude_re: Option<regex::Regex>,
+}
+
+/// Filters, normalizes and deduplicates the internal links of a parsed page into frontier
+/// candidates, applying depth limits, facet defenses and include/exclude patterns.
+pub(crate) fn candidate_links(
+    parsed: Option<&ParsedPage>,
+    url_str: &str,
+    depth: u16,
+    filter: &LinkFilter,
+) -> Vec<CompactString> {
+    let Some(p) = parsed else {
+        return Vec::new();
+    };
+    if !(filter.max_depth == 0 || depth < filter.max_depth) {
+        return Vec::new();
+    }
+
+    let is_canonicalized_away = match p.canonical_url {
+        Some(ref canon) => url_str.contains('?') && canon != url_str,
+        None => false,
+    };
+
+    let mut candidates = Vec::with_capacity(p.links.len());
+    // Deduplicate candidate links locally per page to reduce channel traffic and frontier heap operations
+    let mut local_seen = HashSet::with_capacity(p.links.len());
+
+    for link in &p.links {
+        if !link.is_internal || is_static_asset_url(&link.target_url) {
+            continue;
+        }
+
+        // Faceted defense 1: Prune sorting & display facets if configured
+        if filter.ignore_sorting_facets && has_sorting_facets(&link.target_url) {
+            continue;
+        }
+
+        // Faceted defense 2: Prune excessive content query parameters
+        if filter.max_query_params > 0
+            && count_content_facets(&link.target_url) > filter.max_query_params
+        {
+            continue;
+        }
+
+        // Faceted defense 3: Canonical facet pruning
+        if is_canonicalized_away && link.target_url.contains('?') {
+            continue;
+        }
+
+        // Path filter: Include regex
+        if let Some(ref inc) = filter.include_re {
+            if !inc.is_match(&link.target_url) {
+                continue;
+            }
+        }
+
+        // Path filter: Exclude regex
+        if let Some(ref exc) = filter.exclude_re {
+            if exc.is_match(&link.target_url) {
+                continue;
+            }
+        }
+
+        if let Ok(normalized) = normalize_url(&link.target_url) {
+            let compact = CompactString::new(&normalized);
+            if local_seen.insert(compact.clone()) {
+                candidates.push(compact);
+            }
+        }
+    }
+    candidates
+}
+
 /// Fetches a single frontier entry, applies AIMD politeness throttling, evaluates single-page rules, and generates a PageReport.
 ///
 /// Feeds TTFB latency metrics and HTTP response status codes back into the AIMD controller
@@ -378,171 +494,30 @@ async fn fetch_and_audit_page(
     aimd: Arc<Mutex<AimdController>>,
     worker_cfg: Arc<WorkerConfig>,
 ) -> Option<WorkerPageOutcome> {
-    if !worker_cfg.no_aimd && worker_cfg.static_delay == 0 {
-        let delay_ms = {
-            let a = aimd.lock().await;
-            a.current_delay_ms()
-        };
-        if delay_ms > 0 {
-            tokio::time::sleep(Duration::from_millis(delay_ms)).await;
-        }
-    } else if worker_cfg.static_delay > 0 {
-        tokio::time::sleep(Duration::from_millis(worker_cfg.static_delay)).await;
-    }
+    let fetched = fetch_page(entry, client, aimd, Arc::clone(&worker_cfg)).await?;
+    let depth = fetched.entry.depth;
 
-    let url_str = entry.url.as_str();
-    let fetch_res = client.fetch(url_str).await;
+    // Parallel link filtering, normalization, and deduplication across worker green tasks:
+    // Performing URL parsing, regex evaluations, query facet pruning, and normalization
+    // inside concurrent Tokio worker tasks distributes heavy CPU work across all cores,
+    // preventing the single coordinator task from locking the frontier mutex for long durations.
+    let candidate_urls = candidate_links(
+        fetched.parsed.as_ref(),
+        fetched.entry.url.as_str(),
+        depth,
+        &worker_cfg.links,
+    );
 
-    match fetch_res {
-        Ok(res) => {
-            if !worker_cfg.no_aimd && worker_cfg.static_delay == 0 {
-                let mut a = aimd.lock().await;
-                if res.status_code >= 400 {
-                    a.record_failure(Some(res.status_code), res.status_code == 429);
-                } else {
-                    a.record_success(res.ttfb_ms);
-                }
-            }
+    let processor = SeoProcessor {
+        session_id: session_id.to_string(),
+    };
+    let report = processor.process(fetched);
 
-            let (parsed, js_issues) = if is_html_document(&res.content_type, &res.body) {
-                let raw_parsed = parse_html(&res.body, &res.final_url).ok();
-                if let (Some(raw), Some(renderer)) = (raw_parsed.as_ref(), &worker_cfg.renderer) {
-                    let rendered = renderer.lock().await.render(&res.final_url).await;
-                    match rendered {
-                        Ok(document) => match parse_html(&document.html, &document.final_url) {
-                            Ok(rendered_page) => {
-                                let issues = evaluate_js_diff(
-                                    raw,
-                                    &rendered_page,
-                                    &res.final_url,
-                                    &document.final_url,
-                                    &document.runtime_errors,
-                                );
-                                (Some(rendered_page), issues)
-                            }
-                            Err(error) => {
-                                let fallback = ParsedPage::default();
-                                let issues = evaluate_js_diff(
-                                    raw,
-                                    &fallback,
-                                    &res.final_url,
-                                    &res.final_url,
-                                    &[format!("Unable to parse Chrome-rendered DOM: {error}")],
-                                );
-                                (Some(fallback), issues)
-                            }
-                        },
-                        Err(error) => {
-                            let fallback = ParsedPage::default();
-                            let issues = evaluate_js_diff(
-                                raw,
-                                &fallback,
-                                &res.final_url,
-                                &res.final_url,
-                                &[format!("Chrome rendering failed: {error}")],
-                            );
-                            (Some(fallback), issues)
-                        }
-                    }
-                } else {
-                    (raw_parsed, Vec::new())
-                }
-            } else {
-                (None, Vec::new())
-            };
-
-            let mut page_issues = if let Some(ref p) = parsed {
-                evaluate_page(p, &res)
-            } else {
-                Vec::new()
-            };
-            page_issues.extend(js_issues);
-
-            let depth = entry.depth;
-
-            // Parallel link filtering, normalization, and deduplication across worker green tasks:
-            // Performing URL parsing, regex evaluations, query facet pruning, and normalization
-            // inside concurrent Tokio worker tasks distributes heavy CPU work across all cores,
-            // preventing the single coordinator task from locking the frontier mutex for long durations.
-            let candidate_urls = if let Some(ref p) = parsed {
-                if worker_cfg.max_depth == 0 || depth < worker_cfg.max_depth {
-                    let is_canonicalized_away = match p.canonical_url {
-                        Some(ref canon) => url_str.contains('?') && canon != url_str,
-                        None => false,
-                    };
-
-                    let mut candidates = Vec::with_capacity(p.links.len());
-                    // Deduplicate candidate links locally per page to reduce channel traffic and frontier heap operations
-                    let mut local_seen = HashSet::with_capacity(p.links.len());
-
-                    for link in &p.links {
-                        if !link.is_internal || is_static_asset_url(&link.target_url) {
-                            continue;
-                        }
-
-                        // Faceted defense 1: Prune sorting & display facets if configured
-                        if worker_cfg.ignore_sorting_facets && has_sorting_facets(&link.target_url)
-                        {
-                            continue;
-                        }
-
-                        // Faceted defense 2: Prune excessive content query parameters
-                        if worker_cfg.max_query_params > 0
-                            && count_content_facets(&link.target_url) > worker_cfg.max_query_params
-                        {
-                            continue;
-                        }
-
-                        // Faceted defense 3: Canonical facet pruning
-                        if is_canonicalized_away && link.target_url.contains('?') {
-                            continue;
-                        }
-
-                        // Path filter: Include regex
-                        if let Some(ref inc) = worker_cfg.include_re {
-                            if !inc.is_match(&link.target_url) {
-                                continue;
-                            }
-                        }
-
-                        // Path filter: Exclude regex
-                        if let Some(ref exc) = worker_cfg.exclude_re {
-                            if exc.is_match(&link.target_url) {
-                                continue;
-                            }
-                        }
-
-                        if let Ok(normalized) = normalize_url(&link.target_url) {
-                            let compact = CompactString::new(&normalized);
-                            if local_seen.insert(compact.clone()) {
-                                candidates.push(compact);
-                            }
-                        }
-                    }
-                    candidates
-                } else {
-                    Vec::new()
-                }
-            } else {
-                Vec::new()
-            };
-
-            let report = build_page_report(session_id, url_str, depth, &res, parsed, page_issues);
-
-            Some(WorkerPageOutcome {
-                report,
-                candidate_urls,
-                depth,
-            })
-        }
-        Err(_) => {
-            if !worker_cfg.no_aimd && worker_cfg.static_delay == 0 {
-                let mut a = aimd.lock().await;
-                a.record_failure(None, false);
-            }
-            None
-        }
-    }
+    Some(WorkerPageOutcome {
+        report,
+        candidate_urls,
+        depth,
+    })
 }
 
 /// Constructs the directed site graph, computes PageRank, evaluates whole-site graph rules, and calculates the health score.
@@ -699,11 +674,13 @@ pub async fn run_crawl_with_options(
     let worker_config = Arc::new(WorkerConfig {
         no_aimd: config.no_aimd,
         static_delay: config.delay_ms,
-        max_depth: config.max_depth,
-        ignore_sorting_facets: config.ignore_sorting_facets,
-        max_query_params: config.max_query_params,
-        include_re: include_re.clone(),
-        exclude_re: exclude_re.clone(),
+        links: LinkFilter {
+            max_depth: config.max_depth,
+            ignore_sorting_facets: config.ignore_sorting_facets,
+            max_query_params: config.max_query_params,
+            include_re: include_re.clone(),
+            exclude_re: exclude_re.clone(),
+        },
         renderer: js_renderer.clone(),
     });
 

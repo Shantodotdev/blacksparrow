@@ -57,11 +57,23 @@ unicode-width = "0.2"
 chromiumoxide = { version = "0.9", default-features = false }
 futures = "0.3"
 tempfile = "3.15"
+dom_query = "0.24"
+rs-trafilatura = "0.2"
+tiktoken-rs = "0.12"
+globset = "0.4"
+lopdf = "0.36"
+axum = { version = "0.8", optional = true }
+
+[features]
+default = []
+# HTTP API server (`blacksparrow serve`). Kept optional so the default binary stays lean.
+serve = ["dep:axum"]
 
 
 [dev-dependencies]
 wiremock = "0.6"
 tokio-test = "0.4"
+tower = { version = "0.5", features = ["util"] }
 
 [profile.release]
 opt-level = "z"
