@@ -12,6 +12,7 @@
 //! - [`document`]: HTML / Markdown / text to [`PageDocument`], formats and token budgets.
 //! - [`scrape`]: the network side: guard, cache, robots.txt, Markdown fast path, Chrome.
 //! - [`pdf`]: PDF text with page markers.
+//! - [`interact`]: click, type and scroll in Chrome before reading, with snapshot references.
 //! - [`map`]: fast URL discovery from sitemaps and page links.
 //! - [`crawl`]: multi-page content crawl with cross-page [`boilerplate`] removal.
 //! - [`jobs`]: background crawls with progress, pagination and cancel.
@@ -30,6 +31,7 @@ pub mod crawl;
 pub mod document;
 pub mod fields;
 pub mod find;
+pub mod interact;
 pub mod jobs;
 pub mod main_content;
 pub mod map;

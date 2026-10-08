@@ -36,6 +36,9 @@ pub const HIDDEN_MARKER_ATTR: &str = "data-bs-hidden";
 /// Attribute holding accessibility snapshot references (`e12`).
 pub const REF_ATTR: &str = "data-bs-ref";
 
+/// Extra time after the render limit to read a page whose steps ran out of time.
+const READ_GRACE: Duration = Duration::from_secs(5);
+
 const TRACKER_HOSTS: &[&str] = &[
     "google-analytics.com",
     "googletagmanager.com",
@@ -259,14 +262,19 @@ impl RenderPool {
         let limit = request.timeout.unwrap_or(Duration::from_secs(30));
         let result = match guard_task {
             Ok(task) => {
-                let outcome =
-                    tokio::time::timeout(limit, self.drive(&page, url, request, limit)).await;
+                // Steps stop at `limit`; the grace period lets a page whose step timed out
+                // still be read and returned with the step error.
+                let outcome = tokio::time::timeout(
+                    limit + READ_GRACE,
+                    self.drive(&page, url, request, limit),
+                )
+                .await;
                 task.abort();
                 match outcome {
                     Ok(inner) => inner,
                     Err(_) => Err(SeoError::Network(format!(
                         "Rendering {url} exceeded {} ms",
-                        limit.as_millis()
+                        (limit + READ_GRACE).as_millis()
                     ))),
                 }
             }
