@@ -3,6 +3,7 @@
 //! Provides Write-Ahead Logging (WAL) database storage, asynchronous real-time batch
 //! writing, transactional integrity, and querying for crawl sessions, pages, and issues.
 
+pub mod documents;
 pub mod queries;
 pub mod sqlite;
 pub mod writer;
@@ -13,7 +14,8 @@ pub use queries::{
     update_crawl_status, CrawlSessionInit, IssueFilterCriteria,
 };
 pub use sqlite::{
-    connect_configured, default_db_path, local_db_path, open_connection, resolve_db_path, SCHEMA,
+    connect_configured, default_db_path, local_db_path, open_connection, resolve_db_path,
+    LATEST_SCHEMA_VERSION, SCHEMA,
 };
 pub use writer::{spawn_db_writer, DbMessage, DbWriterHandle};
 
