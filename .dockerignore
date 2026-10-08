@@ -1,0 +1,9 @@
+target/
+**/node_modules/
+.git/
+inspiration/
+docs-site/
+*.db
+*.db-wal
+*.db-shm
+reports/
