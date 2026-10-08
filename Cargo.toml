@@ -61,7 +61,8 @@ dom_query = "0.24"
 rs-trafilatura = "0.2"
 tiktoken-rs = "0.12"
 globset = "0.4"
-lopdf = "0.36"
+lopdf = { version = "0.36", default-features = false }
+base64 = "0.22"
 axum = { version = "0.8", optional = true }
 
 [features]
@@ -74,6 +75,10 @@ serve = ["dep:axum"]
 wiremock = "0.6"
 tokio-test = "0.4"
 tower = { version = "0.5", features = ["util"] }
+
+# rs-trafilatura prints DEBUG lines to stderr when built with debug assertions.
+[profile.dev.package.rs-trafilatura]
+debug-assertions = false
 
 [profile.release]
 opt-level = "z"

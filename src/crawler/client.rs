@@ -136,6 +136,20 @@ impl HttpClient {
     ///
     /// Returns [`SeoError::Network`] on DNS failure, connection refused, timeout, or redirect loops.
     pub async fn fetch(&self, url: &str) -> SeoResult<FetchResult> {
+        self.fetch_with_headers(url, &[]).await
+    }
+
+    /// Like [`HttpClient::fetch`], adding `extra_headers` to every same-origin hop
+    /// (for example `Accept: text/markdown` for the agent Markdown fast path).
+    ///
+    /// # Errors
+    ///
+    /// Same as [`HttpClient::fetch`].
+    pub async fn fetch_with_headers(
+        &self,
+        url: &str,
+        extra_headers: &[(&str, &str)],
+    ) -> SeoResult<FetchResult> {
         validate_url_safety(
             url,
             self.options.allow_all_private_ips,
@@ -160,6 +174,14 @@ impl HttpClient {
                 (Some(init), Some(curr)) => *init == curr.origin(),
                 _ => true,
             };
+
+            for (key, val) in extra_headers {
+                if let (Ok(name), Ok(value)) =
+                    (HeaderName::from_str(key), HeaderValue::from_str(val))
+                {
+                    req = req.header(name, value);
+                }
+            }
 
             if is_same_origin {
                 for (key, val) in &self.options.custom_headers {

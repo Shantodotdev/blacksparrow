@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Configuring retries - Relay SDK docs</title>
+  <meta name="description" content="How the Relay SDK retries failed requests and how to tune it.">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header><nav class="topnav"><a href="/">Relay</a> <a href="/docs">Docs</a> <a href="/pricing">Pricing</a> <a href="/blog">Blog</a></nav></header>
+  <div class="docs-layout">
+    <nav class="docs-sidebar" aria-label="Documentation">
+      <ul>
+        <li><a href="/docs/install">Installation</a></li>
+        <li><a href="/docs/quickstart">Quickstart</a></li>
+        <li><a href="/docs/retries">Configuring retries</a></li>
+        <li><a href="/docs/timeouts">Timeouts</a></li>
+        <li><a href="/docs/errors">Error handling</a></li>
+      </ul>
+    </nav>
+    <main id="main">
+      <nav class="breadcrumbs"><a href="/docs">Docs</a> / <a href="/docs/client">Client</a> / Retries</nav>
+      <h1>Configuring retries</h1>
+      <p>The Relay client retries requests that fail with a network error or a 5xx response. Retries use exponential backoff with full jitter, starting at 200 ms and capped at 10 seconds.</p>
+      <h2>Changing the retry limit</h2>
+      <p>Set <code>max_retries</code> when you build the client. The default is 3; set it to 0 to turn retries off.</p>
+      <pre><code class="language-rust">let client = Relay::builder()
+    .max_retries(5)
+    .build()?;</code></pre>
+      <h2>Which errors are retried</h2>
+      <table>
+        <tr><th>Error</th><th>Retried</th></tr>
+        <tr><td>Connection reset</td><td>Yes</td></tr>
+        <tr><td>HTTP 429</td><td>Yes, after Retry-After</td></tr>
+        <tr><td>HTTP 400</td><td>No</td></tr>
+      </table>
+      <p>See <a href="/docs/errors">Error handling</a> for how to inspect the final error.</p>
+      <div class="pagination"><a href="/docs/quickstart">← Quickstart</a> <a href="/docs/timeouts">Timeouts →</a></div>
+    </main>
+  </div>
+  <footer><p>Relay is open source under the MIT license.</p></footer>
+</body>
+</html>

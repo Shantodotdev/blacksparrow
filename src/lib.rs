@@ -72,6 +72,7 @@ pub mod cli;
 pub mod core;
 pub mod crawler;
 pub mod error;
+pub mod extract;
 pub mod graph;
 pub mod mcp;
 pub mod parser;

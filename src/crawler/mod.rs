@@ -21,6 +21,7 @@ pub mod inspector;
 pub mod priority;
 pub mod processor;
 pub mod render;
+pub mod render_pool;
 pub mod robots;
 pub mod sitemap;
 pub mod waf;
