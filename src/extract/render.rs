@@ -378,22 +378,6 @@ fn proxy_from_env() -> Option<String> {
         .filter(|value| !value.trim().is_empty())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn recognises_tracker_requests_but_not_site_content() {
-        let tracker = |raw: &str| is_tracker(&Url::parse(raw).unwrap());
-        assert!(tracker("https://www.googletagmanager.com/gtm.js?id=GTM-1"));
-        assert!(tracker("https://connect.facebook.net/en_US/fbevents.js"));
-        assert!(tracker("https://www.facebook.com/tr?id=1&ev=PageView"));
-        assert!(!tracker("https://www.facebook.com/SampleBakery"));
-        assert!(!tracker("https://shop.test/static/app.js"));
-        assert!(!tracker("https://notgoogletagmanager.com/x.js"));
-    }
-}
-
 /// Collects rules of stylesheets that have no text in the DOM: constructed sheets and `<style>`
 /// elements filled through `insertRule` (CSS-in-JS). Linked sheets are fetched separately.
 const CSSOM_SCRIPT: &str = r#"(() => {
@@ -417,4 +401,20 @@ const CSSOM_SCRIPT: &str = r#"(() => {
 /// The CSSOM script with its size limit filled in.
 pub fn cssom_script() -> String {
     CSSOM_SCRIPT.replace("MAX", &MAX_CSSOM_CHARS.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recognises_tracker_requests_but_not_site_content() {
+        let tracker = |raw: &str| is_tracker(&Url::parse(raw).unwrap());
+        assert!(tracker("https://www.googletagmanager.com/gtm.js?id=GTM-1"));
+        assert!(tracker("https://connect.facebook.net/en_US/fbevents.js"));
+        assert!(tracker("https://www.facebook.com/tr?id=1&ev=PageView"));
+        assert!(!tracker("https://www.facebook.com/SampleBakery"));
+        assert!(!tracker("https://shop.test/static/app.js"));
+        assert!(!tracker("https://notgoogletagmanager.com/x.js"));
+    }
 }
