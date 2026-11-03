@@ -40,6 +40,29 @@ const GENERIC_FAMILIES: &[&str] = &[
     "revert",
     "-apple-system",
     "blinkmacsystemfont",
+    // Operating-system fonts of the "system font stack"; they say nothing about the brand.
+    "segoe ui",
+    "segoe ui emoji",
+    "segoe ui symbol",
+    "apple color emoji",
+    "noto color emoji",
+    "android emoji",
+    "emojisymbols",
+    "helvetica neue",
+    "sfmono-regular",
+    "sf mono",
+    "menlo",
+    "monaco",
+    "consolas",
+    "liberation mono",
+    "courier new",
+    "oxygen",
+    "oxygen-sans",
+    "ubuntu",
+    "cantarell",
+    "fira sans",
+    "droid sans",
+    "noto sans",
 ];
 
 /// Font families that draw symbols rather than lettering.
@@ -1016,7 +1039,7 @@ mod tests {
         assert!(!fonts.iter().any(|(f, _, _)| f.contains("FontAwesome")));
         assert_eq!(analysis.colors.get("#E11D48"), Some(&2));
         assert_eq!(analysis.colors.get("#0F172A"), Some(&1));
-        assert!(analysis.colors.get("#000000").is_none());
+        assert!(!analysis.colors.contains_key("#000000"));
         let evidence = &analysis.evidence["#E11D48"];
         assert_eq!(evidence[0].kind, "css_variable");
         assert_eq!(evidence[0].name.as_deref(), Some("--brand"));
