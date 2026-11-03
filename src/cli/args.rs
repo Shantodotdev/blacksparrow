@@ -172,6 +172,14 @@ pub struct AuditArgs {
     #[arg(long, default_value = "auto")]
     pub chrome_ws: String,
 
+    /// Chrome executable for `--render-js` (default: `CHROME_PATH`, then the `PATH`)
+    #[arg(long, value_name = "PATH")]
+    pub chrome_path: Option<PathBuf>,
+
+    /// Run Chrome without its sandbox (containers, root)
+    #[arg(long, default_value_t = false)]
+    pub chrome_no_sandbox: bool,
+
     /// Custom User-Agent string
     #[arg(short = 'u', long, default_value = "BlackSparrow/1.0")]
     pub user_agent: String,
