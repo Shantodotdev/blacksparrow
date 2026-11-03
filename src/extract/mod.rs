@@ -49,6 +49,8 @@ const MAX_FONTS: usize = 30;
 const MAX_LINKS_PER_PAGE: usize = 200;
 /// Pages and stylesheets fetched at the same time.
 const FETCH_CONCURRENCY: usize = 4;
+/// Least time left for retrying the homepage after a network error.
+const HOMEPAGE_RETRY_RESERVE: Duration = Duration::from_secs(30);
 /// Time kept back for stylesheets and output when deciding whether to render more pages.
 const RENDER_RESERVE: Duration = Duration::from_secs(12);
 
@@ -526,8 +528,14 @@ async fn extract_with(
     start: &Url,
     icon_fonts: &Regex,
 ) -> SiteExtract {
-    // Homepage.
-    let document = match run.fetch(start).await {
+    // Homepage, with one retry: a dropped connection or a slow first answer is common on small
+    // shared hosts and should not lose the whole site.
+    let mut first = run.fetch(start).await;
+    if matches!(first, Err(FetchFailure::Network(_))) && run.remaining() > HOMEPAGE_RETRY_RESERVE {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        first = run.fetch(start).await;
+    }
+    let document = match first {
         Ok(document) => document,
         Err(failure) => {
             let outcome = match &failure {
