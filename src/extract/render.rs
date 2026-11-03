@@ -28,8 +28,8 @@ use tokio::task::JoinHandle;
 use url::Url;
 
 /// Longest a rendered page may wait for its text to stop changing after load.
-const SETTLE_LIMIT: Duration = Duration::from_secs(6);
-const SETTLE_POLL: Duration = Duration::from_millis(400);
+const SETTLE_LIMIT: Duration = Duration::from_secs(5);
+const SETTLE_POLL: Duration = Duration::from_millis(300);
 /// Most CSSOM text read from a rendered page (CSS-in-JS rules).
 const MAX_CSSOM_CHARS: usize = 2_000_000;
 
@@ -43,9 +43,13 @@ const LEAN_ARGS: &[&str] = &[
     "--disable-component-update",
     "--disable-default-apps",
     "--disable-sync",
-    "--disable-features=Translate,MediaRouter,OptimizationHints,AutofillServerCommunication,InterestFeedContentSuggestions,CalculateNativeWinOcclusion",
+    // One flag only: Chromium reads the last --disable-features. Site isolation is off because
+    // each run has a fresh profile with no cookies or logins to protect, and it costs a renderer
+    // process per cross-site frame (ads, video embeds).
+    "--disable-features=Translate,MediaRouter,OptimizationHints,AutofillServerCommunication,InterestFeedContentSuggestions,CalculateNativeWinOcclusion,IsolateOrigins,site-per-process",
+    "--disable-site-isolation-trials",
     "--blink-settings=imagesEnabled=false",
-    "--renderer-process-limit=2",
+    "--renderer-process-limit=1",
     "--js-flags=--max-old-space-size=384",
     "--mute-audio",
     "--no-first-run",
@@ -270,10 +274,54 @@ impl Renderer {
     }
 }
 
+/// Hosts of analytics, advertising and session-recording scripts: they cost CPU and network
+/// and never add page content.
+const TRACKER_HOSTS: &[&str] = &[
+    "googletagmanager.com",
+    "google-analytics.com",
+    "analytics.google.com",
+    "doubleclick.net",
+    "googleadservices.com",
+    "googlesyndication.com",
+    "connect.facebook.net",
+    "facebook.com/tr",
+    "hotjar.com",
+    "clarity.ms",
+    "analytics.tiktok.com",
+    "snap.licdn.com",
+    "static.ads-twitter.com",
+    "bat.bing.com",
+    "cdn.mxpnl.com",
+    "cdn.segment.com",
+    "fullstory.com",
+    "mouseflow.com",
+    "yandex.ru/metrika",
+    "mc.yandex.ru",
+];
+
+fn is_tracker(url: &Url) -> bool {
+    let host = url.host_str().unwrap_or("").to_ascii_lowercase();
+    let host_path = format!("{host}{}", url.path());
+    TRACKER_HOSTS.iter().any(|tracker| {
+        if tracker.contains('/') {
+            host_path.starts_with(tracker) || host_path.contains(&format!(".{tracker}"))
+        } else {
+            host == *tracker || host.ends_with(&format!(".{tracker}"))
+        }
+    })
+}
+
 async fn request_allowed(event: &EventRequestPaused, policy: Option<AddressPolicy>) -> bool {
     if matches!(
         event.resource_type,
-        ResourceType::Image | ResourceType::Media | ResourceType::Font | ResourceType::Manifest
+        ResourceType::Image
+            | ResourceType::Media
+            | ResourceType::Font
+            | ResourceType::Manifest
+            | ResourceType::Ping
+            | ResourceType::CspViolationReport
+            | ResourceType::Prefetch
+            | ResourceType::TextTrack
     ) {
         return false;
     }
@@ -284,6 +332,9 @@ async fn request_allowed(event: &EventRequestPaused, policy: Option<AddressPolic
     let Ok(url) = parse_web_url(raw) else {
         return false;
     };
+    if is_tracker(&url) {
+        return false;
+    }
     match policy {
         Some(policy) => policy.check_url(&url).await.is_ok(),
         None => true,
@@ -305,7 +356,10 @@ async fn settle(page: &Page) {
             .ok()
             .and_then(|result| result.into_value().ok())
             .unwrap_or(-1);
-        if length >= 0 && length == last {
+        // Carousels and timers keep changing a page's text a little; a change under 2% (or 20
+        // characters) is the page at rest.
+        let tolerance = (last / 50).max(20);
+        if length >= 0 && last >= 0 && (length - last).abs() <= tolerance {
             stable += 1;
             if stable >= 2 {
                 return;
@@ -322,6 +376,22 @@ fn proxy_from_env() -> Option<String> {
         .iter()
         .find_map(|key| std::env::var(key).ok())
         .filter(|value| !value.trim().is_empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recognises_tracker_requests_but_not_site_content() {
+        let tracker = |raw: &str| is_tracker(&Url::parse(raw).unwrap());
+        assert!(tracker("https://www.googletagmanager.com/gtm.js?id=GTM-1"));
+        assert!(tracker("https://connect.facebook.net/en_US/fbevents.js"));
+        assert!(tracker("https://www.facebook.com/tr?id=1&ev=PageView"));
+        assert!(!tracker("https://www.facebook.com/SampleBakery"));
+        assert!(!tracker("https://shop.test/static/app.js"));
+        assert!(!tracker("https://notgoogletagmanager.com/x.js"));
+    }
 }
 
 /// Collects rules of stylesheets that have no text in the DOM: constructed sheets and `<style>`
