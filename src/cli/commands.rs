@@ -4,8 +4,8 @@
 //! `issues`, `check-ai`, `delete`, `clean`, and `schema` commands.
 
 use crate::cli::args::{
-    AuditArgs, CheckAiArgs, CleanArgs, Cli, Commands, DeleteArgs, InspectArgs, IssuesArgs,
-    ListArgs, McpArgs, ReportArgs, SchemaArgs,
+    AuditArgs, CheckAiArgs, CleanArgs, Cli, Commands, DeleteArgs, ExtractArgs, InspectArgs,
+    IssuesArgs, ListArgs, McpArgs, ReportArgs, SchemaArgs,
 };
 use crate::core::config::CrawlConfig;
 use crate::core::models::{IssueCategory, Severity};
@@ -40,7 +40,47 @@ pub async fn execute(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         Commands::Delete(args) => handle_delete(args).await,
         Commands::Clean(args) => handle_clean(args).await,
         Commands::Schema(args) => handle_schema(args).await,
+        Commands::Extract(args) => handle_extract(args).await,
     }
+}
+
+/// Extracts a website and prints the JSON document.
+async fn handle_extract(args: ExtractArgs) -> Result<(), Box<dyn std::error::Error>> {
+    use crate::extract::{extract_site, ExtractOptions, RenderMode};
+
+    let mut options = ExtractOptions::new();
+    options.max_pages = args.max_pages.max(1);
+    options.max_stylesheets = args.max_stylesheets;
+    options.pages = args.pages;
+    options.render = match args.render.as_str() {
+        "always" => RenderMode::Always,
+        "never" => RenderMode::Never,
+        _ => RenderMode::Auto,
+    };
+    options.render_options.chrome_path = args
+        .chrome_path
+        .or_else(|| std::env::var_os("CHROME_PATH").map(PathBuf::from));
+    options.render_options.chrome_ws = args.chrome_ws;
+    options.render_options.extra_args = args.chrome_args;
+    options.render_options.no_sandbox = args.chrome_no_sandbox;
+    options.allow_private_network = args.allow_private_network;
+    options.timeout = Duration::from_secs(args.timeout_secs.max(5));
+    options.request_timeout = Duration::from_secs(args.request_timeout_secs.max(1));
+    if let Some(agent) = args.user_agent {
+        options.user_agent = agent;
+    }
+
+    let result = extract_site(&args.url, options).await?;
+    let json = if args.pretty {
+        serde_json::to_string_pretty(&result)?
+    } else {
+        serde_json::to_string(&result)?
+    };
+    match args.output {
+        Some(path) => std::fs::write(path, json)?,
+        None => println!("{json}"),
+    }
+    Ok(())
 }
 
 /// Executes a full or partial website audit crawl.
