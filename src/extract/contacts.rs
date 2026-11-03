@@ -83,6 +83,36 @@ fn bd_mobile() -> &'static Regex {
     regex(&CELL, r"(?:\+?880[\s.-]?|0)1[3-9]\d{2}(?:[\s.-]?\d){6}")
 }
 
+/// A Bangladeshi number in international form (+880 or 880, then 9 to 10 digits): landlines and
+/// IP-phone numbers as well as mobiles.
+fn bd_international() -> &'static Regex {
+    static CELL: OnceLock<Regex> = OnceLock::new();
+    regex(&CELL, r"\+?880[\s.-]?\d(?:[\s.-]?\d){8,9}")
+}
+
+/// A run of digits that may be a phone number, with common separators.
+fn digit_run() -> &'static Regex {
+    static CELL: OnceLock<Regex> = OnceLock::new();
+    regex(&CELL, r"\+?\d[\d\s().-]{3,20}\d")
+}
+
+/// Words that announce a phone number on the same or the next line.
+const PHONE_WORDS: &[&str] = &[
+    "hotline",
+    "call",
+    "phone",
+    "mobile",
+    "tel",
+    "contact",
+    "helpline",
+    "whatsapp",
+    "হটলাইন",
+    "ফোন",
+    "মোবাইল",
+    "যোগাযোগ",
+    "কল",
+];
+
 fn tel_link() -> &'static Regex {
     static CELL: OnceLock<Regex> = OnceLock::new();
     regex(&CELL, r"(?i)tel:([+\d][\d\s().-]{5,20}\d)")
@@ -142,12 +172,76 @@ pub fn find_phones(text: &str) -> Vec<String> {
             push_unique(&mut found, m.as_str().trim().to_string());
         }
     }
+    for m in bd_international().find_iter(&plain) {
+        let before = m.start().checked_sub(1).map(|i| bytes[i]);
+        let after = bytes.get(m.end()).copied();
+        if !matches!(before, Some(b) if b.is_ascii_digit())
+            && !matches!(after, Some(b) if b.is_ascii_digit())
+        {
+            push_unique(&mut found, m.as_str().trim().to_string());
+        }
+    }
     for caps in tel_link().captures_iter(&plain) {
         if let Some(number) = caps.get(1) {
             push_unique(&mut found, number.as_str().trim().to_string());
         }
     }
+    for number in announced_numbers(&plain) {
+        push_unique(&mut found, number);
+    }
     found
+}
+
+/// Short numbers (hotlines such as 16516, landlines) on a line that names a phone, or on the line
+/// after one ("Hotline:", a "Contact" heading). Link targets are skipped, so an order number in a
+/// URL is never read as a phone.
+fn announced_numbers(text: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    let mut announced = false;
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let lower = trimmed.to_lowercase();
+        let names_phone = PHONE_WORDS.iter().any(|word| lower.contains(word));
+        if names_phone || announced {
+            let visible = strip_link_targets(trimmed);
+            for m in digit_run().find_iter(&visible) {
+                let digits = m.as_str().chars().filter(char::is_ascii_digit).count();
+                let before = visible[..m.start()].chars().last();
+                let lead = visible[..m.start()].to_lowercase();
+                let lead = lead.trim_end();
+                let not_phone = matches!(before, Some('৳' | '$' | '€' | '£' | '#'))
+                    || ["tk", "order", "invoice", "sku", "id", "no", "no."]
+                        .iter()
+                        .any(|word| lead.ends_with(word));
+                // A Bangladeshi number has at most 13 digits (+880 and ten more); pages also write
+                // 880 before an 11-digit local number that keeps its leading 0.
+                let international = m.as_str().trim_start_matches('+').starts_with("880");
+                if ((5..=13).contains(&digits) || (digits == 14 && international)) && !not_phone {
+                    found.push(m.as_str().trim().to_string());
+                }
+            }
+        }
+        announced = names_phone;
+    }
+    found
+}
+
+/// A Markdown line without the `(target)` part of its links.
+fn strip_link_targets(line: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut rest = line;
+    while let Some(start) = rest.find("](") {
+        out.push_str(&rest[..start + 1]);
+        match rest[start..].find(')') {
+            Some(end) => rest = &rest[start + end + 1..],
+            None => return out,
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 /// Email addresses in text (including `mailto:` links), lowercased.
@@ -290,6 +384,19 @@ mod tests {
             phones,
             vec!["01711-223344", "+880 1911 223344", "+88029876543"]
         );
+    }
+
+    #[test]
+    fn finds_hotlines_and_international_landlines_but_not_prices() {
+        let text = "##### Contact\n\n16516 / 88096780016516\n\nPrice ৳ 125000\n\nOrder #1234567 shipped\n\nহটলাইন: ০৯৬১২-৩৪৫৬৭৮\n[Track](https://shop.test/orders/123456789)";
+        let phones = find_phones(text);
+        assert!(phones.contains(&"88096780016516".to_string()), "{phones:?}");
+        assert!(phones.contains(&"16516".to_string()), "{phones:?}");
+        assert!(phones.contains(&"09612-345678".to_string()), "{phones:?}");
+        assert!(!phones
+            .iter()
+            .any(|p| p.contains("125000") || p.contains("1234567")));
+        assert!(!phones.iter().any(|p| p.contains("123456789")));
     }
 
     #[test]
