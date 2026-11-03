@@ -662,3 +662,39 @@ async fn cli_extract_prints_one_json_document() {
     assert_eq!(json["pages"].as_array().unwrap().len(), 4);
     assert_eq!(json["contacts"]["emails"][0], "hello@sweetcrumbs.com.bd");
 }
+
+#[tokio::test]
+async fn audit_render_js_crawls_links_that_only_exist_after_scripts() {
+    let Ok(chrome) = std::env::var("BLACKSPARROW_TEST_CHROME") else {
+        eprintln!("skipped: BLACKSPARROW_TEST_CHROME is not set");
+        return;
+    };
+    let server = MockServer::start().await;
+    serve_site(&server, "spa").await;
+    let mut config = blacksparrow::core::config::CrawlConfig::new(&server.uri()).unwrap();
+    config.max_pages = 5;
+    config.ephemeral = true;
+    config.respect_robots = false;
+    config.quiet = true;
+
+    let plain = blacksparrow::crawler::engine::run_crawl(&config, None)
+        .await
+        .unwrap();
+    assert_eq!(
+        plain.pages.len(),
+        1,
+        "the shell links nowhere without scripts"
+    );
+
+    config.render_js = true;
+    config.chrome_path = Some(PathBuf::from(chrome));
+    config.chrome_no_sandbox = true;
+    let rendered = blacksparrow::crawler::engine::run_crawl(&config, None)
+        .await
+        .unwrap();
+    assert!(
+        rendered.pages.len() >= 2,
+        "the rendered page links to its contact page"
+    );
+    assert!(rendered.pages[0].word_count > 20);
+}

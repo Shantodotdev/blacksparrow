@@ -86,8 +86,15 @@ pub struct CrawlResult {
     pub health_score: u8,
 }
 
+/// Pages rendered in Chromium at the same time during a `render_js` crawl.
+const RENDER_CONCURRENCY: usize = 2;
+
 #[derive(Clone)]
 struct WorkerConfig {
+    /// Headless Chromium for `render_js` crawls; `None` for plain HTTP.
+    renderer: Option<Arc<crate::extract::render::Renderer>>,
+    /// Bounds concurrent renders, which cost far more memory than plain fetches.
+    render_slots: Arc<tokio::sync::Semaphore>,
     no_aimd: bool,
     static_delay: u64,
     max_depth: u16,
@@ -369,6 +376,31 @@ async fn discover_robots_and_sitemaps(
 ///
 /// Feeds TTFB latency metrics and HTTP response status codes back into the AIMD controller
 /// to dynamically optimize request throughput without overloading the target origin.
+/// Replaces an HTML response's body with the page's DOM after its scripts ran. A page that
+/// cannot be rendered keeps its HTTP body, so `render_js` never loses a page.
+async fn render_into(
+    renderer: &crate::extract::render::Renderer,
+    slots: &tokio::sync::Semaphore,
+    res: &mut crate::crawler::client::FetchResult,
+) {
+    if res.status_code >= 400 || !is_html_document(&res.content_type, &res.body) {
+        return;
+    }
+    let Ok(url) = url::Url::parse(&res.final_url) else {
+        return;
+    };
+    let Ok(_slot) = slots.acquire().await else {
+        return;
+    };
+    match renderer.render(&url).await {
+        Ok(rendered) => {
+            res.body = rendered.html;
+            res.body_bytes = res.body.as_bytes().to_vec();
+        }
+        Err(err) => tracing::info!("render failed for {url}: {err}"),
+    }
+}
+
 async fn fetch_and_audit_page(
     session_id: &str,
     entry: FrontierEntry,
@@ -392,7 +424,10 @@ async fn fetch_and_audit_page(
     let fetch_res = client.fetch(url_str).await;
 
     match fetch_res {
-        Ok(res) => {
+        Ok(mut res) => {
+            if let Some(renderer) = worker_cfg.renderer.as_ref() {
+                render_into(renderer, &worker_cfg.render_slots, &mut res).await;
+            }
             if !worker_cfg.no_aimd && worker_cfg.static_delay == 0 {
                 let mut a = aimd.lock().await;
                 if res.status_code >= 400 {
@@ -636,7 +671,32 @@ pub async fn run_crawl_with_options(
         None => None,
     };
 
+    let renderer = if config.render_js {
+        let options = crate::extract::render::RenderOptions {
+            chrome_path: config
+                .chrome_path
+                .clone()
+                .or_else(|| std::env::var_os("CHROME_PATH").map(std::path::PathBuf::from)),
+            chrome_ws: config.chrome_ws.clone(),
+            no_sandbox: config.chrome_no_sandbox,
+            page_timeout: Duration::from_secs(25),
+            user_agent: Some(config.user_agent.clone()),
+            ..Default::default()
+        };
+        match crate::extract::render::Renderer::launch(options).await {
+            Ok(renderer) => Some(Arc::new(renderer)),
+            Err(err) => {
+                tracing::warn!("JavaScript rendering disabled: {err}");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     let worker_config = Arc::new(WorkerConfig {
+        renderer: renderer.clone(),
+        render_slots: Arc::new(tokio::sync::Semaphore::new(RENDER_CONCURRENCY)),
         no_aimd: config.no_aimd,
         static_delay: config.delay_ms,
         max_depth: config.max_depth,
@@ -940,6 +1000,12 @@ pub async fn run_crawl_with_options(
     // of redundant issue clone operations from inside the high-frequency coordinator loop.
     for page in &crawled_pages {
         all_issues.extend(page.issues.iter().cloned());
+    }
+
+    // Every worker task has finished, so the coordinator holds the last references.
+    drop(worker_config);
+    if let Some(renderer) = renderer.and_then(|shared| Arc::try_unwrap(shared).ok()) {
+        renderer.close().await;
     }
 
     let crawl_result = finalize_crawl(

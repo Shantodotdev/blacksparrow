@@ -58,6 +58,10 @@ pub struct CrawlConfig {
     pub render_js: bool,
     /// Remote Chrome WebSocket URL (None = auto-launch local Chrome).
     pub chrome_ws: Option<String>,
+    /// Chrome executable to launch (None = `CHROME_PATH`, then the `PATH`).
+    pub chrome_path: Option<std::path::PathBuf>,
+    /// Launch Chrome without its sandbox (containers, root).
+    pub chrome_no_sandbox: bool,
     /// Custom User-Agent header string.
     pub user_agent: String,
     /// Whether to strictly respect `/robots.txt` disallow directives.
@@ -131,6 +135,8 @@ impl CrawlConfig {
             delay_ms: 0,
             render_js: false,
             chrome_ws: None,
+            chrome_path: None,
+            chrome_no_sandbox: false,
             user_agent: DEFAULT_USER_AGENT.to_string(),
             respect_robots: true,
             proxy: None,
