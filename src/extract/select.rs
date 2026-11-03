@@ -151,6 +151,9 @@ pub fn same_site(url: &Url, home: &Url) -> bool {
 
 /// Chooses up to `max_pages` pages from the homepage's links, best first.
 pub fn select_pages(home: &Url, links: &[PageLink], max_pages: usize) -> Vec<SelectedPage> {
+    if max_pages == 0 {
+        return Vec::new();
+    }
     let home_key = page_key(home);
     let mut scored: Vec<(u32, usize, usize, &'static str, String, String)> = Vec::new();
     let mut seen: Vec<String> = vec![home_key];
@@ -267,6 +270,7 @@ mod tests {
         );
         assert_eq!(chosen[0].kind, "contact");
         assert_eq!(select_pages(&home, &links, 2).len(), 2);
+        assert!(select_pages(&home, &links, 0).is_empty());
     }
 
     #[test]
