@@ -31,6 +31,8 @@ const MAX_LOGO_CANDIDATES: usize = 12;
 const MAX_LINKS: usize = 400;
 const MAX_LINK_TEXT: usize = 200;
 const MAX_DEPTH: usize = 256;
+/// Deepest element nesting parsed; real pages stay far below it.
+const MAX_PARSE_NESTING: usize = 1000;
 const MAX_JSON_LD_BLOCKS: usize = 20;
 const MAX_JSON_LD_CHARS: usize = 200_000;
 
@@ -141,7 +143,7 @@ impl PageAnalysis {
 
 /// Analyses a page; relative URLs resolve against `base`.
 pub fn analyze_page(html: &str, base: &Url) -> PageAnalysis {
-    let document = Html::parse_document(html);
+    let document = Html::parse_document(limit_nesting(html, MAX_PARSE_NESTING));
     let mut analysis = PageAnalysis::default();
     let mut candidates: Vec<(usize, LogoCandidate)> = Vec::new();
     let root = document.root_element();
@@ -230,6 +232,65 @@ pub fn analyze_page(html: &str, base: &Url) -> PageAnalysis {
     analysis.word_count = writer.words;
     analysis.markdown = writer.finish();
     analysis
+}
+
+/// `html` cut at the first tag that nests deeper than `max_depth` elements. The HTML parser's
+/// time grows with the square of the nesting depth, so a hostile page of tens of thousands of
+/// unclosed `<div>`s would otherwise keep a CPU busy for minutes. Depth is counted from tags
+/// alone: void elements, elements the parser closes on its own (`p`, `li`, table cells) and the
+/// raw text of `script`/`style` are not counted.
+fn limit_nesting(html: &str, max_depth: usize) -> &str {
+    const UNCOUNTED: &[&str] = &[
+        "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param",
+        "source", "track", "wbr", "p", "li", "dt", "dd", "tr", "td", "th", "option", "thead",
+        "tbody", "tfoot", "html", "head", "body",
+    ];
+    let bytes = html.as_bytes();
+    let mut depth = 0usize;
+    let mut index = 0usize;
+    while let Some(offset) = bytes[index..].iter().position(|b| *b == b'<') {
+        let start = index + offset;
+        let closing = bytes.get(start + 1) == Some(&b'/');
+        let name_start = start + if closing { 2 } else { 1 };
+        let name_end = bytes[name_start.min(bytes.len())..]
+            .iter()
+            .position(|b| !(b.is_ascii_alphanumeric() || *b == b'-' || *b == b':'))
+            .map_or(bytes.len(), |n| name_start + n);
+        index = name_end.max(start + 1);
+        if name_end == name_start {
+            continue;
+        }
+        let name = html[name_start..name_end].to_ascii_lowercase();
+        let tag_end = bytes[name_end..]
+            .iter()
+            .position(|b| *b == b'>')
+            .map_or(bytes.len(), |n| name_end + n);
+        if closing {
+            if !UNCOUNTED.contains(&name.as_str()) {
+                depth = depth.saturating_sub(1);
+            }
+            index = tag_end.max(index);
+            continue;
+        }
+        let self_closing = tag_end > 0 && bytes.get(tag_end - 1) == Some(&b'/');
+        if matches!(name.as_str(), "script" | "style" | "textarea" | "title") && !self_closing {
+            // Raw text: skip to the matching end tag.
+            let needle = format!("</{name}").into_bytes();
+            index = bytes[tag_end..]
+                .windows(needle.len())
+                .position(|window| window.eq_ignore_ascii_case(&needle))
+                .map_or(bytes.len(), |n| tag_end + n);
+            continue;
+        }
+        if !UNCOUNTED.contains(&name.as_str()) && !self_closing {
+            depth += 1;
+            if depth > max_depth {
+                return &html[..start];
+            }
+        }
+        index = tag_end.max(index);
+    }
+    html
 }
 
 fn read_meta(
@@ -949,6 +1010,17 @@ impl<'a> MarkdownWriter<'a> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn nesting_is_limited_without_touching_normal_pages() {
+        let normal = "<html><body><div><p>one<p>two<ul><li>a<li>b</ul><script>if(a<b){'<div>'}</script></div></body></html>";
+        assert_eq!(super::limit_nesting(normal, 10), normal);
+        let deep = format!("<body>{}text", "<div>".repeat(50));
+        let cut = super::limit_nesting(&deep, 10);
+        assert_eq!(cut.matches("<div>").count(), 10);
+        assert!(!cut.contains("text"));
+        assert_eq!(super::limit_nesting("a < b <", 2), "a < b <");
+    }
+
     use super::*;
 
     fn base() -> Url {

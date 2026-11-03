@@ -235,3 +235,68 @@ During execution, `seolens audit` renders a live colored ANSI dashboard showing:
 - Dynamic AIMD delay and p95 server TTFB.
 - Live issue counters (🚨 Critical, ⚠️ Alerts, ⚡ Warnings).
 - Post-crawl executive scorecard with health score (0–100) and status breakdown.
+
+---
+
+## 5. Site Extraction (`blacksparrow extract <url>`)
+
+Reads a small-business website the way a brand analyst would and prints one JSON document on stdout (or to `--output`). Built for brand kits and AI agents: it replaces paid scrapers with a single local command. English and Bangla text are supported, including Bangla digits in phone numbers.
+
+```bash
+blacksparrow extract https://example.com --pretty
+blacksparrow extract https://example.com --render never -o site.json
+```
+
+### 5.1 Flags
+
+| Flag                          | Default | Meaning                                                                                  |
+| :---------------------------- | :-----: | :--------------------------------------------------------------------------------------- |
+| `-p, --max-pages <N>`         |   `6`   | Pages read in total, homepage included.                                                  |
+| `--page <URL>` (repeatable)   |    -    | Read these pages after the homepage instead of choosing them by rules (kind `requested`). |
+| `--max-stylesheets <N>`       |  `10`   | Most stylesheets fetched for the design analysis (one level of `@import` is followed).   |
+| `--render <auto\|always\|never>` | `auto` | When to use headless Chromium (see 5.4).                                                 |
+| `--chrome-path <PATH>`        |    -    | Chromium executable (falls back to `CHROME_PATH`, then the `PATH`).                      |
+| `--chrome-ws <WS_URL>`        |    -    | Render with an already running Chromium instead of launching one.                        |
+| `--chrome-arg <ARG>`          |    -    | Extra switch for a launched Chromium (repeatable).                                       |
+| `--chrome-no-sandbox`         |  off    | Run Chromium without its sandbox (containers without user namespaces).                   |
+| `--allow-private-network`     |  off    | Allow private and loopback addresses (local test sites only, see 5.5).                   |
+| `--timeout-secs <N>`          |  `90`   | Longest the whole extraction may take (minimum 5).                                       |
+| `--request-timeout-secs <N>`  |  `20`   | Longest one HTTP request may take.                                                       |
+| `-u, --user-agent <UA>`       |    -    | Custom User-Agent for plain fetches.                                                     |
+| `--pretty`                    |  off    | Pretty-print the JSON.                                                                   |
+| `-o, --output <FILE>`         |    -    | Write the JSON to a file instead of stdout.                                              |
+
+### 5.2 Output schema (`schema_version` 1)
+
+- `schema_version`, `generator`, `start_url`, `final_url` (homepage after redirects), `outcome`, `outcome_detail`.
+- `pages[]`: `url`, `final_url`, `kind` (`home`, `contact`, `about`, `catalog`, `locations`, `ordering`, `requested`), `status`, `rendered`, `render_reason` (`js_shell`, `bot_challenge`, `http_error`, `always`), `waf`, `title`, `description`, `lang`, `word_count`, `markdown`, `links[]` (`text`, `url`), and the page's `phones`, `emails`, `whatsapp`, `facebook`, `instagram`.
+- `page_errors[]`: `url`, `error` for chosen pages that could not be read (network failure, non-HTML, or an HTTP error status such as `HTTP 404`).
+- `design`: `title`, `description`, `site_name`, `theme_color`, `colors[]` (`hex`, `occurrences`, `usage_score`, `evidence[]` of where it was seen), `fonts[]` (`family`, `selectors` roles such as `body`, `headings`, `buttons`, `weights`), `logos[]` (`reason`, `url` or inline `svg`, best first), `stylesheets[]` (`url`, `status`, `bytes`, `error`).
+- `contacts`: `phones`, `emails`, `whatsapp`, `facebook`, `instagram` merged across pages. Facebook and Instagram links are canonicalized to the page or profile (share buttons, posts and tracking pixels are dropped).
+- `structured`: schema.org Organization/LocalBusiness facts (`names`, `telephones`, `emails`, `addresses`, `same_as`, `logos`, `descriptions`).
+- `stats`: `elapsed_ms`, `http_fetches`, `http_bytes`, `rendered_pages`, `render_ms`, `blocked_browser_requests`, `peak_rss_kib` (Linux).
+
+### 5.3 Outcomes
+
+The command exits `0` with a JSON document even when the site could not be read; check `outcome`:
+
+| Outcome           | Meaning                                                              |
+| :---------------- | :------------------------------------------------------------------- |
+| `ok`              | The homepage was read.                                               |
+| `unsupported_url` | The URL is malformed or not http(s).                                 |
+| `unresolved`      | The host name does not resolve.                                      |
+| `blocked_address` | The host is a private or reserved address (see 5.5).                 |
+| `unreachable`     | Connection failure, timeout or too many redirects.                   |
+| `bot_protected`   | The homepage is a bot challenge, even after rendering.               |
+| `http_error`      | The homepage answered with an HTTP error status.                     |
+| `not_html`        | The homepage is not an HTML page.                                    |
+
+### 5.4 Rendering
+
+Pages are fetched over plain HTTP first. Chromium is started lazily and only when needed: in `auto` mode for pages that look like empty JavaScript shells (empty app root, "enable JavaScript" notice, almost no text), bot-challenge screens, and 401/403/429/503 answers. `always` renders every HTML page; `never` disables Chromium. Rendering returns the DOM after scripts settled plus CSS rules that exist only in the CSSOM (CSS-in-JS), so colours and fonts of client-rendered sites are found. If Chromium is missing or fails, the plain page is used and the run continues. Images, fonts and media are not downloaded in the browser (counted in `blocked_browser_requests`), and each run uses a temporary browser profile that is deleted afterwards.
+
+A page that merely embeds a protection provider's script but has real content (150 words or more) is not treated as a challenge. Pages nested deeper than 1000 elements are cut at that depth before parsing, because HTML parsing time grows with the square of the nesting depth.
+
+### 5.5 Security guard
+
+The site is untrusted input. Every request, including each redirect hop and every request made by Chromium, is checked: only `http` and `https` are followed, URLs with credentials are refused, and hosts resolving to private, loopback, link-local (cloud metadata `169.254.169.254`), unique-local, multicast, documentation or otherwise reserved addresses are refused unless `--allow-private-network` is set. Name resolution is checked at connect time, so DNS answers cannot swap in a private address afterwards. Response bodies are capped (2 MiB for HTML and CSS) and the whole run is bound by `--timeout-secs`. Only pages linked from the homepage on the same site can be chosen by the rules. `--allow-private-network` exists for local test servers only and must not be used with untrusted URLs.

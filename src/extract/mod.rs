@@ -605,6 +605,13 @@ async fn extract_with(
                 Ok(document) if document.is_html() => {
                     run.count(&document);
                     let content = run.content(document).await;
+                    if content.status >= 400 && !content.rendered {
+                        page_errors.push(PageError {
+                            url,
+                            error: format!("HTTP {}", content.status),
+                        });
+                        continue;
+                    }
                     others.push((url, kind, content));
                 }
                 Ok(document) => {

@@ -1,0 +1,6 @@
+@import url("theme.css");
+@font-face { font-family: "Playfair Display"; src: url(/fonts/pf.woff2) format("woff2"); font-weight: 700; }
+:root { --brand: #c0392b; --ink: #222222; }
+body { font-family: "Hind Siliguri", sans-serif; color: var(--ink); background: #fff8f0; }
+h1 { font-family: "Playfair Display", serif; color: var(--brand); }
+a.btn { background: var(--brand); color: #ffffff; }
