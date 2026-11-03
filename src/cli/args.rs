@@ -55,6 +55,71 @@ pub enum Commands {
     Clean(CleanArgs),
     /// Validate JSON-LD / schema against Google Rich Results guidelines
     Schema(SchemaArgs),
+    /// Extract a business website's content, contacts and design as JSON (brand kits, AI agents)
+    Extract(ExtractArgs),
+}
+
+/// Command-line arguments for the `extract` subcommand.
+#[derive(Args, Debug, Clone)]
+pub struct ExtractArgs {
+    /// Website to read (e.g. `https://example.com`)
+    pub url: String,
+
+    /// Pages to read in total, homepage included
+    #[arg(short = 'p', long, default_value_t = 6)]
+    pub max_pages: usize,
+
+    /// Read these pages after the homepage instead of choosing them by rules (repeatable)
+    #[arg(long = "page", value_name = "URL")]
+    pub pages: Vec<String>,
+
+    /// Most stylesheets fetched for the design analysis
+    #[arg(long, default_value_t = 10)]
+    pub max_stylesheets: usize,
+
+    /// When to render pages in headless Chromium: auto (JavaScript shells and bot challenges), always, never
+    #[arg(long, default_value = "auto", value_parser = ["auto", "always", "never"])]
+    pub render: String,
+
+    /// Chromium executable used for rendering (default: `CHROME_PATH`, then the `PATH`)
+    #[arg(long, value_name = "PATH")]
+    pub chrome_path: Option<PathBuf>,
+
+    /// DevTools WebSocket of a running Chromium to render with instead of launching one
+    #[arg(long, value_name = "WS_URL")]
+    pub chrome_ws: Option<String>,
+
+    /// Extra switch passed to a launched Chromium (repeatable)
+    #[arg(long = "chrome-arg", value_name = "ARG", allow_hyphen_values = true)]
+    pub chrome_args: Vec<String>,
+
+    /// Run Chromium without its sandbox (containers without user namespaces)
+    #[arg(long, default_value_t = false)]
+    pub chrome_no_sandbox: bool,
+
+    /// Allow private and loopback addresses (local test sites only)
+    #[arg(long, default_value_t = false)]
+    pub allow_private_network: bool,
+
+    /// Longest the whole extraction may take, in seconds
+    #[arg(long, default_value_t = 90)]
+    pub timeout_secs: u64,
+
+    /// Longest one HTTP request may take, in seconds
+    #[arg(long, default_value_t = 20)]
+    pub request_timeout_secs: u64,
+
+    /// Custom User-Agent string
+    #[arg(short = 'u', long)]
+    pub user_agent: Option<String>,
+
+    /// Pretty-print the JSON
+    #[arg(long, default_value_t = false)]
+    pub pretty: bool,
+
+    /// Write the JSON to this file instead of stdout
+    #[arg(short = 'o', long, value_name = "FILE")]
+    pub output: Option<PathBuf>,
 }
 
 /// Command-line arguments for the `list` subcommand.
