@@ -76,6 +76,9 @@ pub struct FetcherOptions {
     pub max_body_bytes: usize,
     /// Address policy for every target.
     pub policy: AddressPolicy,
+    /// Egress proxy; `None` connects directly (proxy environment variables are ignored, since a
+    /// proxy resolves names itself and would bypass the guarded resolver).
+    pub proxy: Option<Url>,
 }
 
 /// An HTTP client that only reaches addresses its policy permits.
@@ -92,7 +95,14 @@ impl GuardedFetcher {
     ///
     /// Returns [`SeoError::Network`] when the TLS backend cannot be initialised.
     pub fn new(options: FetcherOptions) -> SeoResult<Self> {
-        let client = reqwest::Client::builder()
+        let builder = match &options.proxy {
+            Some(proxy) => reqwest::Client::builder().proxy(
+                reqwest::Proxy::all(proxy.as_str())
+                    .map_err(|e| SeoError::Config(format!("invalid proxy: {e}")))?,
+            ),
+            None => reqwest::Client::builder().no_proxy(),
+        };
+        let client = builder
             .redirect(Policy::none())
             .timeout(options.timeout)
             .connect_timeout(Duration::from_secs(8))
@@ -164,7 +174,7 @@ impl GuardedFetcher {
                 .unwrap_or("")
                 .to_ascii_lowercase();
             let (bytes, truncated) = self.read_limited(response).await?;
-            let body = String::from_utf8_lossy(&bytes).into_owned();
+            let body = decode_body(&bytes, &content_type);
             let waf = detect_waf(status.as_u16(), &headers, &body);
             return Ok(Document {
                 final_url: current,
@@ -215,6 +225,73 @@ impl GuardedFetcher {
     }
 }
 
+/// Decodes a response body to text: a byte-order mark wins, then the `Content-Type` charset, then
+/// a `<meta charset>` or `@charset` declaration near the start, else UTF-8. Invalid sequences
+/// become U+FFFD, and a body cut at the byte limit never fails to decode.
+pub fn decode_body(bytes: &[u8], content_type: &str) -> String {
+    let encoding = encoding_rs::Encoding::for_bom(bytes)
+        .map(|(encoding, _)| encoding)
+        .or_else(|| header_charset(content_type))
+        .or_else(|| sniffed_charset(bytes, content_type))
+        .unwrap_or(encoding_rs::UTF_8);
+    let (text, _, _) = encoding.decode(bytes);
+    text.into_owned()
+}
+
+/// The encoding named by the `charset` parameter of a `Content-Type` value.
+fn header_charset(content_type: &str) -> Option<&'static encoding_rs::Encoding> {
+    let lower = content_type.to_ascii_lowercase();
+    let rest = &lower[lower.find("charset")? + "charset".len()..];
+    let value = rest.trim_start().strip_prefix('=')?.trim_start();
+    let label: String = value
+        .trim_start_matches(['"', '\''])
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | ':' | '.'))
+        .collect();
+    encoding_rs::Encoding::for_label(label.as_bytes())
+}
+
+/// The encoding declared inside the first 1024 bytes: `@charset` for CSS, `<meta charset>` or
+/// `<meta http-equiv=content-type content="...charset=...">` for HTML.
+fn sniffed_charset(bytes: &[u8], content_type: &str) -> Option<&'static encoding_rs::Encoding> {
+    let head = &bytes[..bytes.len().min(1024)];
+    let text: String = head
+        .iter()
+        .map(|&b| char::from(b.to_ascii_lowercase()))
+        .collect();
+    if content_type.contains("css") || text.trim_start().starts_with("@charset") {
+        let rest = text.trim_start().strip_prefix("@charset")?.trim_start();
+        let label = rest.strip_prefix('"')?.split('"').next()?;
+        return encoding_rs::Encoding::for_label(label.as_bytes());
+    }
+    let mut from = 0;
+    while let Some(offset) = text[from..].find("<meta") {
+        let start = from + offset;
+        let end = text[start..].find('>').map_or(text.len(), |e| start + e);
+        let tag = &text[start..end];
+        from = start + 5;
+        let value = tag.find("charset").and_then(|i| {
+            let rest = tag[i + 7..].trim_start().strip_prefix('=')?.trim_start();
+            let label: String = rest
+                .trim_start_matches(['"', '\''])
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | ':' | '.'))
+                .collect();
+            Some(label)
+        });
+        if let Some(label) = value {
+            // A page that declares UTF-16 in a meta tag is really ASCII-compatible; treat as UTF-8.
+            return match encoding_rs::Encoding::for_label(label.as_bytes()) {
+                Some(e) if e == encoding_rs::UTF_16LE || e == encoding_rs::UTF_16BE => {
+                    Some(encoding_rs::UTF_8)
+                }
+                other => other,
+            };
+        }
+    }
+    None
+}
+
 /// A one-line description of a transport error without the URL (which may be long).
 fn short_error(err: &reqwest::Error) -> String {
     if err.is_timeout() {
@@ -225,5 +302,27 @@ fn short_error(err: &reqwest::Error) -> String {
         "body read failed".to_string()
     } else {
         "request failed".to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::decode_body;
+
+    #[test]
+    fn decodes_by_bom_header_meta_then_utf8() {
+        let latin1 = b"caf\xe9";
+        assert_eq!(decode_body(latin1, "text/html; charset=iso-8859-1"), "café");
+        let meta = b"<html><head><meta charset=\"windows-1252\"></head>caf\xe9";
+        assert!(decode_body(meta, "text/html").ends_with("café"));
+        let http_equiv =
+            b"<meta http-equiv=\"Content-Type\" content=\"text/html; charset=ISO-8859-1\">\xe9";
+        assert!(decode_body(http_equiv, "text/html").ends_with('é'));
+        let bom = [&[0xEF, 0xBB, 0xBF][..], "বাংলা".as_bytes()].concat();
+        assert_eq!(decode_body(&bom, "text/html; charset=latin1"), "বাংলা");
+        assert_eq!(decode_body("বাংলা".as_bytes(), "text/html"), "বাংলা");
+        let css = b"@charset \"windows-1252\"; a:after{content:\"\xe9\"}";
+        assert!(decode_body(css, "text/css").contains('é'));
+        assert_eq!(decode_body(b"ab\xe0\xa6", "text/html"), "ab\u{fffd}");
     }
 }

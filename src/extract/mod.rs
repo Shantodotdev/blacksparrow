@@ -23,6 +23,7 @@ pub mod css;
 pub mod fetch;
 pub mod guard;
 pub mod html;
+pub mod proxy;
 pub mod render;
 pub mod select;
 
@@ -80,6 +81,8 @@ pub struct ExtractOptions {
     pub user_agent: String,
     /// Allows private and loopback addresses (local test sites only).
     pub allow_private_network: bool,
+    /// Egress proxy for all traffic; proxy environment variables are never used.
+    pub proxy: Option<Url>,
     /// Longest the whole extraction may take.
     pub timeout: Duration,
     /// Longest one HTTP request may take.
@@ -103,6 +106,7 @@ impl ExtractOptions {
             },
             user_agent: crate::core::branding::EXTRACT_USER_AGENT.to_string(),
             allow_private_network: false,
+            proxy: None,
             timeout: Duration::from_secs(90),
             request_timeout: Duration::from_secs(20),
             max_body_bytes: 2 * 1024 * 1024,
@@ -370,8 +374,9 @@ impl Run {
         Ok(document)
     }
 
-    /// Renders `url` when rendering is possible and time allows; `None` otherwise.
-    async fn render(&mut self, url: &Url) -> Option<render::Rendered> {
+    /// Renders `url` when rendering is possible and time allows; `None` otherwise. `prefetched`
+    /// is the page's HTML when the browser may reuse it instead of downloading it again.
+    async fn render(&mut self, url: &Url, prefetched: Option<&str>) -> Option<render::Rendered> {
         if self.options.render == RenderMode::Never
             || self.render_failed
             || self.remaining() < RENDER_RESERVE
@@ -382,6 +387,7 @@ impl Run {
         if self.renderer.is_none() {
             let mut options = self.options.render_options.clone();
             options.policy = Some(self.fetcher.policy());
+            options.upstream_proxy = self.options.proxy.clone();
             if options.user_agent.is_none() {
                 options.user_agent = Some(self.options.user_agent.clone());
             }
@@ -397,7 +403,7 @@ impl Run {
         }
         let renderer = self.renderer.as_ref()?;
         let budget = self.remaining().saturating_sub(RENDER_RESERVE / 2);
-        let result = tokio::time::timeout(budget, renderer.render(url)).await;
+        let result = tokio::time::timeout(budget, renderer.render_with(url, prefetched)).await;
         self.stats.render_ms += started.elapsed().as_millis() as u64;
         match result {
             Ok(Ok(rendered)) => {
@@ -444,7 +450,11 @@ impl Run {
         let Some(reason) = reason else {
             return plain;
         };
-        let Some(rendered) = self.render(&document.final_url).await else {
+        // A shell page only needs its scripts run, so the browser reuses the downloaded HTML;
+        // a challenge or an error page must be requested again for the server to decide anew.
+        let prefetched =
+            (reason == "js_shell" && !document.truncated).then_some(document.body.as_str());
+        let Some(rendered) = self.render(&document.final_url, prefetched).await else {
             return plain;
         };
         let final_url = parse_web_url(&rendered.final_url).unwrap_or(document.final_url.clone());
@@ -467,6 +477,27 @@ impl Run {
             cssom: rendered.cssom,
         }
     }
+}
+
+/// Fetches `urls` with bounded concurrency, each within `remaining`, keeping their order.
+async fn fetch_all(
+    fetcher: GuardedFetcher,
+    urls: Vec<String>,
+    remaining: Duration,
+) -> Vec<(String, Result<Document, FetchFailure>)> {
+    stream::iter(urls)
+        .map(|url| {
+            let fetcher = fetcher.clone();
+            async move {
+                let result = tokio::time::timeout(remaining, fetcher.get_text_str(&url))
+                    .await
+                    .unwrap_or_else(|_| Err(FetchFailure::Network("deadline".into())));
+                (url, result)
+            }
+        })
+        .buffered(FETCH_CONCURRENCY)
+        .collect()
+        .await
 }
 
 /// The bot-protection provider when the page is its challenge screen. Protected sites also
@@ -498,6 +529,7 @@ pub async fn extract_site(start_url: &str, options: ExtractOptions) -> SeoResult
         policy: AddressPolicy {
             allow_private_network: options.allow_private_network,
         },
+        proxy: options.proxy.clone(),
     })?;
     let icon_fonts = Regex::new(DEFAULT_ICON_FONT_PATTERN)
         .map_err(|e| crate::error::SeoError::Internal(e.to_string()))?;
@@ -589,26 +621,23 @@ async fn extract_with(
             .map(|url| (url.clone(), "requested"))
             .collect()
     };
+    // The homepage's stylesheets download while the other pages are read and rendered.
+    let stylesheets: Vec<String> = home
+        .analysis
+        .stylesheet_urls
+        .iter()
+        .take(run.options.max_stylesheets)
+        .cloned()
+        .collect();
+    let stylesheets = tokio::spawn(fetch_all(run.fetcher.clone(), stylesheets, run.remaining()));
+
     let mut page_errors = Vec::new();
     let mut others: Vec<(String, &'static str, Content)> = Vec::new();
     if outcome == Outcome::Ok && !wanted.is_empty() {
-        let fetcher = run.fetcher.clone();
-        let remaining = run.remaining();
-        let fetched: Vec<(String, &'static str, Result<Document, FetchFailure>)> =
-            stream::iter(wanted)
-                .map(|(url, kind)| {
-                    let fetcher = fetcher.clone();
-                    async move {
-                        let result = tokio::time::timeout(remaining, fetcher.get_text_str(&url))
-                            .await
-                            .unwrap_or_else(|_| Err(FetchFailure::Network("deadline".into())));
-                        (url, kind, result)
-                    }
-                })
-                .buffered(FETCH_CONCURRENCY)
-                .collect()
-                .await;
-        for (url, kind, result) in fetched {
+        let kinds: Vec<&'static str> = wanted.iter().map(|(_, kind)| *kind).collect();
+        let urls: Vec<String> = wanted.into_iter().map(|(url, _)| url).collect();
+        let fetched = fetch_all(run.fetcher.clone(), urls, run.remaining()).await;
+        for ((url, result), kind) in fetched.into_iter().zip(kinds) {
             match result {
                 Ok(document) if document.is_html() => {
                     run.count(&document);
@@ -637,7 +666,8 @@ async fn extract_with(
         }
     }
 
-    let design = design(run, &home, icon_fonts).await;
+    let stylesheets = stylesheets.await.unwrap_or_default();
+    let design = design(run, &home, icon_fonts, stylesheets).await;
     let mut pages = vec![page_out(start_url.to_string(), "home", &home)];
     for (url, kind, content) in &others {
         pages.push(page_out(url.clone(), kind, content));
@@ -713,8 +743,15 @@ fn page_out(url: String, kind: &'static str, content: &Content) -> PageOut {
 }
 
 fn extend_unique(target: &mut Vec<String>, values: Vec<String>) {
+    extend_unique_by(target, values, |value| value.to_string());
+}
+
+/// Appends the values whose `key` is not in `target` yet, keeping the first-seen spelling.
+fn extend_unique_by(target: &mut Vec<String>, values: Vec<String>, key: impl Fn(&str) -> String) {
     for value in values {
-        if !target.contains(&value) && target.len() < contacts::MAX_CONTACTS {
+        let wanted = key(&value);
+        if !target.iter().any(|known| key(known) == wanted) && target.len() < contacts::MAX_CONTACTS
+        {
             target.push(value);
         }
     }
@@ -731,26 +768,33 @@ fn merge_structured(target: &mut StructuredBusiness, other: &StructuredBusiness)
 }
 
 fn merge_contacts(pages: &[PageOut], structured: &StructuredBusiness) -> ContactsOut {
+    let phone = |value: &str| contacts::phone_key(value);
+    let folded = |value: &str| value.to_lowercase();
     let mut contacts = ContactsOut::default();
     for page in pages {
-        extend_unique(&mut contacts.phones, page.phones.clone());
-        extend_unique(&mut contacts.emails, page.emails.clone());
-        extend_unique(&mut contacts.whatsapp, page.whatsapp.clone());
-        extend_unique(&mut contacts.facebook, page.facebook.clone());
-        extend_unique(&mut contacts.instagram, page.instagram.clone());
+        extend_unique_by(&mut contacts.phones, page.phones.clone(), phone);
+        extend_unique_by(&mut contacts.emails, page.emails.clone(), folded);
+        extend_unique_by(&mut contacts.whatsapp, page.whatsapp.clone(), folded);
+        extend_unique_by(&mut contacts.facebook, page.facebook.clone(), folded);
+        extend_unique_by(&mut contacts.instagram, page.instagram.clone(), folded);
     }
-    extend_unique(&mut contacts.phones, structured.telephones.clone());
-    extend_unique(&mut contacts.emails, structured.emails.clone());
+    extend_unique_by(&mut contacts.phones, structured.telephones.clone(), phone);
+    extend_unique_by(&mut contacts.emails, structured.emails.clone(), folded);
     let profiles = structured.same_as.join(" ");
     let (facebook, instagram) = find_social_links(&profiles);
-    extend_unique(&mut contacts.facebook, facebook);
-    extend_unique(&mut contacts.instagram, instagram);
+    extend_unique_by(&mut contacts.facebook, facebook, folded);
+    extend_unique_by(&mut contacts.instagram, instagram, folded);
     contacts
 }
 
 /// Reads the homepage's design: inline styles, CSSOM rules, Google Fonts, theme colour and the
-/// linked stylesheets (fetched concurrently, plus one level of `@import`).
-async fn design(run: &mut Run, home: &Content, icon_fonts: &Regex) -> DesignOut {
+/// linked stylesheets (`fetched` already, plus one level of `@import`).
+async fn design(
+    run: &mut Run,
+    home: &Content,
+    icon_fonts: &Regex,
+    fetched: Vec<(String, Result<Document, FetchFailure>)>,
+) -> DesignOut {
     let analysis = &home.analysis;
     let page_url = home.final_url.to_string();
     let mut css = CssAnalysis::default();
@@ -781,29 +825,9 @@ async fn design(run: &mut Run, home: &Content, icon_fonts: &Regex) -> DesignOut 
     }
 
     let mut stylesheets: Vec<StylesheetOut> = Vec::new();
-    let mut queue: Vec<String> = analysis
-        .stylesheet_urls
-        .iter()
-        .take(run.options.max_stylesheets)
-        .cloned()
-        .collect();
+    let mut fetched = fetched;
     let mut level = 0;
-    while !queue.is_empty() && level < 2 && run.remaining() > Duration::from_secs(2) {
-        let fetcher = run.fetcher.clone();
-        let remaining = run.remaining();
-        let fetched: Vec<(String, Result<Document, FetchFailure>)> = stream::iter(queue)
-            .map(|url| {
-                let fetcher = fetcher.clone();
-                async move {
-                    let result = tokio::time::timeout(remaining, fetcher.get_text_str(&url))
-                        .await
-                        .unwrap_or_else(|_| Err(FetchFailure::Network("deadline".into())));
-                    (url, result)
-                }
-            })
-            .buffered(FETCH_CONCURRENCY)
-            .collect()
-            .await;
+    while !fetched.is_empty() {
         let mut imports: Vec<String> = Vec::new();
         for (url, result) in fetched {
             match result {
@@ -850,8 +874,14 @@ async fn design(run: &mut Run, home: &Content, icon_fonts: &Regex) -> DesignOut 
             .options
             .max_stylesheets
             .saturating_sub(stylesheets.len());
-        queue = imports.into_iter().take(room).collect();
         level += 1;
+        // One level of `@import` after the linked stylesheets, while time allows.
+        fetched = if level < 2 && !imports.is_empty() && run.remaining() > Duration::from_secs(2) {
+            let imports = imports.into_iter().take(room).collect();
+            fetch_all(run.fetcher.clone(), imports, run.remaining()).await
+        } else {
+            Vec::new()
+        };
     }
 
     let ranked = css.ranked_colors();

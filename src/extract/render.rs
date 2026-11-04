@@ -4,19 +4,24 @@
 //! is launched from a configured executable (or reached over a DevTools WebSocket) through
 //! `chromiumoxide`, only when a page needs it, and shut down at the end of the run.
 //!
-//! Every request the page makes is paused and checked before it leaves the browser: images,
-//! media and fonts are refused (they cost memory and CPU and carry no text), and any other request
-//! must pass the same [`AddressPolicy`] as plain fetches, so a page cannot use the browser to reach
-//! private or cloud-metadata addresses. Each run gets its own temporary profile directory, which
-//! is removed on close.
+//! Every request the page makes is paused before it leaves the browser: images, media, fonts and
+//! trackers are refused (they cost memory and CPU and carry no text). A launched browser sends all
+//! its traffic through a [`GuardProxy`] that connects only to addresses the [`AddressPolicy`]
+//! permits, so a page cannot use the browser to reach private or cloud-metadata addresses, even by
+//! DNS rebinding or WebSockets. A browser reached over `--chrome-ws` has its own network, so its
+//! requests are checked by URL instead and its operator must restrict its egress. Each launch gets
+//! its own temporary profile directory, removed on close or drop.
 
 use super::guard::{parse_web_url, AddressPolicy};
+use super::proxy::GuardProxy;
 use crate::error::{SeoError, SeoResult};
+use base64::Engine;
 use chromiumoxide::browser::{Browser, BrowserConfig};
 use chromiumoxide::cdp::browser_protocol::fetch::{
-    ContinueRequestParams, EventRequestPaused, FailRequestParams,
+    ContinueRequestParams, EventRequestPaused, FailRequestParams, FulfillRequestParams, HeaderEntry,
 };
 use chromiumoxide::cdp::browser_protocol::network::{ErrorReason, ResourceType};
+use chromiumoxide::handler::HandlerConfig;
 use chromiumoxide::Page;
 use futures::StreamExt;
 use serde::Serialize;
@@ -29,34 +34,28 @@ use url::Url;
 
 /// Longest a rendered page may wait for its text to stop changing after load.
 const SETTLE_LIMIT: Duration = Duration::from_secs(5);
-const SETTLE_POLL: Duration = Duration::from_millis(300);
+const SETTLE_POLL: Duration = Duration::from_millis(250);
 /// Most CSSOM text read from a rendered page (CSS-in-JS rules).
 const MAX_CSSOM_CHARS: usize = 2_000_000;
+/// Largest rendered DOM read back, in UTF-16 units of `outerHTML`.
+const MAX_DOM_CHARS: i64 = 8_000_000;
 
-/// Low-footprint switches for a crawler that only needs the DOM.
+/// Low-footprint switches for a crawler that only needs the DOM, on top of chromiumoxide's
+/// defaults (which already disable background networking, sync, default apps, extensions and
+/// `/dev/shm` use).
 const LEAN_ARGS: &[&str] = &[
     "--disable-gpu",
-    "--disable-dev-shm-usage",
     "--disable-software-rasterizer",
-    "--disable-extensions",
-    "--disable-background-networking",
     "--disable-component-update",
-    "--disable-default-apps",
-    "--disable-sync",
-    // One flag only: Chromium reads the last --disable-features. Site isolation is off because
-    // each run has a fresh profile with no cookies or logins to protect, and it costs a renderer
-    // process per cross-site frame (ads, video embeds).
+    // Site isolation is off because each run has a fresh profile with no cookies or logins to
+    // protect, and it costs a renderer process per cross-site frame (ads, video embeds).
     "--disable-features=Translate,MediaRouter,OptimizationHints,AutofillServerCommunication,InterestFeedContentSuggestions,CalculateNativeWinOcclusion,IsolateOrigins,site-per-process",
     "--disable-site-isolation-trials",
     "--blink-settings=imagesEnabled=false",
     "--renderer-process-limit=1",
     "--js-flags=--max-old-space-size=384",
     "--mute-audio",
-    "--no-first-run",
     "--no-default-browser-check",
-    "--password-store=basic",
-    "--use-mock-keychain",
-    "--metrics-recording-only",
 ];
 
 /// Where and how to run Chromium.
@@ -76,6 +75,9 @@ pub struct RenderOptions {
     pub user_agent: Option<String>,
     /// Address policy applied to every browser request.
     pub policy: Option<AddressPolicy>,
+    /// Egress proxy the browser's traffic leaves through (after the guard proxy, when a policy
+    /// is set).
+    pub upstream_proxy: Option<Url>,
 }
 
 /// A rendered page.
@@ -99,6 +101,8 @@ pub struct Renderer {
     handler: JoinHandle<()>,
     profile_dir: Option<PathBuf>,
     options: RenderOptions,
+    /// The guard proxy of a launched browser; requests are checked by URL when absent.
+    proxy: Option<GuardProxy>,
 }
 
 impl Renderer {
@@ -109,41 +113,73 @@ impl Renderer {
     /// Returns [`SeoError::Config`] when no executable is found and [`SeoError::Network`] when
     /// the browser cannot be started or reached.
     pub async fn launch(options: RenderOptions) -> SeoResult<Self> {
+        let mut proxy = None;
         let (browser, mut handler, profile_dir) = match &options.chrome_ws {
             Some(ws) => {
-                let (browser, handler) = Browser::connect(ws.clone())
+                let config = HandlerConfig {
+                    request_intercept: true,
+                    request_timeout: options.page_timeout,
+                    ..HandlerConfig::default()
+                };
+                let (browser, handler) = Browser::connect_with_config(ws.clone(), config)
                     .await
                     .map_err(|e| SeoError::Network(format!("cannot reach Chrome at {ws}: {e}")))?;
                 (browser, handler, None)
             }
             None => {
-                let nanos = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_nanos())
-                    .unwrap_or(0);
-                let profile_dir = std::env::temp_dir().join(format!(
-                    "blacksparrow-chrome-{}-{nanos}",
-                    std::process::id()
-                ));
+                let profile_dir = create_profile_dir()?;
                 let mut builder = BrowserConfig::builder()
                     .user_data_dir(&profile_dir)
                     .enable_request_intercept()
                     .request_timeout(options.page_timeout)
                     .launch_timeout(Duration::from_secs(20))
                     .window_size(1280, 900)
-                    .viewport(None)
-                    .args(LEAN_ARGS.iter().copied())
-                    .args(options.extra_args.iter().map(String::as_str));
+                    .viewport(None);
+                let mut switches: Vec<String> = LEAN_ARGS.iter().map(|s| s.to_string()).collect();
                 if let Some(path) = options.chrome_path.as_ref() {
                     builder = builder.chrome_executable(path);
                 }
                 if options.no_sandbox {
                     builder = builder.no_sandbox();
                 } else {
-                    builder = builder.arg("--enable-sandbox");
+                    switches.push("--enable-sandbox".to_string());
                 }
-                if let Some(proxy) = proxy_from_env() {
-                    builder = builder.arg(format!("--proxy-server={proxy}"));
+                match options.policy {
+                    Some(policy) => {
+                        let guard = GuardProxy::start(policy, options.upstream_proxy.clone())
+                            .await
+                            .map_err(|e| {
+                                SeoError::Network(format!("cannot start the proxy: {e}"))
+                            })?;
+                        switches.extend([
+                            format!("--proxy-server={}", guard.server()),
+                            // Loopback too goes through the proxy, which refuses it.
+                            "--proxy-bypass-list=<-loopback>".to_string(),
+                            // The proxy resolves every name; the browser resolves none.
+                            "--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE 127.0.0.1".to_string(),
+                            "--force-webrtc-ip-handling-policy=disable_non_proxied_udp".to_string(),
+                            "--webrtc-ip-handling-policy=disable_non_proxied_udp".to_string(),
+                        ]);
+                        proxy = Some(guard);
+                    }
+                    None => {
+                        if let Some(upstream) = &options.upstream_proxy {
+                            switches
+                                .push(format!("--proxy-server={}", without_credentials(upstream)));
+                        } else if let Some(env_proxy) = proxy_from_env() {
+                            switches.push(format!("--proxy-server={env_proxy}"));
+                        }
+                    }
+                }
+                switches.extend(options.extra_args.iter().cloned());
+                for switch in &switches {
+                    // chromiumoxide writes `--key[=values]` itself and joins the values of a
+                    // repeated key with commas (so our --disable-features merges with its own).
+                    let bare = switch.trim_start_matches('-');
+                    builder = match bare.split_once('=') {
+                        Some((key, value)) => builder.arg((key, value)),
+                        None => builder.arg(bare),
+                    };
                 }
                 let config = builder.build().map_err(|e| {
                     SeoError::Config(format!(
@@ -169,6 +205,7 @@ impl Renderer {
             handler,
             profile_dir,
             options,
+            proxy,
         })
     }
 
@@ -178,6 +215,17 @@ impl Renderer {
     ///
     /// Returns [`SeoError::Network`] when navigation fails or times out.
     pub async fn render(&self, url: &Url) -> SeoResult<Rendered> {
+        self.render_with(url, None).await
+    }
+
+    /// Renders one page like [`Renderer::render`]. When `prefetched` holds the page's HTML,
+    /// already downloaded without redirects, the browser takes it instead of downloading the
+    /// document again; scripts, styles and data requests still go to the network.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SeoError::Network`] when navigation fails or times out.
+    pub async fn render_with(&self, url: &Url, prefetched: Option<&str>) -> SeoResult<Rendered> {
         let started = Instant::now();
         let page = self
             .browser
@@ -186,7 +234,7 @@ impl Renderer {
             .map_err(|e| SeoError::Network(format!("cannot open a tab: {e}")))?;
         let result = tokio::time::timeout(
             self.options.page_timeout + SETTLE_LIMIT,
-            self.render_in(&page, url, started),
+            self.render_in(&page, url, prefetched, started),
         )
         .await
         .unwrap_or_else(|_| Err(SeoError::Network("render timed out".to_string())));
@@ -194,14 +242,25 @@ impl Renderer {
         result
     }
 
-    async fn render_in(&self, page: &Page, url: &Url, started: Instant) -> SeoResult<Rendered> {
+    async fn render_in(
+        &self,
+        page: &Page,
+        url: &Url,
+        prefetched: Option<&str>,
+        started: Instant,
+    ) -> SeoResult<Rendered> {
         if let Some(agent) = &self.options.user_agent {
             page.set_user_agent(agent.as_str())
                 .await
                 .map_err(|e| SeoError::Network(format!("cannot set user agent: {e}")))?;
         }
         let blocked = Arc::new(AtomicU32::new(0));
-        let interceptor = self.intercept(page, blocked.clone()).await?;
+        let document = prefetched.map(|html| {
+            let mut target = url.clone();
+            target.set_fragment(None);
+            (target.to_string(), html.to_string())
+        });
+        let interceptor = self.intercept(page, blocked.clone(), document).await?;
 
         let navigation = tokio::time::timeout(self.options.page_timeout, page.goto(url.as_str()))
             .await
@@ -212,6 +271,18 @@ impl Renderer {
         }
         settle(page).await;
 
+        let size: i64 = page
+            .evaluate("document.documentElement ? document.documentElement.outerHTML.length : 0")
+            .await
+            .ok()
+            .and_then(|result| result.into_value().ok())
+            .unwrap_or(0);
+        if size > MAX_DOM_CHARS {
+            interceptor.abort();
+            return Err(SeoError::Network(format!(
+                "rendered page too large ({size} chars)"
+            )));
+        }
         let html = page
             .content()
             .await
@@ -239,18 +310,49 @@ impl Renderer {
     }
 
     /// Answers every paused request of `page`: refuse heavy resource types and refused addresses,
-    /// continue the rest.
-    async fn intercept(&self, page: &Page, blocked: Arc<AtomicU32>) -> SeoResult<JoinHandle<()>> {
+    /// continue the rest. The first document request for `document`'s URL is answered with its
+    /// HTML instead of going to the network.
+    async fn intercept(
+        &self,
+        page: &Page,
+        blocked: Arc<AtomicU32>,
+        mut document: Option<(String, String)>,
+    ) -> SeoResult<JoinHandle<()>> {
         let mut events = page
             .event_listener::<EventRequestPaused>()
             .await
             .map_err(|e| SeoError::Network(format!("cannot intercept requests: {e}")))?;
         let page = page.clone();
-        let policy = self.options.policy;
+        // Behind the guard proxy every connection is checked there; a URL check here would only
+        // add a DNS lookup per request.
+        let policy = if self.proxy.is_some() {
+            None
+        } else {
+            self.options.policy
+        };
         Ok(tokio::spawn(async move {
             while let Some(event) = events.next().await {
-                let allowed = request_allowed(&event, policy).await;
                 let id = event.request_id.clone();
+                let prefetched = document.as_ref().is_some_and(|(url, _)| {
+                    event.resource_type == ResourceType::Document && event.request.url == *url
+                });
+                if prefetched {
+                    if let Some((_, html)) = document.take() {
+                        let mut fulfill = FulfillRequestParams::new(id, 200);
+                        fulfill.response_headers = Some(vec![HeaderEntry::new(
+                            "Content-Type",
+                            "text/html; charset=utf-8",
+                        )]);
+                        fulfill.body = Some(
+                            base64::engine::general_purpose::STANDARD
+                                .encode(html)
+                                .into(),
+                        );
+                        let _ = page.execute(fulfill).await;
+                    }
+                    continue;
+                }
+                let allowed = request_allowed(&event, policy).await;
                 if allowed {
                     let _ = page.execute(ContinueRequestParams::new(id)).await;
                 } else {
@@ -263,15 +365,59 @@ impl Renderer {
         }))
     }
 
-    /// Closes the browser and removes its temporary profile.
+    /// Closes a launched browser and removes its temporary profile. A browser reached over
+    /// `--chrome-ws` belongs to someone else and stays running.
     pub async fn close(mut self) {
-        let _ = self.browser.close().await;
-        let _ = tokio::time::timeout(Duration::from_secs(5), self.browser.wait()).await;
+        if self.options.chrome_ws.is_none() {
+            let _ = tokio::time::timeout(Duration::from_secs(5), self.browser.close()).await;
+            let _ = tokio::time::timeout(Duration::from_secs(5), self.browser.wait()).await;
+        }
         self.handler.abort();
         if let Some(dir) = self.profile_dir.take() {
             let _ = tokio::fs::remove_dir_all(dir).await;
         }
     }
+}
+
+impl Drop for Renderer {
+    fn drop(&mut self) {
+        // A run that ends early (an error, a panic, cancellation) still removes the profile;
+        // chromiumoxide kills the launched browser when it is dropped.
+        self.handler.abort();
+        if let Some(dir) = self.profile_dir.take() {
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+}
+
+/// Creates a fresh, private profile directory under the temporary directory. Creation fails
+/// rather than reusing a directory someone else made at the same path.
+fn create_profile_dir() -> SeoResult<PathBuf> {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let dir = std::env::temp_dir().join(format!(
+        "blacksparrow-chrome-{}-{nanos:x}",
+        std::process::id()
+    ));
+    let mut builder = std::fs::DirBuilder::new();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        builder.mode(0o700);
+    }
+    builder
+        .create(&dir)
+        .map_err(|e| SeoError::Network(format!("cannot create the browser profile: {e}")))?;
+    Ok(dir)
+}
+
+fn without_credentials(url: &Url) -> String {
+    let mut bare = url.clone();
+    let _ = bare.set_username("");
+    let _ = bare.set_password(None);
+    bare.to_string()
 }
 
 /// Hosts of analytics, advertising and session-recording scripts: they cost CPU and network
@@ -346,8 +492,13 @@ async fn settle(page: &Page) {
     let deadline = Instant::now() + SETTLE_LIMIT;
     let mut last: i64 = -1;
     let mut stable = 0u8;
+    let mut first = true;
     while Instant::now() < deadline {
-        tokio::time::sleep(SETTLE_POLL).await;
+        // The first reading is taken right after load; later ones a poll apart.
+        if !first {
+            tokio::time::sleep(SETTLE_POLL).await;
+        }
+        first = false;
         let length: i64 = page
             .evaluate(
                 "document.readyState === 'complete' && document.body ? document.body.innerText.length : -1",

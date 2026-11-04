@@ -101,6 +101,12 @@ pub struct ExtractArgs {
     #[arg(long, default_value_t = false)]
     pub allow_private_network: bool,
 
+    /// Send all traffic through this egress proxy (`http://[user:pass@]host:port`); proxy
+    /// environment variables are ignored. The proxy resolves names, so it must enforce its own
+    /// egress rules.
+    #[arg(long, value_name = "URL")]
+    pub proxy: Option<String>,
+
     /// Longest the whole extraction may take, in seconds
     #[arg(long, default_value_t = 90)]
     pub timeout_secs: u64,

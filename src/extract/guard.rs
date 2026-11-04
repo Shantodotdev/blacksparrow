@@ -44,9 +44,36 @@ pub struct AddressPolicy {
 }
 
 impl AddressPolicy {
-    /// Whether `ip` may be contacted under this policy.
+    /// Whether `ip` may be contacted under this policy. Link-local addresses (cloud metadata
+    /// services) are refused even when private networks are allowed.
     pub fn permits(&self, ip: IpAddr) -> bool {
+        if is_link_local(ip) {
+            return false;
+        }
         self.allow_private_network || is_public_ip(ip)
+    }
+
+    /// Resolves `host` (a name or an IP literal, IPv6 with or without brackets) and returns its
+    /// socket addresses when every one of them is permitted.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GuardRefusal::Unresolved`] or [`GuardRefusal::BlockedAddress`].
+    pub async fn resolve(&self, host: &str, port: u16) -> Result<Vec<SocketAddr>, GuardRefusal> {
+        let bare = host.trim_start_matches('[').trim_end_matches(']');
+        let addrs: Vec<SocketAddr> = match bare.parse::<IpAddr>() {
+            Ok(ip) => vec![SocketAddr::new(ip, port)],
+            Err(_) => tokio::net::lookup_host((bare, port))
+                .await
+                .map_err(|_| GuardRefusal::Unresolved)?
+                .collect(),
+        };
+        if addrs.is_empty() {
+            return Err(GuardRefusal::Unresolved);
+        }
+        let ips: Vec<IpAddr> = addrs.iter().map(SocketAddr::ip).collect();
+        self.check_ips(&ips)?;
+        Ok(addrs)
     }
 
     /// Checks a URL's shape and resolves its host, refusing anything the policy forbids.
@@ -91,6 +118,16 @@ impl AddressPolicy {
     }
 }
 
+fn is_link_local(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => v4.is_link_local(),
+        IpAddr::V6(v6) => {
+            (v6.segments()[0] & 0xffc0) == 0xfe80
+                || embedded_ipv4(v6).is_some_and(|v4| v4.is_link_local())
+        }
+    }
+}
+
 /// Whether an address is a public unicast address on the internet.
 pub fn is_public_ip(ip: IpAddr) -> bool {
     match ip {
@@ -113,6 +150,8 @@ fn is_public_v4(ip: Ipv4Addr) -> bool {
         || (a == 100 && (64..=127).contains(&b))
         // 192.0.0.0/24 IETF protocol assignments.
         || (a == 192 && b == 0 && c == 0)
+        // 192.88.99.0/24 deprecated 6to4 relay anycast.
+        || (a == 192 && b == 88 && c == 99)
         // 198.18.0.0/15 benchmarking.
         || (a == 198 && (b == 18 || b == 19))
         // 240.0.0.0/4 reserved.
@@ -123,26 +162,31 @@ fn is_public_v6(ip: Ipv6Addr) -> bool {
     if let Some(v4) = embedded_ipv4(ip) {
         return is_public_v4(v4);
     }
-    let first = ip.segments()[0];
+    let s = ip.segments();
+    let first = s[0];
     !(ip.is_loopback()
         || ip.is_unspecified()
         || ip.is_multicast()
         // fc00::/7 unique local.
         || (first & 0xfe00) == 0xfc00
-        // fe80::/10 link-local.
+        // fe80::/10 link-local and fec0::/10 deprecated site-local.
         || (first & 0xffc0) == 0xfe80
-        // 2001:db8::/32 documentation.
-        || (first == 0x2001 && ip.segments()[1] == 0x0db8))
+        || (first & 0xffc0) == 0xfec0
+        // 64:ff9b:1::/48 local-use NAT64, which may embed any IPv4 address anywhere.
+        || (first == 0x64 && s[1] == 0xff9b && s[2] == 1)
+        // 2001::/32 Teredo tunnels and 2001:db8::/32 documentation.
+        || (first == 0x2001 && (s[1] == 0 || s[1] == 0x0db8))
+        // 100::/64 discard-only.
+        || (first == 0x100 && s[1..4] == [0, 0, 0]))
 }
 
 /// The IPv4 address an IPv6 address carries in a range a gateway may unwrap: IPv4-mapped,
-/// IPv4-compatible, NAT64 (well-known and local-use) and 6to4.
+/// IPv4-compatible, well-known NAT64 and 6to4.
 fn embedded_ipv4(ip: Ipv6Addr) -> Option<Ipv4Addr> {
     let s = ip.segments();
     let low = Ipv4Addr::new((s[6] >> 8) as u8, s[6] as u8, (s[7] >> 8) as u8, s[7] as u8);
     let mapped_or_compatible = s[0..5] == [0, 0, 0, 0, 0] && (s[5] == 0 || s[5] == 0xffff);
-    let nat64 = (s[0] == 0x64 && s[1] == 0xff9b && s[2..6] == [0, 0, 0, 0])
-        || (s[0] == 0x64 && s[1] == 0xff9b && s[2] == 1);
+    let nat64 = s[0] == 0x64 && s[1] == 0xff9b && s[2..6] == [0, 0, 0, 0];
     if mapped_or_compatible || nat64 {
         return Some(low);
     }
@@ -230,6 +274,11 @@ mod tests {
             "::ffff:127.0.0.1",
             "64:ff9b::a9fe:a9fe",
             "2002:7f00:1::",
+            "fec0::1",
+            "2001::1",
+            "100::1",
+            "64:ff9b:1:a9fe:a9fe::",
+            "192.88.99.1",
         ] {
             let ip: IpAddr = raw.parse().unwrap();
             assert!(!is_public_ip(ip), "{raw} must be refused");
@@ -275,6 +324,28 @@ mod tests {
         };
         let local = Url::parse("http://127.0.0.1:8080/").unwrap();
         assert_eq!(policy.check_url(&local).await, Ok(()));
+        let metadata = Url::parse("http://169.254.169.254/").unwrap();
+        assert_eq!(
+            policy.check_url(&metadata).await,
+            Err(GuardRefusal::BlockedAddress)
+        );
+    }
+
+    #[tokio::test]
+    async fn resolve_checks_literals_and_names() {
+        let policy = AddressPolicy {
+            allow_private_network: false,
+        };
+        assert_eq!(
+            policy.resolve("[::1]", 80).await,
+            Err(GuardRefusal::BlockedAddress)
+        );
+        assert_eq!(
+            policy.resolve("localhost", 80).await,
+            Err(GuardRefusal::BlockedAddress)
+        );
+        let public = policy.resolve("1.1.1.1", 443).await.unwrap();
+        assert_eq!(public, vec!["1.1.1.1:443".parse().unwrap()]);
     }
 
     #[test]

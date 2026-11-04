@@ -64,6 +64,13 @@ async fn handle_extract(args: ExtractArgs) -> Result<(), Box<dyn std::error::Err
     options.render_options.extra_args = args.chrome_args;
     options.render_options.no_sandbox = args.chrome_no_sandbox;
     options.allow_private_network = args.allow_private_network;
+    if let Some(proxy) = args.proxy {
+        let url = url::Url::parse(&proxy).map_err(|e| format!("invalid --proxy URL: {e}"))?;
+        if url.scheme() != "http" || url.host_str().is_none() {
+            return Err("--proxy must be an http://host:port URL".into());
+        }
+        options.proxy = Some(url);
+    }
     options.timeout = Duration::from_secs(args.timeout_secs.max(5));
     options.request_timeout = Duration::from_secs(args.request_timeout_secs.max(1));
     if let Some(agent) = args.user_agent {
