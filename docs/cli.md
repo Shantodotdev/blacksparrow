@@ -249,22 +249,23 @@ blacksparrow extract https://example.com --render never -o site.json
 
 ### 5.1 Flags
 
-| Flag                          | Default | Meaning                                                                                  |
-| :---------------------------- | :-----: | :--------------------------------------------------------------------------------------- |
-| `-p, --max-pages <N>`         |   `6`   | Pages read in total, homepage included.                                                  |
-| `--page <URL>` (repeatable)   |    -    | Read these pages after the homepage instead of choosing them by rules (kind `requested`). |
-| `--max-stylesheets <N>`       |  `10`   | Most stylesheets fetched for the design analysis (one level of `@import` is followed).   |
-| `--render <auto\|always\|never>` | `auto` | When to use headless Chromium (see 5.4).                                                 |
-| `--chrome-path <PATH>`        |    -    | Chromium executable (falls back to `CHROME_PATH`, then the `PATH`).                      |
-| `--chrome-ws <WS_URL>`        |    -    | Render with an already running Chromium instead of launching one.                        |
-| `--chrome-arg <ARG>`          |    -    | Extra switch for a launched Chromium (repeatable).                                       |
-| `--chrome-no-sandbox`         |  off    | Run Chromium without its sandbox (containers without user namespaces).                   |
-| `--allow-private-network`     |  off    | Allow private and loopback addresses (local test sites only, see 5.5).                   |
-| `--timeout-secs <N>`          |  `90`   | Longest the whole extraction may take (minimum 5).                                       |
-| `--request-timeout-secs <N>`  |  `20`   | Longest one HTTP request may take.                                                       |
-| `-u, --user-agent <UA>`       |    -    | Custom User-Agent for plain fetches.                                                     |
-| `--pretty`                    |  off    | Pretty-print the JSON.                                                                   |
-| `-o, --output <FILE>`         |    -    | Write the JSON to a file instead of stdout.                                              |
+| Flag                             | Default | Meaning                                                                                   |
+| :------------------------------- | :-----: | :---------------------------------------------------------------------------------------- |
+| `-p, --max-pages <N>`            |   `6`   | Pages read in total, homepage included.                                                   |
+| `--page <URL>` (repeatable)      |    -    | Read these pages after the homepage instead of choosing them by rules (kind `requested`). |
+| `--max-stylesheets <N>`          |  `10`   | Most stylesheets fetched for the design analysis (one level of `@import` is followed).    |
+| `--render <auto\|always\|never>` | `auto`  | When to use headless Chromium (see 5.4).                                                  |
+| `--chrome-path <PATH>`           |    -    | Chromium executable (falls back to `CHROME_PATH`, then the `PATH`).                       |
+| `--chrome-ws <WS_URL>`           |    -    | Render with an already running Chromium instead of launching one.                         |
+| `--chrome-arg <ARG>`             |    -    | Extra switch for a launched Chromium (repeatable).                                        |
+| `--chrome-no-sandbox`            |   off   | Run Chromium without its sandbox (containers without user namespaces).                    |
+| `--allow-private-network`        |   off   | Allow private and loopback addresses (local test sites only, see 5.5).                    |
+| `--proxy <URL>`                  |    -    | Send all traffic through this egress proxy (`http://[user:pass@]host:port`, see 5.5).     |
+| `--timeout-secs <N>`             |  `90`   | Longest the whole extraction may take (minimum 5).                                        |
+| `--request-timeout-secs <N>`     |  `20`   | Longest one HTTP request may take.                                                        |
+| `-u, --user-agent <UA>`          |    -    | Custom User-Agent for plain fetches.                                                      |
+| `--pretty`                       |   off   | Pretty-print the JSON.                                                                    |
+| `-o, --output <FILE>`            |    -    | Write the JSON to a file instead of stdout.                                               |
 
 ### 5.2 Output schema (`schema_version` 1)
 
@@ -280,16 +281,16 @@ blacksparrow extract https://example.com --render never -o site.json
 
 The command exits `0` with a JSON document even when the site could not be read; check `outcome`:
 
-| Outcome           | Meaning                                                              |
-| :---------------- | :------------------------------------------------------------------- |
-| `ok`              | The homepage was read.                                               |
-| `unsupported_url` | The URL is malformed or not http(s).                                 |
-| `unresolved`      | The host name does not resolve.                                      |
-| `blocked_address` | The host is a private or reserved address (see 5.5).                 |
-| `unreachable`     | Connection failure, timeout or too many redirects.                   |
-| `bot_protected`   | The homepage is a bot challenge, even after rendering.               |
-| `http_error`      | The homepage answered with an HTTP error status.                     |
-| `not_html`        | The homepage is not an HTML page.                                    |
+| Outcome           | Meaning                                                |
+| :---------------- | :----------------------------------------------------- |
+| `ok`              | The homepage was read.                                 |
+| `unsupported_url` | The URL is malformed or not http(s).                   |
+| `unresolved`      | The host name does not resolve.                        |
+| `blocked_address` | The host is a private or reserved address (see 5.5).   |
+| `unreachable`     | Connection failure, timeout or too many redirects.     |
+| `bot_protected`   | The homepage is a bot challenge, even after rendering. |
+| `http_error`      | The homepage answered with an HTTP error status.       |
+| `not_html`        | The homepage is not an HTML page.                      |
 
 ### 5.4 Rendering
 
@@ -299,4 +300,10 @@ A page that merely embeds a protection provider's script but has real content (1
 
 ### 5.5 Security guard
 
-The site is untrusted input. Every request, including each redirect hop and every request made by Chromium, is checked: only `http` and `https` are followed, URLs with credentials are refused, and hosts resolving to private, loopback, link-local (cloud metadata `169.254.169.254`), unique-local, multicast, documentation or otherwise reserved addresses are refused unless `--allow-private-network` is set. Name resolution is checked at connect time, so DNS answers cannot swap in a private address afterwards. Response bodies are capped (2 MiB for HTML and CSS) and the whole run is bound by `--timeout-secs`. Only pages linked from the homepage on the same site can be chosen by the rules. `--allow-private-network` exists for local test servers only and must not be used with untrusted URLs.
+The site is untrusted input. Every request, including each redirect hop and every request made by Chromium, is checked: only `http` and `https` are followed, URLs with credentials are refused, and hosts resolving to private, loopback, link-local (cloud metadata `169.254.169.254`), unique-local, multicast, documentation or otherwise reserved addresses are refused unless `--allow-private-network` is set. Link-local addresses stay refused even then. Name resolution is checked at connect time, so DNS answers cannot swap in a private address afterwards. Response bodies are capped (2 MiB for HTML and CSS, 8 million characters for a rendered DOM) and the whole run is bound by `--timeout-secs`. Only pages linked from the homepage on the same site can be chosen by the rules. `--allow-private-network` exists for local test servers only and must not be used with untrusted URLs.
+
+A launched Chromium resolves no names itself: all its traffic (pages, scripts, WebSockets, iframes, preconnects) goes through a small proxy inside Black Sparrow on the loopback interface, which resolves each host, checks every address and connects only to addresses that passed. WebRTC may not send UDP outside the proxy. This closes DNS rebinding between a check and the browser's own connection.
+
+Proxy environment variables (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`) are ignored, since a proxy resolves names itself and would bypass the check. Pass `--proxy` to use an egress proxy on purpose; the check then becomes advisory (the proxy resolves the name again), so that proxy must enforce its own egress rules.
+
+A browser reached with `--chrome-ws` has its own network: its requests are checked by URL only, so its operator must restrict that browser's egress, and it is left running at the end. `--chrome-ws`, `--chrome-arg`, `--chrome-path`, `--proxy`, `--allow-private-network` and `-o` are operator settings: never build them from untrusted input. All output fields carry website content and are untrusted for the consumer; inline SVG logos are reduced to an allow-list of drawing elements and attributes, but should still be served with a restrictive `Content-Security-Policy` or rendered as images.
