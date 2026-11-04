@@ -19,6 +19,26 @@ const MAX_ROLES_PER_FONT: usize = 8;
 const MAX_FAMILY_CHARS: usize = 120;
 /// Deepest nesting of `@media`/`@supports`/`@layer` blocks read.
 const MAX_NESTING: usize = 8;
+/// Longest declaration value scanned for colours.
+const MAX_COLOR_VALUE_BYTES: usize = 4096;
+/// Longest custom property value kept for `var()` resolution.
+const MAX_VARIABLE_BYTES: usize = 2048;
+/// Longest text `var()` resolution may produce before it stops substituting.
+const MAX_RESOLVED_BYTES: usize = 16 * 1024;
+/// Longest colour function (`rgb(...)`, `oklch(...)`) considered a colour literal.
+const MAX_COLOR_FUNCTION_BYTES: usize = 100;
+/// Declarations whose colours are effects, not brand colours.
+const EFFECT_PROPERTIES: &[&str] = &[
+    "box-shadow",
+    "-webkit-box-shadow",
+    "text-shadow",
+    "filter",
+    "-webkit-filter",
+    "backdrop-filter",
+    "-webkit-backdrop-filter",
+];
+/// Colours with less opacity than this are shadows and tints, not brand colours.
+const MIN_COLOR_ALPHA: f64 = 0.5;
 
 const GENERIC_FAMILIES: &[&str] = &[
     "serif",
@@ -181,7 +201,7 @@ pub fn analyze_css(
     icon_fonts: &Regex,
     class_roles: &ClassRoles,
 ) {
-    let cleaned = strip_comments(css);
+    let cleaned = strip_comments(css.trim_start_matches('\u{FEFF}'));
     let rules = parse_rules(&cleaned, 0);
     let mut variables: HashMap<String, String> = HashMap::new();
     collect_variables(&rules, &mut variables);
@@ -474,6 +494,7 @@ fn next_delimiter(bytes: &[u8], start: usize) -> Option<usize> {
 }
 
 fn parse_rules(css: &str, depth: usize) -> Vec<Rule> {
+    let css = css.trim_start_matches('\u{FEFF}');
     let bytes = css.as_bytes();
     let mut rules = Vec::new();
     let mut index = 0usize;
@@ -515,6 +536,9 @@ fn parse_rules(css: &str, depth: usize) -> Vec<Rule> {
                         selector: prelude.to_string(),
                         declarations: parse_declarations(inner),
                     });
+                    if depth < MAX_NESTING && inner.contains('{') {
+                        rules.extend(nested_style_rules(prelude, inner, depth + 1));
+                    }
                 }
                 index = end;
             }
@@ -523,12 +547,41 @@ fn parse_rules(css: &str, depth: usize) -> Vec<Rule> {
     rules
 }
 
+/// Style rules nested inside the block of `parent` (CSS native nesting): `&` stands for the
+/// parent selector, any other selector is a descendant of it. At-rule blocks inside are read as
+/// they are.
+fn nested_style_rules(parent: &str, inner: &str, depth: usize) -> Vec<Rule> {
+    parse_rules(inner, depth)
+        .into_iter()
+        .filter_map(|rule| match rule {
+            Rule::Style {
+                selector,
+                declarations,
+            } if !selector.starts_with("--") => {
+                let selector = if selector.contains('&') {
+                    selector.replace('&', parent)
+                } else {
+                    format!("{parent} {selector}")
+                };
+                Some(Rule::Style {
+                    selector,
+                    declarations,
+                })
+            }
+            Rule::Group(_) | Rule::Style { .. } | Rule::FontFace(_) | Rule::Import(_) => None,
+        })
+        .collect()
+}
+
 fn parse_declarations(block: &str) -> Vec<(String, String)> {
     let mut declarations = Vec::new();
     for part in split_top_level(block, b';') {
         if let Some((name, value)) = part.split_once(':') {
             let name = name.trim();
-            if name.is_empty() || name.contains('{') {
+            let is_property = name
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == '-' || c == '_');
+            if name.is_empty() || !is_property || value.contains('{') {
                 continue;
             }
             let value = value.trim().trim_end_matches("!important").trim();
@@ -597,7 +650,7 @@ fn collect_variables(rules: &[Rule], variables: &mut HashMap<String, String>) {
         match rule {
             Rule::Style { declarations, .. } => {
                 for (name, value) in declarations {
-                    if name.starts_with("--") {
+                    if name.starts_with("--") && value.len() <= MAX_VARIABLE_BYTES {
                         variables
                             .entry(name.clone())
                             .or_insert_with(|| value.clone());
@@ -708,7 +761,21 @@ fn read_style_rule(
                 source_url: Some(ctx.source_url.to_string()),
             }
         };
-        for color in colors_in(value) {
+        if EFFECT_PROPERTIES.contains(&name.as_str())
+            || (name.starts_with("--") && name.contains("shadow"))
+            || value.len() > MAX_COLOR_VALUE_BYTES
+            || value.contains("drop-shadow(")
+        {
+            continue;
+        }
+        let resolved;
+        let colored = if !name.starts_with("--") && value.contains("var(") {
+            resolved = resolve_vars(value, ctx.variables);
+            resolved.as_str()
+        } else {
+            value.as_str()
+        };
+        for color in colors_in(colored) {
             analysis.add_color(&color, evidence.clone());
         }
     }
@@ -822,7 +889,9 @@ fn simple_selectors(selector: &str) -> (Vec<String>, Vec<String>) {
 pub fn primary_family(value: &str, variables: &HashMap<String, String>) -> Option<String> {
     let resolved = resolve_vars(value, variables);
     for part in split_top_level(&resolved, b',') {
-        let name: String = part
+        // A backslash escapes the next character, so Tailwind's `\'Figtree\'` is Figtree quoted.
+        let unescaped = part.replace('\\', "");
+        let name: String = unescaped
             .trim()
             .trim_matches(|c| c == '"' || c == '\'')
             .split_whitespace()
@@ -835,6 +904,7 @@ pub fn primary_family(value: &str, variables: &HashMap<String, String>) -> Optio
             && !lower.ends_with(" fallback")
             && !name.starts_with("--")
             && !name.starts_with("var(")
+            && !name.contains(['(', ')'])
         {
             return Some(name.chars().take(MAX_FAMILY_CHARS).collect());
         }
@@ -887,7 +957,7 @@ fn clean_family(name: &str) -> String {
 fn resolve_vars(value: &str, variables: &HashMap<String, String>) -> String {
     let mut resolved = value.to_string();
     for _ in 0..3 {
-        if !resolved.contains("var(") {
+        if !resolved.contains("var(") || resolved.len() > MAX_RESOLVED_BYTES {
             break;
         }
         resolved = resolve_vars_once(&resolved, variables);
@@ -899,9 +969,12 @@ fn resolve_vars_once(value: &str, variables: &HashMap<String, String>) -> String
     let mut out = String::with_capacity(value.len());
     let mut rest = value;
     while let Some(start) = rest.find("var(") {
+        if out.len() > MAX_RESOLVED_BYTES {
+            break;
+        }
         out.push_str(&rest[..start]);
         let after = &rest[start + 4..];
-        let Some(end) = after.find(')') else {
+        let Some(end) = matching_close(after) else {
             out.push_str(&rest[start..]);
             return out;
         };
@@ -917,11 +990,29 @@ fn resolve_vars_once(value: &str, variables: &HashMap<String, String>) -> String
     out
 }
 
-/// Every colour literal in a declaration value, in order, outside strings and `url()`.
+/// The index of the `)` closing a group whose `(` came just before `text`, so a fallback such as
+/// `var(--a, var(--b, serif))` stays whole.
+fn matching_close(text: &str) -> Option<usize> {
+    let mut depth = 0usize;
+    for (index, byte) in text.bytes().enumerate() {
+        match byte {
+            b'(' => depth += 1,
+            b')' if depth == 0 => return Some(index),
+            b')' => depth -= 1,
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Every colour literal in a declaration value, in order, outside strings and `url()`. Colours
+/// with an alpha below one half are left out. Runs in time linear in the value.
 pub fn colors_in(value: &str) -> Vec<String> {
     let bytes = value.as_bytes();
     let mut colors = Vec::new();
     let mut index = 0usize;
+    // The position of the first `)` at or after `index`; `Some(None)` once none is left.
+    let mut next_close: Option<Option<usize>> = None;
     while index < bytes.len() {
         let byte = bytes[index];
         if byte == b'"' || byte == b'\'' {
@@ -941,9 +1032,7 @@ pub fn colors_in(value: &str) -> Vec<String> {
             while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'-') {
                 end += 1;
             }
-            if let Some(color) = parse_color(&value[index..end]) {
-                colors.push(color);
-            }
+            push_opaque(&mut colors, &value[index..end]);
             index = end.max(index + 1);
             continue;
         }
@@ -952,16 +1041,24 @@ pub fn colors_in(value: &str) -> Vec<String> {
             while index < bytes.len() && is_ident_byte(bytes[index]) {
                 index += 1;
             }
-            let word = value[start..index].to_ascii_lowercase();
             if index < bytes.len() && bytes[index] == b'(' {
-                let close = value[index..].find(')').map(|offset| index + offset + 1);
-                if word == "url" {
+                let word = value[start..index].to_ascii_lowercase();
+                let is_url = word == "url";
+                if !is_url && !matches!(word.as_str(), "rgb" | "rgba" | "hsl" | "hsla" | "oklch") {
+                    continue;
+                }
+                let cached = match next_close {
+                    Some(Some(position)) if position >= index => Some(position),
+                    Some(None) => None,
+                    _ => value[index..].find(')').map(|offset| index + offset),
+                };
+                next_close = Some(cached);
+                let close = cached.map(|position| position + 1);
+                if is_url {
                     index = close.unwrap_or(bytes.len());
-                } else if matches!(word.as_str(), "rgb" | "rgba" | "hsl" | "hsla" | "oklch") {
-                    if let Some(close) = close {
-                        if let Some(color) = parse_color(&value[start..close]) {
-                            colors.push(color);
-                        }
+                } else if let Some(close) = close {
+                    if close - start <= MAX_COLOR_FUNCTION_BYTES {
+                        push_opaque(&mut colors, &value[start..close]);
                         index = close;
                     }
                 }
@@ -973,6 +1070,50 @@ pub fn colors_in(value: &str) -> Vec<String> {
     colors
 }
 
+/// Appends the colour of `literal` unless it is not a colour or is mostly transparent.
+fn push_opaque(colors: &mut Vec<String>, literal: &str) {
+    if let Some(color) = parse_color(literal) {
+        if alpha_of(literal) >= MIN_COLOR_ALPHA {
+            colors.push(color);
+        }
+    }
+}
+
+/// The alpha channel of a colour literal, 1.0 when it has none or it cannot be read.
+fn alpha_of(literal: &str) -> f64 {
+    let text = literal.trim().to_ascii_lowercase();
+    if let Some(digits) = text.strip_prefix('#') {
+        let channel = match digits.len() {
+            4 => digits
+                .get(3..4)
+                .and_then(|d| u8::from_str_radix(d, 16).ok())
+                .map(|v| v * 17),
+            8 => digits
+                .get(6..8)
+                .and_then(|d| u8::from_str_radix(d, 16).ok()),
+            _ => None,
+        };
+        return channel.map_or(1.0, |c| f64::from(c) / 255.0);
+    }
+    let Some(inner) = text
+        .split_once('(')
+        .and_then(|(_, rest)| rest.strip_suffix(')'))
+    else {
+        return 1.0;
+    };
+    let raw = match inner.split_once('/') {
+        Some((_, alpha)) => Some(alpha),
+        None => inner.split(',').nth(3),
+    };
+    let Some(raw) = raw.map(str::trim) else {
+        return 1.0;
+    };
+    match raw.strip_suffix('%') {
+        Some(percent) => percent.trim().parse::<f64>().map_or(1.0, |v| v / 100.0),
+        None => raw.parse::<f64>().unwrap_or(1.0),
+    }
+}
+
 fn is_ident_byte(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_'
 }
@@ -980,6 +1121,19 @@ fn is_ident_byte(byte: u8) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn primary_family_handles_escapes_and_nested_fallbacks() {
+        let none = HashMap::new();
+        assert_eq!(
+            primary_family("\\'Figtree\\', sans-serif", &none).as_deref(),
+            Some("Figtree")
+        );
+        assert_eq!(
+            primary_family("var(--a, var(--b, monospace)), Roboto", &none).as_deref(),
+            Some("Roboto")
+        );
+    }
 
     fn icon() -> Regex {
         Regex::new(DEFAULT_ICON_FONT_PATTERN).unwrap()
@@ -1037,7 +1191,8 @@ mod tests {
             && roles.contains(&"buttons")
             && roles.contains(&"links")));
         assert!(!fonts.iter().any(|(f, _, _)| f.contains("FontAwesome")));
-        assert_eq!(analysis.colors.get("#E11D48"), Some(&2));
+        // definition + var() use + literal
+        assert_eq!(analysis.colors.get("#E11D48"), Some(&3));
         assert_eq!(analysis.colors.get("#0F172A"), Some(&1));
         assert!(!analysis.colors.contains_key("#000000"));
         let evidence = &analysis.evidence["#E11D48"];
@@ -1096,5 +1251,63 @@ mod tests {
         assert!(!fonts.iter().any(|(f, _)| f.contains("Fallback")));
         assert_eq!(analysis.colors.get("#FB2C36"), Some(&1));
         assert_eq!(analysis.colors.get("#00AAFF"), Some(&1));
+    }
+
+    fn analyze(css: &str) -> CssAnalysis {
+        let mut analysis = CssAnalysis::default();
+        analyze_css(
+            &mut analysis,
+            css,
+            "s.css",
+            false,
+            &icon(),
+            &ClassRoles::new(),
+        );
+        analysis
+    }
+
+    #[test]
+    fn colour_scanning_is_linear_on_hostile_input() {
+        let started = std::time::Instant::now();
+        assert!(colors_in(&"rgb(".repeat(500_000)).is_empty());
+        assert!(colors_in(&format!("{}{}", "rgb(".repeat(100_000), ")")).is_empty());
+        assert!(colors_in(&"hsl(1,2%,3%) url(".repeat(100_000)).len() <= 100_000);
+        let css = format!("a{{color:{}}}", "rgb(".repeat(500_000));
+        let _ = analyze(&css);
+        let css = format!(":root{{--a:var(--b)}}a{{x:{}}}", "var(--a)".repeat(100_000));
+        let _ = analyze(&css);
+        assert!(started.elapsed().as_secs() < 10, "{:?}", started.elapsed());
+    }
+
+    #[test]
+    fn counts_var_uses_and_ignores_shadows_and_transparent_colours() {
+        let css = ":root{--brand:#E11D48} a{color:var(--brand)} b{background:var(--brand)} \
+            c{box-shadow:0 0 4px #000} d{text-shadow:1px 1px #111} e{filter:drop-shadow(0 0 2px #222)} \
+            f{border-color:rgba(0,0,0,.1)} g{color:#33333380} h{color:#0008}";
+        let analysis = analyze(css);
+        assert_eq!(analysis.colors.get("#E11D48"), Some(&3));
+        assert_eq!(analysis.colors.get("#333333"), Some(&1));
+        assert_eq!(analysis.colors.get("#000000"), Some(&1));
+        for ignored in ["#111111", "#222222"] {
+            assert!(!analysis.colors.contains_key(ignored), "{ignored}");
+        }
+        assert_eq!(analysis.colors.len(), 3);
+    }
+
+    #[test]
+    fn strips_a_leading_byte_order_mark() {
+        let analysis = analyze("\u{FEFF}h1{color:#f00}");
+        assert_eq!(analysis.colors.get("#FF0000"), Some(&1));
+    }
+
+    #[test]
+    fn reads_simple_native_nesting() {
+        let analysis = analyze(
+            "body{color:#111; .card{background:#222; &:hover{color:#333}} h1{font-family:Lora}}",
+        );
+        for hex in ["#111111", "#222222", "#333333"] {
+            assert!(analysis.colors.contains_key(hex), "{hex}");
+        }
+        assert!(analysis.fonts().iter().any(|f| f.family == "Lora"));
     }
 }
