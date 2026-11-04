@@ -25,6 +25,13 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Default crawler User-Agent string.
 pub const DEFAULT_USER_AGENT: &str = concat!("BlackSparrow/", env!("CARGO_PKG_VERSION"));
 
+/// User-Agent of site extraction: a current desktop browser signature (many small-business hosts
+/// refuse unknown clients) that still names the crawler.
+pub const EXTRACT_USER_AGENT: &str = concat!(
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 BlackSparrow/",
+    env!("CARGO_PKG_VERSION")
+);
+
 /// AI crawler / bot User-Agent string for MCP probes.
 pub const MCP_BOT_USER_AGENT: &str = concat!("BlackSparrowBot/", env!("CARGO_PKG_VERSION"));
 

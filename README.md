@@ -41,6 +41,7 @@ Built from the ground up in Rust, Black Sparrow streams HTML responses through C
 - 🤖 **GEO & AI Search Readiness**: Audits `/llms.txt`, probes AI crawler permissions (`GPTBot`, `ClaudeBot`), and flags bot-challenge firewall screens.
 - 🕸️ **Topology & Internal PageRank**: Ingests link graphs into `petgraph` to detect orphan pages, canonical loops, and distribute internal link equity.
 - 📊 **Multi-Format Reporting**: Generates interactive standalone TUI-style HTML reports, Screaming Frog-compatible CSV suites, Markdown for LLMs, and structured JSON.
+- 🏷️ **Site Extraction for Brand Kits**: `blacksparrow extract <url>` reads a business website (English and Bangla) into one JSON document: Markdown pages, contacts and social links, colours, fonts, logos, schema.org facts. Headless Chromium is used only for JavaScript shells, with an SSRF guard. See [`docs/cli.md`](docs/cli.md#5-site-extraction-blacksparrow-extract-url).
 
 ---
 
