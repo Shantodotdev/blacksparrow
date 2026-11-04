@@ -141,9 +141,24 @@ impl PageAnalysis {
     }
 }
 
-/// Analyses a page; relative URLs resolve against `base`.
+/// The URL relative links resolve against: the page's first `<base href>` (http or https only)
+/// resolved against the page URL, else the page URL itself.
+fn document_base(document: &Html, page: &Url) -> Url {
+    document
+        .root_element()
+        .descendent_elements()
+        .find(|element| element.value().name() == "base" && element.value().attr("href").is_some())
+        .and_then(|element| element.value().attr("href"))
+        .and_then(|href| page.join(href.trim()).ok())
+        .filter(|url| matches!(url.scheme(), "http" | "https") && url.host_str().is_some())
+        .unwrap_or_else(|| page.clone())
+}
+
+/// Analyses a page; relative URLs resolve against `base`, or against the page's `<base href>`.
 pub fn analyze_page(html: &str, base: &Url) -> PageAnalysis {
     let document = Html::parse_document(limit_nesting(html, MAX_PARSE_NESTING));
+    let effective_base = document_base(&document, base);
+    let base = &effective_base;
     let mut analysis = PageAnalysis::default();
     let mut candidates: Vec<(usize, LogoCandidate)> = Vec::new();
     let root = document.root_element();
@@ -190,7 +205,7 @@ pub fn analyze_page(html: &str, base: &Url) -> PageAnalysis {
                 }
             }
             "img" => read_image(element, base, &mut candidates),
-            "svg" => read_svg(element, &mut candidates),
+            "svg" => read_svg(element, base, &mut candidates),
             "a" => read_anchor(element, base, &mut analysis.links),
             _ => {}
         }
@@ -450,25 +465,72 @@ fn cloudflare_email(element: ElementRef<'_>) -> Option<String> {
     decode_cloudflare_email(hex)
 }
 
-/// Whether the element itself says "logo" in a naming attribute.
+/// Words that put a "logo" among many: partner and client carousels, not the business's own.
+const NOT_OWN_LOGO_WORDS: &[&str] = &[
+    "partner",
+    "partners",
+    "client",
+    "clients",
+    "sponsor",
+    "sponsors",
+    "customer",
+    "customers",
+    "carousel",
+    "slider",
+    "slick",
+    "swiper",
+    "marquee",
+    "brands",
+    "affiliate",
+    "affiliates",
+    "trusted",
+    "featured",
+];
+
+/// Lowercase alphanumeric words of `value`.
+fn words(value: &str) -> Vec<String> {
+    value
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .map(str::to_lowercase)
+        .collect()
+}
+
+/// Whether `value` has the whole word `logo` and no word that makes it one of many logos.
+fn names_own_logo(value: &str) -> bool {
+    let words = words(value);
+    words.iter().any(|word| word == "logo")
+        && !words
+            .iter()
+            .any(|word| NOT_OWN_LOGO_WORDS.contains(&word.as_str()))
+}
+
+/// Whether the file name of an image URL says "logo" and its folders do not name a partner
+/// list.
+fn path_names_own_logo(src: &str) -> bool {
+    let path = src.split(['?', '#']).next().unwrap_or("");
+    let mut segments = path.rsplit('/');
+    let file = segments.next().unwrap_or("");
+    let folders = segments.collect::<Vec<_>>().join(" ");
+    let folder_words = words(&folders);
+    words(file).iter().any(|word| word == "logo")
+        && !words(file)
+            .iter()
+            .any(|word| NOT_OWN_LOGO_WORDS.contains(&word.as_str()))
+        && !folder_words
+            .iter()
+            .any(|word| NOT_OWN_LOGO_WORDS.contains(&word.as_str()))
+}
+
+/// Whether the element itself says "logo" in a naming attribute, as a whole word.
 fn own_logo_hint(element: ElementRef<'_>) -> bool {
-    [
-        "class",
-        "id",
-        "alt",
-        "src",
-        "aria-label",
-        "title",
-        "data-src",
-    ]
-    .iter()
-    .any(|name| {
-        element
-            .value()
-            .attr(name)
-            .map(|value| value.to_ascii_lowercase().contains("logo"))
-            .unwrap_or(false)
-    })
+    let value = element.value();
+    ["class", "id", "alt", "aria-label", "title"]
+        .iter()
+        .any(|name| value.attr(name).is_some_and(names_own_logo))
+        || ["src", "data-src"]
+            .iter()
+            .any(|name| value.attr(name).is_some_and(path_names_own_logo))
 }
 
 /// Whether the element or one of its three nearest ancestors names itself a logo (a logo is
@@ -489,6 +551,17 @@ fn in_header(element: ElementRef<'_>) -> bool {
         .any(|ancestor| matches!(ancestor.value().name(), "header" | "nav"))
 }
 
+/// Whether the element sits inside a link to the site's home page.
+fn in_home_link(element: ElementRef<'_>, base: &Url) -> bool {
+    element
+        .ancestors()
+        .filter_map(ElementRef::wrap)
+        .filter(|ancestor| ancestor.value().name() == "a")
+        .filter_map(|anchor| anchor.value().attr("href"))
+        .filter_map(|href| base.join(href.trim()).ok())
+        .any(|url| url.path() == "/" && url.query().is_none() && url.host_str() == base.host_str())
+}
+
 fn inside_svg(element: ElementRef<'_>) -> bool {
     element
         .ancestors()
@@ -496,13 +569,25 @@ fn inside_svg(element: ElementRef<'_>) -> bool {
         .any(|ancestor| ancestor.value().name() == "svg")
 }
 
-fn logo_reason(element: ElementRef<'_>) -> LogoReason {
-    if in_header(element) {
+fn logo_reason(element: ElementRef<'_>, base: &Url) -> LogoReason {
+    if in_header(element) || in_home_link(element, base) {
         LogoReason::HeaderLogo
     } else {
         LogoReason::LogoHint
     }
 }
+
+/// Sort key within a reason: logos in a link to the home page come before other logos.
+fn logo_order(element: ElementRef<'_>, base: &Url, position: usize) -> usize {
+    if in_home_link(element, base) {
+        position
+    } else {
+        position + HOME_LINK_ORDER_GAP
+    }
+}
+
+/// Added to the position of logos that do not link home, so they sort after those that do.
+const HOME_LINK_ORDER_GAP: usize = 1_000_000;
 
 fn read_image(element: ElementRef<'_>, base: &Url, candidates: &mut Vec<(usize, LogoCandidate)>) {
     let value = element.value();
@@ -515,9 +600,9 @@ fn read_image(element: ElementRef<'_>, base: &Url, candidates: &mut Vec<(usize, 
     };
     if logo_hinted(element) {
         candidates.push((
-            candidates.len(),
+            logo_order(element, base, candidates.len()),
             LogoCandidate {
-                reason: logo_reason(element),
+                reason: logo_reason(element, base),
                 url: Some(url),
                 svg: None,
             },
@@ -525,33 +610,262 @@ fn read_image(element: ElementRef<'_>, base: &Url, candidates: &mut Vec<(usize, 
     }
 }
 
-fn read_svg(element: ElementRef<'_>, candidates: &mut Vec<(usize, LogoCandidate)>) {
+fn read_svg(element: ElementRef<'_>, base: &Url, candidates: &mut Vec<(usize, LogoCandidate)>) {
     if inside_svg(element) || !logo_hinted(element) {
         return;
     }
-    let mut markup = element.html();
-    if markup.len() > MAX_INLINE_SVG_CHARS {
+    let Some(markup) = sanitized_svg(element) else {
         return;
-    }
-    let head_end = markup.find('>').unwrap_or(markup.len());
-    if !markup[..head_end].contains("xmlns=") {
-        markup = markup.replacen("<svg", "<svg xmlns=\"http://www.w3.org/2000/svg\"", 1);
-    }
-    if markup.contains("xlink:") && !markup[..head_end].contains("xmlns:xlink") {
-        markup = markup.replacen(
-            "<svg",
-            "<svg xmlns:xlink=\"http://www.w3.org/1999/xlink\"",
-            1,
-        );
-    }
+    };
     candidates.push((
-        candidates.len(),
+        logo_order(element, base, candidates.len()),
         LogoCandidate {
-            reason: logo_reason(element),
+            reason: logo_reason(element, base),
             url: None,
             svg: Some(markup),
         },
     ));
+}
+
+/// Elements an inline SVG logo may keep: shapes, text and paint servers.
+const SVG_ELEMENTS: &[&str] = &[
+    "svg",
+    "g",
+    "path",
+    "circle",
+    "ellipse",
+    "rect",
+    "line",
+    "polyline",
+    "polygon",
+    "text",
+    "tspan",
+    "defs",
+    "lineargradient",
+    "radialgradient",
+    "stop",
+    "clippath",
+    "mask",
+    "use",
+    "symbol",
+    "title",
+    "desc",
+    "style",
+];
+
+/// Attributes an inline SVG logo may keep (compared in lowercase).
+const SVG_ATTRIBUTES: &[&str] = &[
+    "id",
+    "class",
+    "style",
+    "d",
+    "points",
+    "x",
+    "y",
+    "x1",
+    "x2",
+    "y1",
+    "y2",
+    "cx",
+    "cy",
+    "r",
+    "rx",
+    "ry",
+    "fx",
+    "fy",
+    "fr",
+    "width",
+    "height",
+    "viewbox",
+    "preserveaspectratio",
+    "fill",
+    "fill-opacity",
+    "fill-rule",
+    "stroke",
+    "stroke-width",
+    "stroke-linecap",
+    "stroke-linejoin",
+    "stroke-miterlimit",
+    "stroke-dasharray",
+    "stroke-dashoffset",
+    "stroke-opacity",
+    "opacity",
+    "transform",
+    "gradienttransform",
+    "gradientunits",
+    "spreadmethod",
+    "offset",
+    "stop-color",
+    "stop-opacity",
+    "clip-path",
+    "clip-rule",
+    "clippathunits",
+    "mask",
+    "maskunits",
+    "maskcontentunits",
+    "font-family",
+    "font-size",
+    "font-weight",
+    "font-style",
+    "letter-spacing",
+    "text-anchor",
+    "dominant-baseline",
+    "dx",
+    "dy",
+    "rotate",
+    "textlength",
+    "lengthadjust",
+    "display",
+    "visibility",
+    "color",
+    "vector-effect",
+    "href",
+];
+
+/// Most elements kept in a sanitised SVG.
+const MAX_SVG_ELEMENTS: usize = 5000;
+/// Deepest element nesting kept in a sanitised SVG.
+const MAX_SVG_DEPTH: usize = 64;
+
+/// A standalone SVG document rebuilt from the allow-listed elements and attributes of an inline
+/// `<svg>`, or `None` when it is too large. Scripts, event handlers, `<foreignObject>`, external
+/// references and everything else not on the lists are dropped, and every value is escaped.
+fn sanitized_svg(root: ElementRef<'_>) -> Option<String> {
+    let mut out = String::from(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"",
+    );
+    let mut budget = MAX_SVG_ELEMENTS;
+    write_svg_element(root, true, 0, &mut budget, &mut out)?;
+    Some(out)
+}
+
+/// Writes `element` (already known to be an allow-listed element) and its allowed content. The
+/// root's opening tag is already partly written, so it only gets its attributes appended.
+fn write_svg_element(
+    element: ElementRef<'_>,
+    is_root: bool,
+    depth: usize,
+    budget: &mut usize,
+    out: &mut String,
+) -> Option<()> {
+    if out.len() > MAX_INLINE_SVG_CHARS || depth > MAX_SVG_DEPTH || *budget == 0 {
+        return None;
+    }
+    *budget -= 1;
+    let name = element.value().name();
+    if !is_root {
+        out.push('<');
+        out.push_str(name);
+    }
+    for (attribute, value) in element.value().attrs() {
+        if let Some(safe) = safe_svg_attribute(attribute, value) {
+            if is_root && attribute.eq_ignore_ascii_case("xmlns") {
+                continue;
+            }
+            out.push(' ');
+            out.push_str(attribute);
+            out.push_str("=\"");
+            out.push_str(&escape_xml(&safe));
+            out.push('"');
+        }
+    }
+    out.push('>');
+    let lower = name.to_ascii_lowercase();
+    let text_holder = matches!(
+        lower.as_str(),
+        "text" | "tspan" | "title" | "desc" | "style"
+    );
+    for child in element.children() {
+        match child.value() {
+            Node::Text(text) if text_holder => {
+                if lower == "style" && !safe_svg_style_text(text) {
+                    continue;
+                }
+                out.push_str(&escape_xml(text));
+            }
+            Node::Element(_) => {
+                if let Some(child) = ElementRef::wrap(child) {
+                    let child_name = child.value().name().to_ascii_lowercase();
+                    if SVG_ELEMENTS.contains(&child_name.as_str()) && child_name != "svg" {
+                        write_svg_element(child, false, depth + 1, budget, out)?;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    out.push_str("</");
+    out.push_str(name);
+    out.push('>');
+    Some(())
+}
+
+/// The value of an allow-listed SVG attribute if it is safe to keep: no escapes or comments, no
+/// script URLs, and references (`href`, `url(...)`) only to ids inside the document.
+fn safe_svg_attribute(name: &str, value: &str) -> Option<String> {
+    let lower = name.to_ascii_lowercase();
+    if !SVG_ATTRIBUTES.contains(&lower.as_str()) || value.len() > 20_000 {
+        return None;
+    }
+    if lower == "href" {
+        let trimmed = value.trim();
+        return (trimmed.starts_with('#') && !trimmed.contains(char::is_whitespace))
+            .then(|| trimmed.to_string());
+    }
+    safe_svg_css(value).then(|| value.to_string())
+}
+
+/// Whether a presentation value or style text is free of anything that loads or runs content.
+fn safe_svg_css(value: &str) -> bool {
+    let lower = value.to_ascii_lowercase();
+    if value.contains(['\\', '<']) || lower.contains("/*") || lower.contains('@') {
+        return false;
+    }
+    if [
+        "javascript:",
+        "expression",
+        "behavior",
+        "binding",
+        "image",
+        "src(",
+        "element(",
+        "data:",
+    ]
+    .iter()
+    .any(|bad| lower.contains(bad))
+    {
+        return false;
+    }
+    let mut rest = lower.as_str();
+    while let Some(at) = rest.find("url(") {
+        let target = rest[at + 4..].trim_start().trim_start_matches(['"', '\'']);
+        if !target.starts_with('#') {
+            return false;
+        }
+        rest = &rest[at + 4..];
+    }
+    true
+}
+
+/// Whether the text of a `<style>` element is safe to keep.
+fn safe_svg_style_text(text: &str) -> bool {
+    text.len() <= 20_000 && safe_svg_css(text)
+}
+
+fn escape_xml(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    for c in value.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&#39;"),
+            c if c.is_control() && !matches!(c, '\n' | '\t' | '\r') => {}
+            c => out.push(c),
+        }
+    }
+    out
 }
 
 fn read_anchor(element: ElementRef<'_>, base: &Url, links: &mut Vec<PageLink>) {
@@ -653,16 +967,77 @@ const BUSINESS_TYPES: &[&str] = &[
     "ngo",
     "restaurant",
     "bakery",
+    "hotel",
+    "motel",
+    "resort",
+    "hostel",
+    "dentist",
+    "physician",
+    "hospital",
+    "pharmacy",
+    "medicalclinic",
+    "medicalbusiness",
+    "diagnosticlab",
+    "professionalservice",
+    "legalservice",
+    "attorney",
+    "accountingservice",
+    "financialservice",
+    "insuranceagency",
+    "realestateagent",
+    "travelagency",
+    "beautysalon",
+    "hairsalon",
+    "nailsalon",
+    "healthandbeautybusiness",
+    "healthclub",
+    "gym",
+    "foodestablishment",
+    "cafeorcoffeeshop",
+    "barorpub",
+    "fastfoodrestaurant",
+    "icecreamshop",
+    "winery",
+    "brewery",
+    "school",
+    "educationalorganization",
+    "preschool",
+    "collegeoruniversity",
+    "autodealer",
+    "autorepair",
+    "autobodyshop",
+    "electrician",
+    "plumber",
+    "locksmith",
+    "movingcompany",
+    "homeandconstructionbusiness",
+    "generalcontractor",
+    "lodgingbusiness",
+    "bedandbreakfast",
+    "sportsactivitylocation",
+    "entertainmentbusiness",
+    "governmentoffice",
+    "performinggroup",
 ];
+
+/// The schema.org type name of `kind`: `https://schema.org/Dentist`, `schema:Dentist` and
+/// `Dentist` all give `dentist`.
+fn schema_type_name(kind: &str) -> String {
+    let trimmed = kind.trim();
+    let name = trimmed.rsplit(['/', ':', '#']).next().unwrap_or(trimmed);
+    name.to_ascii_lowercase()
+}
 
 fn is_business_type(value: Option<&Value>) -> bool {
     let matches = |kind: &str| {
-        let lower = kind.to_ascii_lowercase();
-        let short = lower.rsplit('/').next().unwrap_or(&lower);
-        BUSINESS_TYPES.contains(&short)
+        let short = schema_type_name(kind);
+        BUSINESS_TYPES.contains(&short.as_str())
             || short.ends_with("store")
             || short.ends_with("business")
             || short.ends_with("shop")
+            || short.ends_with("clinic")
+            || short.ends_with("salon")
+            || short.ends_with("establishment")
     };
     match value {
         Some(Value::String(kind)) => matches(kind),
@@ -737,7 +1112,10 @@ fn read_json_ld(value: &Value, base: &Url, found: &mut StructuredBusiness, depth
             }
         }
         Value::Object(map) => {
-            if is_business_type(map.get("@type")) {
+            if is_business_type(map.get("@type"))
+                || map.contains_key("telephone")
+                || map.contains_key("address")
+            {
                 push_all(&mut found.names, strings(map.get("name")));
                 push_all(&mut found.telephones, strings(map.get("telephone")));
                 push_all(
@@ -1147,5 +1525,127 @@ mod tests {
         let page = analyze_page(broken, &base());
         assert!(page.links.is_empty());
         assert!(page.logo_candidates.is_empty());
+    }
+
+    fn logo_urls(html: &str) -> Vec<String> {
+        analyze_page(html, &base())
+            .logo_candidates
+            .into_iter()
+            .filter(|c| matches!(c.reason, LogoReason::HeaderLogo | LogoReason::LogoHint))
+            .filter_map(|c| c.url)
+            .collect()
+    }
+
+    #[test]
+    fn logo_hints_match_whole_words_only() {
+        let html = r#"<body>
+            <div class="client-logos"><img src="/c1.png"></div>
+            <div class="partner-logo"><img src="/p1.png" alt="Partner"></div>
+            <a class="logout" href="/out"><img src="/out.png"></a>
+            <img src="/img/clients/logo.png">
+            <img src="/img/catalog.png" class="logos">
+            <section><img class="footer-logo" src="/footer.png"></section>
+            <header><a href="/"><img class="site-logo" src="/site.png"></a></header>
+            <img class="navbar-logo" src="/nav.png"></body>"#;
+        assert_eq!(
+            logo_urls(html),
+            vec![
+                "https://shop.test/site.png",
+                "https://shop.test/footer.png",
+                "https://shop.test/nav.png",
+            ]
+        );
+    }
+
+    #[test]
+    fn home_linked_logos_come_first() {
+        let html = r#"<body><img class="logo" src="/other.png"><a href="/"><img class="logo" src="/home.png"></a></body>"#;
+        assert_eq!(logo_urls(html)[0], "https://shop.test/home.png");
+    }
+
+    #[test]
+    fn honours_base_href() {
+        let html = r#"<html><head><base href="https://cdn.shop.test/v2/"><link rel="stylesheet" href="app.css"></head><body><a href="contact">Contact</a><base href="https://evil.test/"></body></html>"#;
+        let page = analyze_page(html, &base());
+        assert_eq!(page.links[0].url, "https://cdn.shop.test/v2/contact");
+        assert_eq!(
+            page.stylesheet_urls,
+            vec!["https://cdn.shop.test/v2/app.css"]
+        );
+        let bad = r#"<head><base href="javascript:alert(1)"></head><a href="/x">x</a>"#;
+        assert_eq!(
+            analyze_page(bad, &base()).links[0].url,
+            "https://shop.test/x"
+        );
+    }
+
+    #[test]
+    fn accepts_prefixed_and_broader_schema_types() {
+        let html = r#"<script type="application/ld+json">[
+            {"@type":"schema:Dentist","name":"Smile","telephone":"+8801711223344"},
+            {"@type":"http://schema.org/Hotel","name":"Stay"},
+            {"@type":"WebPage","name":"Home page","address":"Dhaka"},
+            {"@type":"Person","name":"Not a business"}]</script>"#;
+        let found = analyze_page(html, &base()).structured;
+        assert_eq!(found.names, vec!["Smile", "Stay", "Home page"]);
+        assert_eq!(found.telephones, vec!["+8801711223344"]);
+        assert_eq!(found.addresses, vec!["Dhaka"]);
+    }
+
+    #[test]
+    fn inline_svg_logos_are_rebuilt_from_an_allow_list() {
+        let html = r##"<header><a class="logo" href="/"><svg viewBox="0 0 10 10" onload="alert(1)" width="10">
+            <script>alert(1)</script>
+            <foreignObject><iframe src="https://evil.test"></iframe></foreignObject>
+            <a href="javascript:alert(1)"><path d="M0 0h5" onclick="x()"/></a>
+            <path d="M0 0h10" fill="url(#g)" style="fill:red" onmouseover="x()"/>
+            <path d="M1 1" fill="url(https://evil.test/x.svg#a)"/>
+            <path d="M2 2" style="fill:url('http://evil.test/a.png')"/>
+            <path d="M3 3" style="background:u\72l(http://evil.test)"/>
+            <image href="https://evil.test/a.png"/>
+            <use href="https://evil.test/a.svg#x"/><use xlink:href="#ok" href="#ok"/>
+            <style>.a{fill:red}</style><style>.b{fill:url(http://evil.test/i.png)}</style>
+            <style>@import url(http://evil.test/x.css);</style>
+            <text x="1" title='"><script>'>Hi &lt;b&gt; &amp; co</text>
+            <linearGradient id="g"><stop offset="0" stop-color="#fff"/></linearGradient>
+            </svg></a></header>"##;
+        let page = analyze_page(html, &base());
+        let svg = page.logo_candidates[0].svg.as_deref().unwrap();
+        for bad in [
+            "script",
+            "alert",
+            "onload",
+            "onclick",
+            "onmouseover",
+            "foreignObject",
+            "iframe",
+            "evil.test",
+            "javascript",
+            "<image",
+            "@import",
+            "<a ",
+            "title=",
+        ] {
+            assert!(!svg.contains(bad), "{bad} in {svg}");
+        }
+        assert!(
+            svg.starts_with("<svg xmlns=\"http://www.w3.org/2000/svg\""),
+            "{svg}"
+        );
+        assert!(svg.contains("viewBox=\"0 0 10 10\""));
+        assert!(svg.contains("fill=\"url(#g)\""));
+        assert!(svg.contains("href=\"#ok\""));
+        assert!(svg.contains(".a{fill:red}"));
+        assert!(svg.contains("Hi &lt;b&gt; &amp; co"));
+        assert!(svg.contains("<linearGradient id=\"g\"><stop"));
+        // The result is well-formed XML.
+        let mut reader = quick_xml::Reader::from_str(svg);
+        loop {
+            match reader.read_event() {
+                Ok(quick_xml::events::Event::Eof) => break,
+                Ok(_) => {}
+                Err(e) => panic!("not well-formed: {e}: {svg}"),
+            }
+        }
     }
 }

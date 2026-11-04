@@ -698,3 +698,93 @@ async fn audit_render_js_crawls_links_that_only_exist_after_scripts() {
     );
     assert!(rendered.pages[0].word_count > 20);
 }
+
+// ---------------------------------------------------------------------------
+// Review regressions: encodings, false-positive contacts, CSS colours, logos
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn legacy_encoded_pages_and_stylesheets_are_decoded() {
+    let server = MockServer::start().await;
+    // windows-1252 page declaring its charset only in a meta tag, with a stylesheet whose
+    // `@charset` is also windows-1252 and a font name containing a non-ASCII letter.
+    let page = b"<!doctype html><html><head><meta http-equiv=\"Content-Type\" content=\"text/html; charset=windows-1252\"><title>Caf\xe9 R\xf6st</title><link rel=stylesheet href=/s.css></head><body><h1>Welcome to Caf\xe9 R\xf6st, a small caf\xe9 in Dhaka</h1></body></html>".to_vec();
+    Mock::given(method("GET"))
+        .and(path("/"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_bytes(page)
+                .insert_header("content-type", "text/html"),
+        )
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/s.css"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_bytes(
+                    b"@charset \"windows-1252\"; h1 { font-family: 'Caf\xe9 Sans'; }".to_vec(),
+                )
+                .insert_header("content-type", "text/css"),
+        )
+        .mount(&server)
+        .await;
+    let result = run(&server, "/", options(RenderMode::Never)).await;
+    let home = &result.pages[0];
+    assert_eq!(home.title.as_deref(), Some("Café Röst"));
+    assert!(home.markdown.contains("Welcome to Café Röst"));
+    let design = result.design.unwrap();
+    assert!(design.fonts.iter().any(|f| f.family == "Café Sans"));
+}
+
+#[tokio::test]
+async fn contacts_ignore_dates_hours_and_lookalike_links() {
+    let server = MockServer::start().await;
+    let html = r#"<!doctype html><html><head><title>Hotel Sunrise</title></head><body>
+        <h1>Hotel Sunrise, serving guests since 2015-2020 and beyond</h1>
+        <p>Open 9.00-21.00 every day. Booking calling hours 2024-05-12.</p>
+        <p>Phone no 0961-2345678</p>
+        <p>Hotline No 16516</p>
+        <a href="tel:+880%201711%20223344">Call</a>
+        <a href="https://www.facebook.com/people/Sunrise-Hotel/100012345/">fb</a>
+        <a href="https://www.facebook.com/sharer/sharer.php?u=x">share</a>
+        <a href="https://www.facebook.com/like.php?href=x">like</a>
+        <a href="https://www.instagram.com/share/abc">share</a>
+        <p>Mail: front[at]sunrise.test or image@2x.png</p>
+        </body></html>"#;
+    mount_html(&server, "/", 200, html).await;
+    let result = run(&server, "/", options(RenderMode::Never)).await;
+    let contacts = result.contacts;
+    assert_eq!(
+        contacts.phones,
+        vec!["+880 1711 223344", "0961-2345678", "16516"]
+    );
+    assert_eq!(contacts.emails, vec!["front@sunrise.test"]);
+    assert_eq!(
+        contacts.facebook,
+        vec!["https://www.facebook.com/people/Sunrise-Hotel/100012345"]
+    );
+    assert!(contacts.instagram.is_empty());
+}
+
+#[tokio::test]
+async fn shadow_and_transparent_colours_do_not_rank_and_svg_logos_are_sanitized() {
+    let server = MockServer::start().await;
+    let html = r##"<!doctype html><html><head><title>Brand</title><style>
+        :root { --brand: #E11D48; }
+        .a { color: var(--brand); } .b { background: var(--brand); }
+        .c { box-shadow: 0 1px 2px rgba(0,0,0,.1); } .d { box-shadow: 0 0 3px #000; }
+        .e { border-color: rgba(0,0,0,.08); } .f { text-shadow: 1px 1px #000; }
+        </style></head><body><header><a class="logo" href="/">
+        <svg viewBox="0 0 10 10" onload="alert(1)"><script>alert(1)</script>
+        <foreignObject><div>x</div></foreignObject><path d="M0 0h10"/></svg></a></header>
+        <h1>Brand</h1></body></html>"##;
+    mount_html(&server, "/", 200, html).await;
+    let result = run(&server, "/", options(RenderMode::Never)).await;
+    let design = result.design.unwrap();
+    assert_eq!(design.colors[0].hex, "#E11D48");
+    assert!(design.colors.iter().all(|c| c.hex != "#000000"));
+    let svg = design.logos[0].svg.as_deref().unwrap();
+    assert!(svg.contains("<path d=\"M0 0h10\">"));
+    assert!(!svg.contains("script") && !svg.contains("onload") && !svg.contains("foreignObject"));
+}
