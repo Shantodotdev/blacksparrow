@@ -42,7 +42,8 @@ async fn serve_site(server: &MockServer, site: &str) {
                 .unwrap()
                 .to_str()
                 .unwrap()
-                .to_string();
+                // URL paths use `/` whatever the platform's separator.
+                .replace('\\', "/");
             let body = std::fs::read(&file).unwrap();
             let template = ResponseTemplate::new(200)
                 .set_body_bytes(body)
