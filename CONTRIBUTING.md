@@ -30,18 +30,18 @@ We are committed to providing a welcoming, inclusive, and harassment-free enviro
      rustup update stable
      ```
 
-2. **C Build Tools & OpenSSL** (Required to compile bundled SQLite and OpenSSL dependencies):
+2. **C Build Tools** (Required to compile bundled SQLite; TLS uses rustls, so OpenSSL is not needed):
 
    - **Ubuntu / Debian**:
 
      ```bash
-     sudo apt update && sudo apt install -y build-essential pkg-config libssl-dev
+     sudo apt update && sudo apt install -y build-essential pkg-config
      ```
 
    - **Fedora / RHEL**:
 
      ```bash
-     sudo dnf install -y gcc pkg-config openssl-devel
+     sudo dnf install -y gcc pkg-config
      ```
 
    - **macOS**:
