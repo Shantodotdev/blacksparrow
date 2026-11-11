@@ -10,10 +10,22 @@ ci = "github"
 # The installers to generate for each app
 installers = ["shell", "powershell", "msi"]
 # Target platforms to build apps for (Rust target-triple syntax)
-targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
+targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "aarch64-unknown-linux-musl", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-unknown-linux-musl", "x86_64-pc-windows-msvc"]
 # Path that installers should place binaries in
 install-path = "~/.local/bin"
 # Where to host releases
 hosting = "github"
+# Publish the Python wheels and npm packages once the GitHub release is created
+publish-jobs = ["./publish-pypi", "./publish-npm"]
+# Sign the release archives with GitHub build attestations (verify: gh attestation verify)
+github-attestations = true
 # Whether to install an updater program
 install-updater = false
+
+[dist.github-custom-job-permissions.publish-pypi]
+contents = "read"
+id-token = "write"
+
+[dist.github-custom-job-permissions.publish-npm]
+contents = "read"
+id-token = "write"

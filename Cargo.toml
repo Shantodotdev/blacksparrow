@@ -7,13 +7,15 @@ resolver = "2"
 
 [package]
 name = "blacksparrow"
-version = "0.1.0-rc.2"
+version = "0.1.0"
 edition = "2021"
 authors = ["KR Shanto"]
 description = "High-performance, local-first website crawler and technical SEO audit engine in Rust"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Shantodotdev/blacksparrow"
 homepage = "https://github.com/Shantodotdev/blacksparrow"
+# Kept out of `cargo package` and the Python sdist, which only need the crate.
+exclude = ["/docs-site", "/sdks/js", "/.agents", "/.codex", "/.github", "/wix", "/target"]
 
 [package.metadata.wix]
 upgrade-guid = "F61D4D0E-5430-4175-BB7B-BE311E3956C9"
@@ -44,7 +46,7 @@ bitflags = { version = "2.8", features = ["serde"] }
 url = "2.5"
 ahash = "0.8"
 lol_html = "3.0"
-reqwest = { version = "0.12", features = ["gzip", "brotli", "deflate"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "charset", "http2", "macos-system-configuration", "gzip", "brotli", "deflate"] }
 hashbrown = "0.15"
 quick-xml = "0.37"
 flate2 = "1.0"
@@ -59,11 +61,13 @@ scraper = "0.29"
 chromiumoxide = { version = "0.9", default-features = false }
 futures = "0.3"
 encoding_rs = "0.8"
+schemars = "1.2"
 
 
 [dev-dependencies]
 wiremock = "0.6"
 tokio-test = "0.4"
+jsonschema = { version = "0.61", default-features = false }
 
 [profile.release]
 opt-level = "z"
