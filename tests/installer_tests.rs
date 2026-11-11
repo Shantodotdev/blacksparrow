@@ -2,10 +2,13 @@
 //!
 //! Validates `install.sh` CLI argument handling, fail-closed validation,
 //! and protection against arbitrary command injection.
+//!
+//! `install.sh` is the macOS and Linux installer (Windows uses `blacksparrow-installer.ps1`), so
+//! these tests run only where it is meant to run.
+#![cfg(unix)]
 
 use std::process::Command;
 
-#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
 #[test]
