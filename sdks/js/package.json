@@ -1,0 +1,73 @@
+{
+  "name": "blacksparrow",
+  "version": "0.1.0",
+  "description": "Read a business website (pages, contacts, colours, fonts, logos) with the Black Sparrow engine. Typed Node.js API around a prebuilt native binary.",
+  "keywords": [
+    "website",
+    "extract",
+    "scraper",
+    "brand",
+    "design",
+    "colors",
+    "fonts",
+    "logo",
+    "contacts",
+    "crawler",
+    "seo"
+  ],
+  "license": "MIT OR Apache-2.0",
+  "author": "KR Shanto",
+  "homepage": "https://github.com/Shantodotdev/blacksparrow/tree/main/sdks/js#readme",
+  "bugs": {
+    "url": "https://github.com/Shantodotdev/blacksparrow/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Shantodotdev/blacksparrow.git",
+    "directory": "sdks/js"
+  },
+  "type": "module",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/esm/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/esm/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/index.d.ts",
+        "default": "./dist/cjs/index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "blacksparrow": "./dist/esm/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE-MIT",
+    "LICENSE-APACHE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && node --test",
+    "prepack": "node scripts/build.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "typescript": "~5.9.3"
+  }
+}
