@@ -253,6 +253,49 @@ pub struct AuditArgs {
     /// Optional audit or project name
     #[arg(long)]
     pub name: Option<String>,
+
+    /// Specific private host or host:port allowed to be crawled (can be repeated, e.g. -a localhost:3000 or --allow-host localhost:3000)
+    #[arg(
+        short = 'a',
+        long = "allow-host",
+        visible_alias = "allow",
+        value_name = "HOST"
+    )]
+    pub allowed_hosts: Vec<String>,
+}
+
+impl Default for AuditArgs {
+    fn default() -> Self {
+        Self {
+            url: String::new(),
+            max_pages: 500,
+            max_depth: None,
+            concurrency: 10,
+            delay: 0,
+            render_js: false,
+            chrome_ws: "auto".to_string(),
+            chrome_path: None,
+            chrome_no_sandbox: false,
+            user_agent: crate::core::branding::DEFAULT_USER_AGENT.to_string(),
+            format: "terminal,json,md".to_string(),
+            output_dir: PathBuf::from("./reports"),
+            fail_on: "none".to_string(),
+            no_robots: false,
+            ephemeral: false,
+            no_aimd: false,
+            max_query_params: 2,
+            ignore_sorting_facets: true,
+            db_path: None,
+            local: false,
+            include: None,
+            exclude: None,
+            headers: Vec::new(),
+            sitemap: None,
+            quiet: false,
+            name: None,
+            allowed_hosts: Vec::new(),
+        }
+    }
 }
 
 /// Command-line arguments for the `inspect` subcommand.
@@ -276,6 +319,15 @@ pub struct InspectArgs {
     /// Custom HTTP request header(s) (e.g. -H "Authorization: Bearer xyz")
     #[arg(short = 'H', long = "header")]
     pub headers: Vec<String>,
+
+    /// Specific private host or host:port allowed to be inspected (can be repeated, e.g. -a localhost:3000 or --allow-host localhost:3000)
+    #[arg(
+        short = 'a',
+        long = "allow-host",
+        visible_alias = "allow",
+        value_name = "HOST"
+    )]
+    pub allowed_hosts: Vec<String>,
 }
 
 /// Command-line arguments for the `mcp` subcommand.
@@ -296,6 +348,19 @@ pub struct McpArgs {
     /// Force database persistence to project-local `.seolens/seolens.db`
     #[arg(short = 'L', long, default_value_t = false)]
     pub local: bool,
+
+    /// Allow auditing local and private network addresses (default: false). Cloud metadata endpoints remain permanently blocked.
+    #[arg(long, default_value_t = false)]
+    pub allow_local_network: bool,
+
+    /// Specific private host or host:port allowed for MCP tools (can be repeated, e.g. -a localhost:3000 or --allow-host localhost:3000)
+    #[arg(
+        short = 'a',
+        long = "allow-host",
+        visible_alias = "allow",
+        value_name = "HOST"
+    )]
+    pub allowed_hosts: Vec<String>,
 }
 
 /// Command-line arguments for the `report` subcommand.
@@ -435,9 +500,15 @@ pub struct CleanArgs {
 
 /// Command-line arguments for the `schema` subcommand.
 #[derive(Args, Debug, Clone)]
+#[command(subcommand_negates_reqs = true, args_conflicts_with_subcommands = true)]
 pub struct SchemaArgs {
+    /// Print a JSON Schema instead of validating structured data
+    #[command(subcommand)]
+    pub document: Option<SchemaDocument>,
+
     /// URL or path to a local JSON/HTML file containing structured data
-    pub target: String,
+    #[arg(required = true)]
+    pub target: Option<String>,
 
     /// Expected schema @type (e.g. Product, Article, FAQPage)
     #[arg(short = 't', long = "type")]
@@ -450,4 +521,11 @@ pub struct SchemaArgs {
     /// Custom User-Agent string (when target is a URL)
     #[arg(short = 'u', long, default_value = "BlackSparrow/1.0")]
     pub user_agent: String,
+}
+
+/// Documents whose JSON Schema `schema` can print.
+#[derive(Subcommand, Debug, Clone)]
+pub enum SchemaDocument {
+    /// Print the JSON Schema (draft 2020-12) of the `extract` output document
+    Extract,
 }

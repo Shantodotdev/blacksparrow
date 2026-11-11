@@ -58,3 +58,59 @@ jobs:
 
       - name: Run documentation tests
         run: cargo test --doc
+
+  schema-drift:
+    name: Extract Schema Is Up To Date
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust caching
+        uses: Swatinem/rust-cache@v2
+
+      - name: Compare the printed schema with the committed one
+        run: cargo run --quiet -- schema extract | diff - schema/extract.schema.json
+
+  sdk-python:
+    name: Python SDK Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust caching
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Build the binary and run the SDK tests
+        run: cargo build && cd sdks/python && BLACKSPARROW_BINARY=$GITHUB_WORKSPACE/target/debug/blacksparrow uv run --extra test pytest
+
+  sdk-js:
+    name: JavaScript SDK Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust caching
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build the binary and run the SDK tests
+        run: cargo build && cd sdks/js && npm ci && BLACKSPARROW_BINARY=$GITHUB_WORKSPACE/target/debug/blacksparrow npm test

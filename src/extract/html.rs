@@ -14,6 +14,8 @@
 //! so memory stays bounded by the largest single page.
 
 use super::css::{google_fonts, parse_color, ClassRoles};
+use super::AlwaysPresent;
+use schemars::JsonSchema;
 use scraper::node::Node;
 use scraper::{ElementRef, Html};
 use serde::Serialize;
@@ -37,7 +39,7 @@ const MAX_JSON_LD_BLOCKS: usize = 20;
 const MAX_JSON_LD_CHARS: usize = 200_000;
 
 /// Why an image is a logo candidate.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum LogoReason {
     /// A logo-named image or SVG inside `<header>` or `<nav>`.
@@ -55,18 +57,21 @@ pub enum LogoReason {
 }
 
 /// A place the brand's logo may be.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
+#[schemars(transform = AlwaysPresent(&["url", "svg"]))]
 pub struct LogoCandidate {
     /// Why this is a candidate; lower ranks first.
     pub reason: LogoReason,
     /// Absolute http(s) image URL; `None` for an inline SVG.
+    #[schemars(with = "Option<String>")]
     pub url: Option<String>,
     /// A standalone SVG document; `None` for an image URL.
+    #[schemars(with = "Option<String>")]
     pub svg: Option<String>,
 }
 
 /// A hyperlink on the page.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
 pub struct PageLink {
     /// Visible text (or label) of the link, whitespace collapsed.
     pub text: String,
@@ -75,7 +80,7 @@ pub struct PageLink {
 }
 
 /// Facts a page states about its business in schema.org JSON-LD.
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, JsonSchema)]
 pub struct StructuredBusiness {
     /// `name` values of Organization/LocalBusiness-like nodes.
     pub names: Vec<String>,

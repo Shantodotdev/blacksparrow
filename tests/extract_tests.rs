@@ -353,29 +353,56 @@ async fn spa_is_rendered_in_chromium_when_auto() {
     );
 }
 
-/// The page asks for an image and for the cloud metadata address. Images are always blocked in
-/// the browser; the metadata address is only blocked when private networks are refused, and
-/// the test server itself lives on loopback, so that half is covered by the guard tests and
-/// the unit tests of `guard.rs` instead of by weakening the policy here.
+/// The page asks for a web font, a video, a beacon and an image. Chromium is started with
+/// `imagesEnabled=false`, so the image is never even requested; the other types are refused by
+/// the request interceptor and must be counted and never reach the server, while the page and
+/// its stylesheet load normally. (The metadata address is only blocked when private networks
+/// are refused, and the test server itself lives on loopback, so that half is covered by the
+/// guard tests and the unit tests of `guard.rs` instead of by weakening the policy here.)
 #[tokio::test]
 async fn rendered_page_requests_for_images_are_blocked() {
     let Some(opts) = chrome_options(RenderMode::Always) else {
         return;
     };
     let server = MockServer::start().await;
-    serve_site(&server, "spa").await;
-    Mock::given(method("GET"))
-        .and(path("/pixel.png"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_bytes(vec![0u8; 8])
-                .insert_header("content-type", "image/png"),
-        )
-        .mount(&server)
-        .await;
+    mount_html(
+        &server,
+        "/",
+        200,
+        r#"<!doctype html><html lang="en"><head><title>Blocked resources</title>
+<link rel="stylesheet" href="/site.css"></head>
+<body><h1 class="font-user">Resources the renderer refuses</h1>
+<img src="/pixel.png"><video src="/clip.mp4" preload="auto"></video>
+<script>navigator.sendBeacon('/beacon', 'x');</script></body></html>"#,
+    )
+    .await;
+    for (url_path, content_type, body) in [
+        (
+            "/site.css",
+            "text/css",
+            "@font-face { font-family: Probe; src: url(/probe.woff2) format('woff2'); }\
+             .font-user { font-family: Probe, serif; }",
+        ),
+        ("/pixel.png", "image/png", "\0\0\0\0\0\0\0\0"),
+        ("/probe.woff2", "font/woff2", "wOF2"),
+        ("/clip.mp4", "video/mp4", "\0\0\0\0"),
+        ("/beacon", "text/plain", "ok"),
+    ] {
+        Mock::given(method("GET"))
+            .and(path(url_path))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_bytes(body.as_bytes().to_vec())
+                    .insert_header("content-type", content_type),
+            )
+            .mount(&server)
+            .await;
+    }
     let result = run(&server, "/", opts).await;
+    assert_eq!(result.outcome, Outcome::Ok);
+    assert!(result.pages[0].rendered);
     assert!(
-        result.stats.blocked_browser_requests > 0,
+        result.stats.blocked_browser_requests >= 2,
         "{:?}",
         result.stats
     );
@@ -387,9 +414,15 @@ async fn rendered_page_requests_for_images_are_blocked() {
         .map(|r| r.url.path().to_string())
         .collect();
     assert!(
-        !requested.iter().any(|p| p == "/pixel.png"),
-        "{requested:?}"
+        requested.iter().any(|p| p == "/site.css"),
+        "the stylesheet should still load: {requested:?}"
     );
+    for refused in ["/pixel.png", "/probe.woff2", "/clip.mp4", "/beacon"] {
+        assert!(
+            !requested.iter().any(|p| p == refused),
+            "{refused} reached the server: {requested:?}"
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------

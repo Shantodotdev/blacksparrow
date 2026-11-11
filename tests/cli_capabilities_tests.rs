@@ -164,7 +164,7 @@ fn test_cli_argument_parsing_new_commands() {
 
     match cli.command {
         Commands::Schema(args) => {
-            assert_eq!(args.target, "https://example.com/product");
+            assert_eq!(args.target.as_deref(), Some("https://example.com/product"));
             assert_eq!(args.expected_type.as_deref(), Some("Product"));
             assert_eq!(args.format, "json");
         }

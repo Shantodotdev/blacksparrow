@@ -21,6 +21,7 @@ use chromiumoxide::cdp::browser_protocol::fetch::{
     ContinueRequestParams, EventRequestPaused, FailRequestParams, FulfillRequestParams, HeaderEntry,
 };
 use chromiumoxide::cdp::browser_protocol::network::{ErrorReason, ResourceType};
+use chromiumoxide::cdp::js_protocol::runtime::EventExceptionThrown;
 use chromiumoxide::handler::HandlerConfig;
 use chromiumoxide::Page;
 use futures::StreamExt;
@@ -39,6 +40,20 @@ const SETTLE_POLL: Duration = Duration::from_millis(250);
 const MAX_CSSOM_CHARS: usize = 2_000_000;
 /// Largest rendered DOM read back, in UTF-16 units of `outerHTML`.
 const MAX_DOM_CHARS: i64 = 8_000_000;
+/// Most uncaught script errors kept per page.
+const MAX_RUNTIME_ERRORS: usize = 50;
+/// Records uncaught errors and unhandled rejections the page raises while it runs.
+const RUNTIME_ERROR_OBSERVER: &str = r#"
+    (() => {
+        window.__blacksparrow_runtime_errors = [];
+        const record = (error) => {
+            const value = error && (error.stack || error.message) ? (error.stack || error.message) : String(error);
+            window.__blacksparrow_runtime_errors.push(value);
+        };
+        window.addEventListener('error', (event) => record(event.error || event.message), true);
+        window.addEventListener('unhandledrejection', (event) => record(event.reason), true);
+    })();
+"#;
 
 /// Low-footprint switches for a crawler that only needs the DOM, on top of chromiumoxide's
 /// defaults (which already disable background networking, sync, default apps, extensions and
@@ -89,6 +104,8 @@ pub struct Rendered {
     pub html: String,
     /// CSS rules the page built in the CSSOM without text in the DOM (CSS-in-JS).
     pub cssom: Vec<String>,
+    /// Uncaught script errors the page raised while it ran (deduplicated, capped).
+    pub runtime_errors: Vec<String>,
     /// Requests refused (images, fonts, media, refused addresses).
     pub blocked_requests: u32,
     /// Milliseconds the render took.
@@ -261,12 +278,26 @@ impl Renderer {
             (target.to_string(), html.to_string())
         });
         let interceptor = self.intercept(page, blocked.clone(), document).await?;
+        let (error_tx, mut error_rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut exceptions = page
+            .event_listener::<EventExceptionThrown>()
+            .await
+            .map_err(|e| SeoError::Network(format!("cannot listen for script errors: {e}")))?;
+        let exception_task = tokio::spawn(async move {
+            while let Some(event) = exceptions.next().await {
+                let _ = error_tx.send(event.exception_details.text.clone());
+            }
+        });
+        page.evaluate_on_new_document(RUNTIME_ERROR_OBSERVER)
+            .await
+            .map_err(|e| SeoError::Network(format!("cannot watch script errors: {e}")))?;
 
         let navigation = tokio::time::timeout(self.options.page_timeout, page.goto(url.as_str()))
             .await
             .map_err(|_| SeoError::Network("navigation timed out".to_string()))?;
         if let Err(err) = navigation {
             interceptor.abort();
+            exception_task.abort();
             return Err(SeoError::Network(format!("navigation failed: {err}")));
         }
         settle(page).await;
@@ -279,6 +310,7 @@ impl Renderer {
             .unwrap_or(0);
         if size > MAX_DOM_CHARS {
             interceptor.abort();
+            exception_task.abort();
             return Err(SeoError::Network(format!(
                 "rendered page too large ({size} chars)"
             )));
@@ -299,11 +331,27 @@ impl Renderer {
             .ok()
             .flatten()
             .unwrap_or_else(|| url.to_string());
+        let observed: Vec<String> = page
+            .evaluate("window.__blacksparrow_runtime_errors || []")
+            .await
+            .ok()
+            .and_then(|result| result.into_value().ok())
+            .unwrap_or_default();
         interceptor.abort();
+        exception_task.abort();
+        let mut runtime_errors = Vec::new();
+        while let Ok(error) = error_rx.try_recv() {
+            runtime_errors.push(error);
+        }
+        runtime_errors.extend(observed);
+        runtime_errors.sort();
+        runtime_errors.dedup();
+        runtime_errors.truncate(MAX_RUNTIME_ERRORS);
         Ok(Rendered {
             final_url,
             html,
             cssom,
+            runtime_errors,
             blocked_requests: blocked.load(Ordering::Relaxed),
             elapsed_ms: started.elapsed().as_millis() as u64,
         })

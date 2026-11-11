@@ -291,6 +291,14 @@ pub enum RuleId {
     WarnGraphDeadEndPage,
     WarnGraphHighCrawlDepth,
     WarnLowInternalPagerankHub,
+
+    // --- Category 13: JavaScript SEO Diffing ---
+    ErrJsDiffCanonicalAltered,
+    ErrJsDiffNoindexInjected,
+    WarnJsDiffTitleMetaDesync,
+    AlertJsDiffVanishingContent,
+    AlertJsDiffLateRenderedLinks,
+    ErrJsDiffHydrationCrash,
 }
 
 impl RuleId {
@@ -403,6 +411,13 @@ impl RuleId {
             Self::WarnGraphDeadEndPage => "WARN_GRAPH_DEAD_END_PAGE",
             Self::WarnGraphHighCrawlDepth => "WARN_GRAPH_HIGH_CRAWL_DEPTH",
             Self::WarnLowInternalPagerankHub => "WARN_LOW_INTERNAL_PAGERANK_HUB",
+
+            Self::ErrJsDiffCanonicalAltered => "ERR_JS_DIFF_CANONICAL_ALTERED",
+            Self::ErrJsDiffNoindexInjected => "ERR_JS_DIFF_NOINDEX_INJECTED",
+            Self::WarnJsDiffTitleMetaDesync => "WARN_JS_DIFF_TITLE_META_DESYNC",
+            Self::AlertJsDiffVanishingContent => "ALERT_JS_DIFF_VANISHING_CONTENT",
+            Self::AlertJsDiffLateRenderedLinks => "ALERT_JS_DIFF_LATE_RENDERED_LINKS",
+            Self::ErrJsDiffHydrationCrash => "ERR_JS_DIFF_HYDRATION_CRASH",
         }
     }
 }

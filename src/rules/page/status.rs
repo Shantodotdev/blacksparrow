@@ -154,8 +154,17 @@ pub fn check_status(page: &ParsedPage, fetch: &FetchResult, issues: &mut Vec<Iss
         }
     }
 
-    // 10. Performance HTML payload size
-    if fetch.size_bytes > 3_000_000 {
+    // 10. Performance HTML payload size & Googlebot 15 MB limit
+    if fetch.is_truncated || fetch.size_bytes >= 15_000_000 {
+        let rule = get_rule(RuleId::ErrPerfExcessiveHtmlPayload);
+        issues.push(rule.to_finding(
+            url,
+            Some(&format!(
+                "HTML document payload exceeds Google's 15 MB indexing boundary ({:.2} MB, stream truncated). Search engines will not index any content, links, or structured data beyond 15 MB.",
+                fetch.size_bytes as f64 / 1_000_000.0
+            )),
+        ));
+    } else if fetch.size_bytes > 3_000_000 {
         let rule = get_rule(RuleId::ErrPerfExcessiveHtmlPayload);
         issues.push(rule.to_finding(
             url,

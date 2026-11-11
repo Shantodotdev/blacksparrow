@@ -1,0 +1,114 @@
+# Publishes the npm packages. Called by release.yml (a cargo-dist `publish-jobs` entry) after
+# the GitHub release exists, with the dist plan as input.
+#
+# The release archives built by cargo-dist are turned into one package per platform
+# (blacksparrow-linux-x64-gnu, ... see sdks/js/scripts/stage-platform-packages.mjs). Those are
+# published first, then the main `blacksparrow` package that depends on them.
+#
+# Authentication is npm trusted publishing (OIDC, no token) once each package has a trusted
+# publisher configured; npm matches it against the calling workflow (release.yml). A package
+# name that does not exist yet cannot have one, so the first release needs an NPM_TOKEN
+# repository secret; see RELEASING.md.
+name: Publish to npm
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        description: The cargo-dist plan (JSON) of this release
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish npm packages
+    runs-on: ubuntu-22.04
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/blacksparrow
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      PLAN: ${{ inputs.plan }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Read the release from the plan
+        run: |
+          echo "TAG=$(echo "$PLAN" | jq -r '.announcement_tag')" >> "$GITHUB_ENV"
+          echo "VERSION=$(echo "$PLAN" | jq -r '.releases[0].app_version')" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      # Trusted publishing needs npm 11.5.2 or newer.
+      - name: Update npm
+        run: npm install --global npm@^11.5.2 && npm --version
+
+      # Without the secret npm exchanges the workflow's OIDC identity for a publish credential
+      # (trusted publishing); a token in the npm config would take precedence over that.
+      - name: Use NPM_TOKEN when the secret is set
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "$NPM_TOKEN" ]; then
+            echo "::add-mask::$NPM_TOKEN"
+            echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" >> "$HOME/.npmrc"
+            echo "Publishing with NPM_TOKEN"
+          else
+            echo "Publishing with npm trusted publishing (OIDC)"
+          fi
+
+      - name: Download the release archives
+        run: |
+          mkdir artifacts
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir artifacts \
+            --pattern 'blacksparrow-*.tar.xz' --pattern 'blacksparrow-*.tar.xz.sha256' \
+            --pattern 'blacksparrow-*.zip' --pattern 'blacksparrow-*.zip.sha256'
+          ls -l artifacts
+
+      - name: Verify the build attestations
+        run: |
+          for archive in artifacts/*.tar.xz artifacts/*.zip; do
+            gh attestation verify "$archive" --repo "$GITHUB_REPOSITORY"
+          done
+
+      - name: Stage the platform packages
+        run: |
+          node sdks/js/scripts/stage-platform-packages.mjs \
+            --artifacts artifacts --version "$VERSION" --out staged
+          ls staged
+          test "$(ls -d staged/*/ | wc -l)" -eq 7
+
+      - name: Build the main package
+        working-directory: sdks/js
+        run: |
+          npm ci
+          npm run build
+
+      - name: Publish the platform packages, then the main package
+        run: |
+          tag_flag=""
+          case "$VERSION" in *-*) tag_flag="--tag next" ;; esac
+          publish() {
+            dir="$1"
+            name="$(node -p "require('./$dir/package.json').name")"
+            status="$(curl -s -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/$name/$VERSION")"
+            if [ "$status" = "200" ]; then
+              echo "$name@$VERSION is already published, skipping"
+              return
+            fi
+            (cd "$dir" && npm publish --provenance --access public $tag_flag)
+          }
+          for dir in staged/*/; do
+            publish "${dir%/}"
+          done
+          publish sdks/js

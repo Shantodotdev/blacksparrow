@@ -5,14 +5,14 @@
 
 use crate::cli::args::{
     AuditArgs, CheckAiArgs, CleanArgs, Cli, Commands, DeleteArgs, ExtractArgs, InspectArgs,
-    IssuesArgs, ListArgs, McpArgs, ReportArgs, SchemaArgs,
+    IssuesArgs, ListArgs, McpArgs, ReportArgs, SchemaArgs, SchemaDocument,
 };
 use crate::core::config::CrawlConfig;
 use crate::core::models::{IssueCategory, Severity};
 use crate::crawler::ai_check::audit_ai_readiness;
 use crate::crawler::client::{FetchOptions, HttpClient};
 use crate::crawler::engine::{run_crawl_with_options, CrawlResult, ProgressCallback};
-use crate::crawler::inspector::inspect_url_with_options;
+use crate::crawler::inspector::inspect_url_with_options_ext;
 use crate::graph::{compute_pagerank, SiteGraph};
 use crate::report::{
     clear_post_crawl_status, create_crawl_progress_bar, export_csv_suite, export_html_report,
@@ -120,6 +120,15 @@ async fn handle_audit(args: AuditArgs) -> Result<(), Box<dyn std::error::Error>>
     config.exclude_regex = args.exclude;
     config.quiet = args.quiet;
     config.crawl_name = args.name;
+    for h in args.allowed_hosts {
+        if !config
+            .allowed_private_hosts
+            .iter()
+            .any(|existing| existing.eq_ignore_ascii_case(&h))
+        {
+            config.allowed_private_hosts.push(h);
+        }
+    }
 
     if let Some(sm) = args.sitemap {
         config.explicit_sitemaps.push(sm);
@@ -134,8 +143,14 @@ async fn handle_audit(args: AuditArgs) -> Result<(), Box<dyn std::error::Error>>
 
     config.validate()?;
 
-    let db_path = resolve_db_path(args.db_path.clone(), args.local);
-    config.db_path = Some(db_path.clone());
+    let db_path = if !args.ephemeral {
+        let p = resolve_db_path(args.db_path.clone(), args.local);
+        config.db_path = Some(p.clone());
+        Some(p)
+    } else {
+        config.db_path = None;
+        None
+    };
 
     let session_id = format!(
         "crawl_{}",
@@ -146,8 +161,8 @@ async fn handle_audit(args: AuditArgs) -> Result<(), Box<dyn std::error::Error>>
     );
     config.session_id = Some(session_id.clone());
 
-    let (writer_handle, writer_task) = if !args.ephemeral {
-        let db = Database::open(&db_path)?;
+    let (writer_handle, writer_task) = if let Some(ref path) = db_path {
+        let db = Database::open(path)?;
         db.init_crawl_session(&CrawlSessionInit {
             session_id: session_id.clone(),
             target_url: config.start_url.clone(),
@@ -207,16 +222,6 @@ async fn handle_audit(args: AuditArgs) -> Result<(), Box<dyn std::error::Error>>
         }
         let _ = handle.shutdown().await;
         let _ = task.await;
-    }
-
-    if args.ephemeral && db_path.exists() {
-        let _ = std::fs::remove_file(&db_path);
-        let mut shm = db_path.clone();
-        shm.set_extension("db-shm");
-        let _ = std::fs::remove_file(shm);
-        let mut wal = db_path.clone();
-        wal.set_extension("db-wal");
-        let _ = std::fs::remove_file(wal);
     }
 
     // Handle file exports concurrently across CPU cores
@@ -358,7 +363,16 @@ async fn handle_inspect(args: InspectArgs) -> Result<(), Box<dyn std::error::Err
         }
     }
 
-    match inspect_url_with_options(&args.url, &args.user_agent, timeout, custom_headers).await {
+    match inspect_url_with_options_ext(
+        &args.url,
+        &args.user_agent,
+        timeout,
+        custom_headers,
+        false,
+        args.allowed_hosts,
+    )
+    .await
+    {
         Ok((page, fetch, issues)) => {
             if args.format.eq_ignore_ascii_case("json") {
                 let json_output = serde_json::json!({
@@ -410,7 +424,10 @@ async fn handle_inspect(args: InspectArgs) -> Result<(), Box<dyn std::error::Err
 async fn handle_mcp(args: McpArgs) -> Result<(), Box<dyn std::error::Error>> {
     let db_path = resolve_db_path(args.db_path, args.local);
     if args.transport.eq_ignore_ascii_case("stdio") {
-        crate::mcp::run_mcp_server(Some(db_path)).await?;
+        let ctx = crate::mcp::McpContext::new(Some(db_path))?
+            .with_allow_local_network(args.allow_local_network)
+            .with_allowed_hosts(args.allowed_hosts);
+        crate::mcp::run_mcp_server_with_context(ctx).await?;
     } else {
         eprintln!(
             "❌ Transport '{}' is not currently supported. Please use '--transport stdio'.",
@@ -744,17 +761,27 @@ async fn handle_clean(args: CleanArgs) -> Result<(), Box<dyn std::error::Error>>
 
 /// Validate JSON-LD / schema against Google Rich Results guidelines.
 async fn handle_schema(args: SchemaArgs) -> Result<(), Box<dyn std::error::Error>> {
-    let raw_content = if args.target.starts_with("http://") || args.target.starts_with("https://") {
+    if let Some(SchemaDocument::Extract) = args.document {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&crate::extract::output_schema())?
+        );
+        return Ok(());
+    }
+    let target = args.target.ok_or("a URL or file to validate is required")?;
+
+    let raw_content = if target.starts_with("http://") || target.starts_with("https://") {
         let client = HttpClient::new(FetchOptions {
             user_agent: args.user_agent,
             timeout: Duration::from_secs(15),
+            allow_all_private_ips: false,
             ..Default::default()
         })?;
-        let res = client.fetch(&args.target).await?;
+        let res = client.fetch(&target).await?;
         res.body
     } else {
-        std::fs::read_to_string(&args.target)
-            .map_err(|e| format!("Failed to read schema file '{}': {e}", args.target))?
+        std::fs::read_to_string(&target)
+            .map_err(|e| format!("Failed to read schema file '{target}': {e}"))?
     };
 
     let outcome = validate_raw_schema(&raw_content, args.expected_type.as_deref())?;

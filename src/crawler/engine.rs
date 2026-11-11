@@ -25,7 +25,7 @@ use crate::graph::{compute_pagerank, SiteGraph};
 use crate::parser::{parse_html, ParsedPage};
 use crate::report::score::calculate_health_score;
 use crate::rules::catalog::get_rule;
-use crate::rules::{evaluate_graph, evaluate_page};
+use crate::rules::{evaluate_graph, evaluate_js_diff, evaluate_page};
 use crate::storage::DbWriterHandle;
 use compact_str::CompactString;
 use hashbrown::{HashMap, HashSet};
@@ -372,35 +372,32 @@ async fn discover_robots_and_sitemaps(
     (robots, discovered_pages, site_issues)
 }
 
+/// Renders an HTML response's page in Chromium and returns its DOM after scripts ran. A page
+/// that cannot be rendered yields `None`, so `render_js` never loses a page: the caller keeps
+/// the HTTP body.
+async fn render_page(
+    renderer: &crate::extract::render::Renderer,
+    slots: &tokio::sync::Semaphore,
+    res: &crate::crawler::client::FetchResult,
+) -> Option<crate::extract::render::Rendered> {
+    if res.status_code >= 400 || !is_html_document(&res.content_type, &res.body) {
+        return None;
+    }
+    let url = url::Url::parse(&res.final_url).ok()?;
+    let _slot = slots.acquire().await.ok()?;
+    match renderer.render(&url).await {
+        Ok(rendered) => Some(rendered),
+        Err(err) => {
+            tracing::info!("render failed for {url}: {err}");
+            None
+        }
+    }
+}
+
 /// Fetches a single frontier entry, applies AIMD politeness throttling, evaluates single-page rules, and generates a PageReport.
 ///
 /// Feeds TTFB latency metrics and HTTP response status codes back into the AIMD controller
 /// to dynamically optimize request throughput without overloading the target origin.
-/// Replaces an HTML response's body with the page's DOM after its scripts ran. A page that
-/// cannot be rendered keeps its HTTP body, so `render_js` never loses a page.
-async fn render_into(
-    renderer: &crate::extract::render::Renderer,
-    slots: &tokio::sync::Semaphore,
-    res: &mut crate::crawler::client::FetchResult,
-) {
-    if res.status_code >= 400 || !is_html_document(&res.content_type, &res.body) {
-        return;
-    }
-    let Ok(url) = url::Url::parse(&res.final_url) else {
-        return;
-    };
-    let Ok(_slot) = slots.acquire().await else {
-        return;
-    };
-    match renderer.render(&url).await {
-        Ok(rendered) => {
-            res.body = rendered.html;
-            res.body_bytes = res.body.as_bytes().to_vec();
-        }
-        Err(err) => tracing::info!("render failed for {url}: {err}"),
-    }
-}
-
 async fn fetch_and_audit_page(
     session_id: &str,
     entry: FrontierEntry,
@@ -425,9 +422,6 @@ async fn fetch_and_audit_page(
 
     match fetch_res {
         Ok(mut res) => {
-            if let Some(renderer) = worker_cfg.renderer.as_ref() {
-                render_into(renderer, &worker_cfg.render_slots, &mut res).await;
-            }
             if !worker_cfg.no_aimd && worker_cfg.static_delay == 0 {
                 let mut a = aimd.lock().await;
                 if res.status_code >= 400 {
@@ -437,17 +431,44 @@ async fn fetch_and_audit_page(
                 }
             }
 
-            let parsed = if is_html_document(&res.content_type, &res.body) {
+            let mut parsed = if is_html_document(&res.content_type, &res.body) {
                 parse_html(&res.body, &res.final_url).ok()
             } else {
                 None
             };
+            let mut js_issues = Vec::new();
 
-            let page_issues = if let Some(ref p) = parsed {
+            // With `render_js`, the rendered DOM replaces the HTTP body for every later rule and
+            // link extraction, and the difference between the two feeds the JS diff rules.
+            if let (Some(raw), Some(renderer)) = (parsed.as_ref(), worker_cfg.renderer.as_ref()) {
+                if let Some(rendered) = render_page(renderer, &worker_cfg.render_slots, &res).await
+                {
+                    match parse_html(&rendered.html, &rendered.final_url) {
+                        Ok(rendered_page) => {
+                            js_issues = evaluate_js_diff(
+                                raw,
+                                &rendered_page,
+                                &res.final_url,
+                                &rendered.final_url,
+                                &rendered.runtime_errors,
+                            );
+                            res.body_bytes = rendered.html.as_bytes().to_vec();
+                            res.body = rendered.html;
+                            parsed = Some(rendered_page);
+                        }
+                        Err(err) => {
+                            tracing::info!("rendered DOM of {} not parsed: {err}", res.final_url);
+                        }
+                    }
+                }
+            }
+
+            let mut page_issues = if let Some(ref p) = parsed {
                 evaluate_page(p, &res)
             } else {
                 Vec::new()
             };
+            page_issues.extend(js_issues);
 
             let depth = entry.depth;
 
@@ -642,6 +663,8 @@ pub async fn run_crawl_with_options(
         max_redirects: 10,
         custom_headers: config.headers.clone(),
         proxy: config.proxy.clone(),
+        allow_all_private_ips: config.allow_all_private_ips,
+        allowed_private_hosts: config.allowed_private_hosts.clone(),
         ..Default::default()
     })?);
 
@@ -681,6 +704,16 @@ pub async fn run_crawl_with_options(
             no_sandbox: config.chrome_no_sandbox,
             page_timeout: Duration::from_secs(25),
             user_agent: Some(config.user_agent.clone()),
+            // The browser follows the crawl's private-network rule: loopback and private hosts
+            // are reachable only when the crawl itself may fetch them.
+            policy: Some(crate::extract::guard::AddressPolicy {
+                allow_private_network: config.allow_all_private_ips
+                    || !config.allowed_private_hosts.is_empty(),
+            }),
+            upstream_proxy: config
+                .proxy
+                .as_deref()
+                .and_then(|proxy| url::Url::parse(proxy).ok()),
             ..Default::default()
         };
         match crate::extract::render::Renderer::launch(options).await {

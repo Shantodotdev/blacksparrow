@@ -7,6 +7,7 @@
 //! except that `@import` URLs are reported for the caller to fetch.
 
 use regex::Regex;
+use schemars::JsonSchema;
 use serde::Serialize;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::OnceLock;
@@ -89,10 +90,11 @@ const GENERIC_FAMILIES: &[&str] = &[
 pub const DEFAULT_ICON_FONT_PATTERN: &str = "(?i)icon|icomoon|font ?awesome|glyph|material (icons|symbols)|dashicons|eicons|themify|ionicons|feather";
 
 /// Where a colour was seen.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
 pub struct ColorEvidence {
     /// `css_variable`, `stylesheet`, `inline_style` or `theme_color_meta`.
     #[serde(rename = "type")]
+    #[schemars(extend("enum" = ["css_variable", "stylesheet", "inline_style", "theme_color_meta"]))]
     pub kind: &'static str,
     /// The custom property name, for `css_variable`.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -103,7 +105,7 @@ pub struct ColorEvidence {
 }
 
 /// A font family the site applies.
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, Serialize, JsonSchema)]
 pub struct FontUse {
     /// The family name as written.
     pub family: String,
