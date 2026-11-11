@@ -93,6 +93,12 @@ print_error() {
   exit 1
 }
 
+# Emit a shell-safe representation for paths written into startup files.
+# Bash's %q escapes shell metacharacters without evaluating the path.
+shell_quote_path() {
+  printf '%q' "$1"
+}
+
 # ------------------------------------------------------------------------------
 # 2. Architecture & Platform Detection
 # ------------------------------------------------------------------------------
@@ -118,7 +124,7 @@ detect_target() {
       esac
       ;;
     *)
-      print_error "Unsupported operating system: $os (Use PowerShell installer for Windows)"
+      print_error "Unsupported operating system: $os (On Windows, download the .msi installer from GitHub Releases or build from source)"
       ;;
   esac
 }
@@ -127,6 +133,9 @@ detect_target() {
 # 3. Main Installation Pipeline
 # ------------------------------------------------------------------------------
 main() {
+  local modify_path=1
+  local verify_checksum=1
+
   # Parse CLI arguments if any
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -135,15 +144,40 @@ main() {
         shift
         ;;
       --dir)
+        if [ $# -lt 2 ] || [ -z "${2:-}" ] || [[ "$2" == --* ]]; then
+          print_error "--dir requires a directory path argument."
+        fi
         INSTALL_DIR="$2"
         shift 2
         ;;
       --version)
+        if [ $# -lt 2 ] || [ -z "${2:-}" ] || [[ "$2" == --* ]]; then
+          print_error "--version requires a version tag argument."
+        fi
         VERSION="$2"
         shift 2
         ;;
-      *)
+      --no-modify-path)
+        modify_path=0
         shift
+        ;;
+      --no-verify)
+        verify_checksum=0
+        shift
+        ;;
+      --help|-h)
+        printf "Usage: install.sh [OPTIONS]\n\n"
+        printf "Options:\n"
+        printf "  --dir <path>       Install destination directory (default: ~/.local/bin)\n"
+        printf "  --system           Install to /usr/local/bin\n"
+        printf "  --version <tag>    Specific release version tag (default: %s)\n" "$DEFAULT_TAG"
+        printf "  --no-modify-path   Do not modify shell profile files (~/.bashrc, ~/.zshrc, etc.)\n"
+        printf "  --no-verify        Skip cryptographic SHA-256 checksum verification\n"
+        printf "  --help, -h         Show this help message\n"
+        exit 0
+        ;;
+      *)
+        print_error "Unknown argument: $1. Run 'install.sh --help' for usage."
         ;;
     esac
   done
@@ -187,25 +221,35 @@ main() {
   fi
   print_success_step "Downloaded release payload"
 
-  # Verify SHA-256 if available
-  if curl -fsSL "$checksum_url" -o "${TMP_DIR}/${tarball}.sha256" 2>/dev/null; then
+  # Verify SHA-256 (fail-closed by default)
+  if [ "$verify_checksum" -eq 1 ]; then
+    print_step "•" "Verifying release integrity via SHA-256 checksum..."
+    if ! curl -fsSL "$checksum_url" -o "${TMP_DIR}/${tarball}.sha256" 2>/dev/null; then
+      print_error "Failed to download SHA-256 checksum from ${checksum_url}. Aborting for security. Use --no-verify to bypass."
+    fi
+
     local expected_hash
     expected_hash="$(awk '{print $1}' "${TMP_DIR}/${tarball}.sha256")"
-    local actual_hash=""
+    if [ -z "$expected_hash" ]; then
+      print_error "Checksum file is empty or malformed: ${checksum_url}."
+    fi
 
+    local actual_hash=""
     if command -v sha256sum >/dev/null 2>&1; then
       actual_hash="$(sha256sum "${TMP_DIR}/${tarball}" | awk '{print $1}')"
     elif command -v shasum >/dev/null 2>&1; then
       actual_hash="$(shasum -a 256 "${TMP_DIR}/${tarball}" | awk '{print $1}')"
+    else
+      print_error "Neither 'sha256sum' nor 'shasum' utility was found. Cannot verify artifact integrity. Use --no-verify to bypass."
     fi
 
-    if [ -n "$actual_hash" ]; then
-      if [ "$expected_hash" = "$actual_hash" ]; then
-        print_success_step "Cryptographic SHA-256 hash verified"
-      else
-        print_error "Checksum verification failed! Expected: $expected_hash, Got: $actual_hash"
-      fi
+    if [ "$expected_hash" = "$actual_hash" ]; then
+      print_success_step "Cryptographic SHA-256 hash verified: ${actual_hash}"
+    else
+      print_error "Checksum verification failed! Expected: $expected_hash, Got: $actual_hash"
     fi
+  else
+    print_warn_step "Skipping SHA-256 checksum verification (--no-verify specified)"
   fi
 
   print_step "•" "Extracting executable payload..."
@@ -269,8 +313,10 @@ main() {
   print_header "SHELL ENVIRONMENT & PATH CHECK"
 
   local in_path=0
-  local dir_expanded
-  dir_expanded="$(eval echo "$INSTALL_DIR")"
+  local dir_expanded="$INSTALL_DIR"
+  case "$INSTALL_DIR" in
+    "~"*) dir_expanded="$HOME${INSTALL_DIR#\~}" ;;
+  esac
   IFS=:
   for p in $PATH; do
     if [ "$p" = "$dir_expanded" ] || [ "$p" = "$INSTALL_DIR" ]; then
@@ -320,20 +366,27 @@ main() {
         ;;
     esac
 
-    local export_line="export PATH=\"${INSTALL_DIR}:\$PATH\""
+    local quoted_install_dir
+    quoted_install_dir="$(shell_quote_path "$INSTALL_DIR")"
+    local export_line="export PATH=${quoted_install_dir}:\$PATH"
     if [ "$user_shell" = "fish" ]; then
-      export_line="fish_add_path ${INSTALL_DIR}"
+      export_line="fish_add_path -- ${quoted_install_dir}"
     fi
 
     local added=0
-    if [ -n "$rc_file" ]; then
-      if [ ! -f "$rc_file" ] || ! grep -qF "$INSTALL_DIR" "$rc_file"; then
+    if [ "$modify_path" -eq 1 ] && [ -n "$rc_file" ]; then
+      if [ ! -f "$rc_file" ] || {
+        ! grep -qF "$INSTALL_DIR" "$rc_file" &&
+        ! grep -qF "$quoted_install_dir" "$rc_file"
+      }; then
         printf "\n# Added by Black Sparrow installer\n%s\n" "$export_line" >> "$rc_file"
         print_success_step "Automatically configured ${rc_file}"
         added=1
       else
         print_step "•" "${rc_file} already contains ${INSTALL_DIR}"
       fi
+    elif [ "$modify_path" -eq 0 ]; then
+      print_step "•" "Skipped shell profile configuration (--no-modify-path)"
     fi
 
     printf "\n"
@@ -345,7 +398,7 @@ main() {
       printf "    %b%s%b\n\n" "$C_CYAN$C_BOLD" "$export_line" "$C_RESET"
     fi
     printf "  %bOr execute directly:%b\n\n" "$C_DIM" "$C_RESET"
-    printf "    %b%s/seolens --version%b\n\n" "$C_DIM" "$INSTALL_DIR" "$C_RESET"
+    printf "    %b%s/blacksparrow --version%b\n\n" "$C_DIM" "$INSTALL_DIR" "$C_RESET"
   fi
 }
 

@@ -36,6 +36,7 @@ fn make_test_fetch(
         ttfb_ms: 100,
         redirect_chain: Vec::new(),
         waf_detected: None,
+        is_truncated: false,
     }
 }
 

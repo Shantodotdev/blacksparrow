@@ -356,6 +356,7 @@ fn make_mock_fetch(url: &str, body: &str) -> FetchResult {
         redirect_chain: Vec::new(),
         body_bytes: Vec::new(),
         waf_detected: None,
+        is_truncated: false,
     }
 }
 
