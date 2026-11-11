@@ -297,7 +297,8 @@ jobs:
     secrets: inherit
     # publish jobs get escalated permissions
     permissions:
-      "contents": "read"
+      "attestations": "write"
+      "contents": "write"
       "id-token": "write"
 
   custom-publish-npm:

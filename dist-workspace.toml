@@ -23,8 +23,10 @@ github-attestations = true
 install-updater = false
 
 [dist.github-custom-job-permissions.publish-pypi]
-contents = "read"
+# Write: the wheels are attached to the GitHub release; attestations: their build provenance.
+contents = "write"
 id-token = "write"
+attestations = "write"
 
 [dist.github-custom-job-permissions.publish-npm]
 contents = "read"

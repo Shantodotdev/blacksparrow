@@ -9,6 +9,8 @@
 # publisher configured; npm matches it against the calling workflow (release.yml). A package
 # name that does not exist yet cannot have one, so the first release needs an NPM_TOKEN
 # repository secret; see RELEASING.md.
+#
+# Off until the repository variable PUBLISH_NPM is "true".
 name: Publish to npm
 
 on:
@@ -25,6 +27,7 @@ permissions:
 jobs:
   publish:
     name: Publish npm packages
+    if: ${{ vars.PUBLISH_NPM == 'true' }}
     runs-on: ubuntu-22.04
     environment:
       name: npm

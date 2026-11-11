@@ -12,9 +12,29 @@ bot challenge, and returns:
 - schema.org business facts from JSON-LD
 - what the run cost
 
-The Black Sparrow binary ships **inside the wheel**, like `ruff`. `pip install blacksparrow` (or
-`uv add blacksparrow`) is all it takes: nothing is built, and nothing is downloaded at install or run
-time. Wheels exist for Linux (glibc and musl, x86_64 and aarch64), macOS (Intel and Apple silicon)
+The Black Sparrow binary ships **inside the wheel**, like `ruff`: nothing is built, and nothing is
+downloaded at run time. The wheels are attached to each
+[GitHub release](https://github.com/Shantodotdev/blacksparrow/releases) (they are not on PyPI yet).
+Install the one for your platform by its URL:
+
+```bash
+pip install "blacksparrow @ https://github.com/Shantodotdev/blacksparrow/releases/download/v0.1.0/<wheel file name>"
+```
+
+In a uv project, list one URL per platform with a marker, so `uv.lock` pins each wheel with its hash:
+
+```toml
+[project]
+dependencies = ["blacksparrow==0.1.0"]
+
+[tool.uv.sources]
+blacksparrow = [
+  { url = "https://github.com/.../blacksparrow-0.1.0-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", marker = "sys_platform == 'linux' and platform_machine == 'x86_64'" },
+  { url = "https://github.com/.../blacksparrow-0.1.0-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", marker = "sys_platform == 'linux' and platform_machine == 'aarch64'" },
+]
+```
+
+Copy the exact file names from the release page. Wheels exist for Linux (glibc and musl, x86_64 and aarch64), macOS (Intel and Apple silicon)
 and Windows (x64). Python 3.10 or newer. The only dependency is `pydantic>=2`.
 
 ## Quick start
@@ -45,22 +65,22 @@ Without a browser, pass `render="never"` and `chrome_path=None`. Plain HTTP is e
 
 ### Arguments
 
-| Argument | Meaning |
-| --- | --- |
-| `url` | The website. Anything that is not an absolute `http(s)` address returns outcome `unsupported_url` without running anything. |
-| `chrome_path` | Absolute path of a Chromium or chrome-headless-shell executable. **Required** unless `render="never"` (then pass `None`). |
-| `render` | `"auto"` (default: only JavaScript shells and bot challenges), `"always"` or `"never"`. |
-| `max_pages` | Pages read in total, homepage included (1 to 100). **Required.** |
-| `timeout_seconds` | The binary's deadline for the whole site (at least 5). **Required.** The process is killed 30 seconds after it if it still runs. |
+| Argument                | Meaning                                                                                                                                                        |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `url`                   | The website. Anything that is not an absolute `http(s)` address returns outcome `unsupported_url` without running anything.                                    |
+| `chrome_path`           | Absolute path of a Chromium or chrome-headless-shell executable. **Required** unless `render="never"` (then pass `None`).                                      |
+| `render`                | `"auto"` (default: only JavaScript shells and bot challenges), `"always"` or `"never"`.                                                                        |
+| `max_pages`             | Pages read in total, homepage included (1 to 100). **Required.**                                                                                               |
+| `timeout_seconds`       | The binary's deadline for the whole site (at least 5). **Required.** The process is killed 30 seconds after it if it still runs.                               |
 | `allow_private_network` | Allow loopback and private addresses. Off by default: they are refused for every request, also inside the browser. Turn it on only for sites you run yourself. |
-| `proxy` | `http://[user:pass@]host:port` egress proxy for all traffic. Credentials in the URL are visible to local users in the process list. |
-| `user_agent` | User-Agent for plain fetches. |
-| `chrome_no_sandbox` | Run Chromium without its sandbox. Needed in containers without user namespaces. |
-| `pages` | Pages to read after the homepage instead of choosing them by rules. |
-| `env` | Extra environment variables for the process (see below). |
-| `max_output_bytes` | Largest document accepted (default 16 MiB). |
-| `cancel` | A `threading.Event`; set it from another thread to stop the reading. |
-| `binary` | Absolute path of the binary to run instead of the bundled one. |
+| `proxy`                 | `http://[user:pass@]host:port` egress proxy for all traffic. Credentials in the URL are visible to local users in the process list.                            |
+| `user_agent`            | User-Agent for plain fetches.                                                                                                                                  |
+| `chrome_no_sandbox`     | Run Chromium without its sandbox. Needed in containers without user namespaces.                                                                                |
+| `pages`                 | Pages to read after the homepage instead of choosing them by rules.                                                                                            |
+| `env`                   | Extra environment variables for the process (see below).                                                                                                       |
+| `max_output_bytes`      | Largest document accepted (default 16 MiB).                                                                                                                    |
+| `cancel`                | A `threading.Event`; set it from another thread to stop the reading.                                                                                           |
+| `binary`                | Absolute path of the binary to run instead of the bundled one.                                                                                                 |
 
 ## Async
 
@@ -106,13 +126,13 @@ The JSON Schema of the document (`schema_version` 1) is printed by `blacksparrow
 
 ## Errors
 
-| Error | When |
-| --- | --- |
-| `BlackSparrowError` | The binary could not start, crashed, printed too much or no usable document, or printed a `schema_version` this package does not know. |
-| `BinaryNotFoundError` | No usable binary (subclass of `BlackSparrowError`). |
-| `BlackSparrowTimeout` | The process outlived its deadline (subclass). |
-| `BlackSparrowCancelled` | The `cancel` event was set (subclass). |
-| `TypeError`, `ValueError` | An argument is wrong; nothing was run. |
+| Error                     | When                                                                                                                                   |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `BlackSparrowError`       | The binary could not start, crashed, printed too much or no usable document, or printed a `schema_version` this package does not know. |
+| `BinaryNotFoundError`     | No usable binary (subclass of `BlackSparrowError`).                                                                                    |
+| `BlackSparrowTimeout`     | The process outlived its deadline (subclass).                                                                                          |
+| `BlackSparrowCancelled`   | The `cancel` event was set (subclass).                                                                                                 |
+| `TypeError`, `ValueError` | An argument is wrong; nothing was run.                                                                                                 |
 
 ## How the process is run
 

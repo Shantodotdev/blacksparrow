@@ -47,7 +47,7 @@ Built from the ground up in Rust, Black Sparrow streams HTML responses through C
 
 ## Releases and installation
 
-Every version is published to four places from one tag, with the same version number: GitHub Releases (the binary), the shell and PowerShell installers, PyPI (`blacksparrow`) and npm (`blacksparrow`). Black Sparrow ships as a single binary with no OpenSSL or other system library to install. **Chromium is not bundled**: `blacksparrow extract` only needs it for JavaScript-only sites; point to it with `--chrome-path` (or `CHROME_PATH`) when it is not on the `PATH` (see [`docs/cli.md`](docs/cli.md#54-rendering)).
+Every version is released from one tag on [GitHub Releases](https://github.com/Shantodotdev/blacksparrow/releases): the binary for each platform, the shell and PowerShell installers, and the Python wheels. Publishing to PyPI and npm is prepared but off for now ([`RELEASING.md`](RELEASING.md)). Black Sparrow ships as a single binary with no OpenSSL or other system library to install. **Chromium is not bundled**: `blacksparrow extract` only needs it for JavaScript-only sites; point to it with `--chrome-path` (or `CHROME_PATH`) when it is not on the `PATH` (see [`docs/cli.md`](docs/cli.md#54-rendering)).
 
 ### Download from GitHub Releases
 
@@ -89,19 +89,17 @@ On Windows use `blacksparrow-installer.ps1` or the `.msi` from the release page 
 
 ### Python
 
+Each release has one wheel per platform (Linux glibc and musl, macOS, Windows), with the binary inside and a typed Python API. Install the wheel for your platform from the release page by its URL:
+
 ```bash
-pip install blacksparrow
+pip install "blacksparrow @ https://github.com/Shantodotdev/blacksparrow/releases/download/v0.1.0/<wheel file name>"
 ```
 
-The wheel contains the binary for your platform (Linux glibc and musl, macOS, Windows) and a typed Python API. See [`sdks/python`](sdks/python/README.md).
+In a uv project, give one URL per platform in `[tool.uv.sources]` with a marker each, so `uv.lock` pins every wheel with its hash. See [`sdks/python`](sdks/python/README.md).
 
 ### Node.js
 
-```bash
-npm install blacksparrow
-```
-
-The package installs the binary for your platform as an optional dependency and exposes a typed API. See [`sdks/js`](sdks/js/README.md).
+The npm package ([`sdks/js`](sdks/js/README.md)) is not published yet. Until it is, download the binary from the release page and point the package at it with `BLACKSPARROW_BINARY`.
 
 Both SDKs use the `BLACKSPARROW_BINARY` environment variable, when set, instead of the bundled binary. The JSON Schema of the `extract` output is built into the binary (`blacksparrow schema extract`) and committed as [`schema/extract.schema.json`](schema/extract.schema.json). Maintainers: see [`RELEASING.md`](RELEASING.md).
 

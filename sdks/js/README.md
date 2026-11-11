@@ -13,9 +13,10 @@ There are no runtime dependencies.
 - Pages that need JavaScript, or that show a bot challenge, are rendered in headless Chromium. You
   bring the Chromium; it is only started for pages that need it.
 
-```sh
-npm install blacksparrow
-```
+The package is not on npm yet. Until it is, build it from this folder (`npm ci && npm run build`)
+and point it at a binary downloaded from the
+[GitHub release](https://github.com/Shantodotdev/blacksparrow/releases) with `BLACKSPARROW_BINARY`.
+Once published, `npm install blacksparrow` installs the binary for your platform as well.
 
 ## Quick start
 
@@ -29,11 +30,17 @@ const site = await extract("https://example.com", {
 });
 
 if (site.outcome !== "ok") {
-  console.log(`Could not read the site: ${site.outcome} (${site.outcome_detail})`);
+  console.log(
+    `Could not read the site: ${site.outcome} (${site.outcome_detail})`,
+  );
 } else {
   const home = site.pages[0]; // kind "home"
   console.log(home.title, home.markdown.slice(0, 200));
-  console.log(site.contacts.emails, site.contacts.phones, site.contacts.whatsapp);
+  console.log(
+    site.contacts.emails,
+    site.contacts.phones,
+    site.contacts.whatsapp,
+  );
   console.log(site.design?.colors.slice(0, 3).map((color) => color.hex));
   console.log(site.design?.fonts.map((font) => font.family));
   console.log(site.design?.logos[0]);
@@ -58,22 +65,22 @@ const { extract } = require("blacksparrow");
 
 Reads the site and returns the result, validated and capped (see [Safety](#safety)).
 
-| Option | Default | |
-| --- | --- | --- |
-| `render` | `"auto"` | `"auto"` renders only JavaScript shells and bot challenges, `"always"` renders every HTML page, `"never"` uses plain HTTP only. |
-| `chromePath` | | Absolute path of a Chromium or chrome-headless-shell. Required unless `render` is `"never"`. |
-| `maxPages` | `6` | Pages read in total, homepage included (1 to 50). |
-| `timeoutSeconds` | `90` | The engine's own deadline for the whole site (5 to 3600). Work that cannot finish in time is skipped and the rest is still returned. |
-| `killGraceSeconds` | `30` | Seconds beyond `timeoutSeconds` before the process is killed and the call rejects with code `timeout`. |
-| `pages` | | Pages to read after the homepage instead of choosing them by rules. |
-| `allowPrivateNetwork` | `false` | Allows private, loopback and link-local addresses. Only for local test sites. |
-| `proxy` | | Egress proxy for all traffic, `http://[user:pass@]host:port`. Credentials appear in the engine's command line. |
-| `userAgent` | | User-Agent of plain fetches. |
-| `chromeNoSandbox` | `false` | Runs Chromium without its sandbox, for containers without user namespaces. |
-| `maxOutputBytes` | 16 MiB | Largest document accepted from the engine. |
-| `signal` | | An `AbortSignal`. Aborting kills the engine and every browser it started. |
-| `binary` | | Path of the engine binary (see [Which binary runs](#which-binary-runs)). |
-| `env` | | Extra environment variables for the engine. |
+| Option                | Default  |                                                                                                                                      |
+| --------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `render`              | `"auto"` | `"auto"` renders only JavaScript shells and bot challenges, `"always"` renders every HTML page, `"never"` uses plain HTTP only.      |
+| `chromePath`          |          | Absolute path of a Chromium or chrome-headless-shell. Required unless `render` is `"never"`.                                         |
+| `maxPages`            | `6`      | Pages read in total, homepage included (1 to 50).                                                                                    |
+| `timeoutSeconds`      | `90`     | The engine's own deadline for the whole site (5 to 3600). Work that cannot finish in time is skipped and the rest is still returned. |
+| `killGraceSeconds`    | `30`     | Seconds beyond `timeoutSeconds` before the process is killed and the call rejects with code `timeout`.                               |
+| `pages`               |          | Pages to read after the homepage instead of choosing them by rules.                                                                  |
+| `allowPrivateNetwork` | `false`  | Allows private, loopback and link-local addresses. Only for local test sites.                                                        |
+| `proxy`               |          | Egress proxy for all traffic, `http://[user:pass@]host:port`. Credentials appear in the engine's command line.                       |
+| `userAgent`           |          | User-Agent of plain fetches.                                                                                                         |
+| `chromeNoSandbox`     | `false`  | Runs Chromium without its sandbox, for containers without user namespaces.                                                           |
+| `maxOutputBytes`      | 16 MiB   | Largest document accepted from the engine.                                                                                           |
+| `signal`              |          | An `AbortSignal`. Aborting kills the engine and every browser it started.                                                            |
+| `binary`              |          | Path of the engine binary (see [Which binary runs](#which-binary-runs)).                                                             |
+| `env`                 |          | Extra environment variables for the engine.                                                                                          |
 
 The engine refuses private, loopback and link-local addresses for every request, also inside the
 browser, unless `allowPrivateNetwork` is set. Do not set it for URLs you do not control.
@@ -114,16 +121,16 @@ with the same snake_case names:
 
 A site that cannot be read is a normal result, not an exception:
 
-| `outcome` | Meaning |
-| --- | --- |
-| `ok` | The homepage was read. |
+| `outcome`         | Meaning                                                 |
+| ----------------- | ------------------------------------------------------- |
+| `ok`              | The homepage was read.                                  |
 | `unsupported_url` | Not an http(s) address. The engine is not even started. |
-| `unresolved` | The host name does not resolve. |
-| `blocked_address` | The host is a private or reserved address. |
-| `unreachable` | Connection, timeout or redirect failure. |
-| `bot_protected` | The homepage is a bot challenge, also after rendering. |
-| `http_error` | The homepage answered with an HTTP error. |
-| `not_html` | The homepage is not an HTML page. |
+| `unresolved`      | The host name does not resolve.                         |
+| `blocked_address` | The host is a private or reserved address.              |
+| `unreachable`     | Connection, timeout or redirect failure.                |
+| `bot_protected`   | The homepage is a bot challenge, also after rendering.  |
+| `http_error`      | The homepage answered with an HTTP error.               |
+| `not_html`        | The homepage is not an HTML page.                       |
 
 `BlackSparrowError` is thrown when the engine itself fails. Its `code` is one of:
 `invalid_options`, `binary_not_found`, `spawn_failed`, `timeout`, `aborted` (the abort reason is

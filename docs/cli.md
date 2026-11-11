@@ -322,7 +322,7 @@ A browser reached with `--chrome-ws` has its own network: its requests are check
 
 ## 6. Releases and installation
 
-Releases are published from one version tag to GitHub Releases, PyPI and npm with the same version number. The binary is self-contained (no OpenSSL or other system library). **Chromium is not bundled**: it is needed only to render JavaScript-only sites in `extract`, and is found through `--chrome-path`, then `CHROME_PATH`, then the `PATH`.
+Releases are published from one version tag to GitHub Releases: the binaries, the installers and the Python wheels. Publishing to PyPI and npm is prepared but off (`RELEASING.md`). The binary is self-contained (no OpenSSL or other system library). **Chromium is not bundled**: it is needed only to render JavaScript-only sites in `extract`, and is found through `--chrome-path`, then `CHROME_PATH`, then the `PATH`.
 
 ### 6.1 GitHub Releases
 
@@ -349,9 +349,6 @@ curl --proto '=https' --tlsv1.2 -LsSf https://github.com/Shantodotdev/blacksparr
 
 ### 6.3 Python and Node.js
 
-```bash
-pip install blacksparrow     # wheel with the binary inside; Python API in sdks/python
-npm install blacksparrow     # platform binary as optional dependency; Node API in sdks/js
-```
+The Python wheels, with the binary inside, are attached to each GitHub release; install the one for your platform by its URL (`pip install "blacksparrow @ <wheel URL>"`). The Python API is in `sdks/python`. The Node package in `sdks/js` is not published yet; it runs a downloaded binary through `BLACKSPARROW_BINARY`.
 
 Both SDKs run the binary found at `BLACKSPARROW_BINARY` when that variable is set, which is the way to use a custom build or a binary outside the package.
