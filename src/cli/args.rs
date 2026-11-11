@@ -500,9 +500,15 @@ pub struct CleanArgs {
 
 /// Command-line arguments for the `schema` subcommand.
 #[derive(Args, Debug, Clone)]
+#[command(subcommand_negates_reqs = true, args_conflicts_with_subcommands = true)]
 pub struct SchemaArgs {
+    /// Print a JSON Schema instead of validating structured data
+    #[command(subcommand)]
+    pub document: Option<SchemaDocument>,
+
     /// URL or path to a local JSON/HTML file containing structured data
-    pub target: String,
+    #[arg(required = true)]
+    pub target: Option<String>,
 
     /// Expected schema @type (e.g. Product, Article, FAQPage)
     #[arg(short = 't', long = "type")]
@@ -515,4 +521,11 @@ pub struct SchemaArgs {
     /// Custom User-Agent string (when target is a URL)
     #[arg(short = 'u', long, default_value = "BlackSparrow/1.0")]
     pub user_agent: String,
+}
+
+/// Documents whose JSON Schema `schema` can print.
+#[derive(Subcommand, Debug, Clone)]
+pub enum SchemaDocument {
+    /// Print the JSON Schema (draft 2020-12) of the `extract` output document
+    Extract,
 }

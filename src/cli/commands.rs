@@ -5,7 +5,7 @@
 
 use crate::cli::args::{
     AuditArgs, CheckAiArgs, CleanArgs, Cli, Commands, DeleteArgs, ExtractArgs, InspectArgs,
-    IssuesArgs, ListArgs, McpArgs, ReportArgs, SchemaArgs,
+    IssuesArgs, ListArgs, McpArgs, ReportArgs, SchemaArgs, SchemaDocument,
 };
 use crate::core::config::CrawlConfig;
 use crate::core::models::{IssueCategory, Severity};
@@ -761,18 +761,27 @@ async fn handle_clean(args: CleanArgs) -> Result<(), Box<dyn std::error::Error>>
 
 /// Validate JSON-LD / schema against Google Rich Results guidelines.
 async fn handle_schema(args: SchemaArgs) -> Result<(), Box<dyn std::error::Error>> {
-    let raw_content = if args.target.starts_with("http://") || args.target.starts_with("https://") {
+    if let Some(SchemaDocument::Extract) = args.document {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&crate::extract::output_schema())?
+        );
+        return Ok(());
+    }
+    let target = args.target.ok_or("a URL or file to validate is required")?;
+
+    let raw_content = if target.starts_with("http://") || target.starts_with("https://") {
         let client = HttpClient::new(FetchOptions {
             user_agent: args.user_agent,
             timeout: Duration::from_secs(15),
             allow_all_private_ips: false,
             ..Default::default()
         })?;
-        let res = client.fetch(&args.target).await?;
+        let res = client.fetch(&target).await?;
         res.body
     } else {
-        std::fs::read_to_string(&args.target)
-            .map_err(|e| format!("Failed to read schema file '{}': {e}", args.target))?
+        std::fs::read_to_string(&target)
+            .map_err(|e| format!("Failed to read schema file '{target}': {e}"))?
     };
 
     let outcome = validate_raw_schema(&raw_content, args.expected_type.as_deref())?;

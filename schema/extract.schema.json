@@ -1,0 +1,766 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SiteExtract",
+  "description": "The extraction result.",
+  "type": "object",
+  "properties": {
+    "contacts": {
+      "description": "Contacts across pages.",
+      "$ref": "#/$defs/ContactsOut"
+    },
+    "design": {
+      "description": "The site's design; `null` when the homepage could not be read.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DesignOut"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "final_url": {
+      "description": "The homepage after redirects.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "generator": {
+      "description": "`blacksparrow <version>`.",
+      "type": "string"
+    },
+    "outcome": {
+      "description": "How it ended.",
+      "$ref": "#/$defs/Outcome"
+    },
+    "outcome_detail": {
+      "description": "Details of a failed outcome.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "page_errors": {
+      "description": "Pages that could not be read.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PageError"
+      }
+    },
+    "pages": {
+      "description": "Pages read, homepage first.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PageOut"
+      }
+    },
+    "schema_version": {
+      "description": "[`SCHEMA_VERSION`].",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "start_url": {
+      "description": "The URL asked for.",
+      "type": "string"
+    },
+    "stats": {
+      "description": "Cost of the run.",
+      "$ref": "#/$defs/StatsOut"
+    },
+    "structured": {
+      "description": "schema.org business facts across pages.",
+      "$ref": "#/$defs/StructuredBusiness"
+    }
+  },
+  "required": [
+    "schema_version",
+    "generator",
+    "start_url",
+    "outcome",
+    "pages",
+    "page_errors",
+    "contacts",
+    "structured",
+    "stats",
+    "final_url",
+    "design"
+  ],
+  "$defs": {
+    "ColorEvidence": {
+      "description": "Where a colour was seen.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "The custom property name, for `css_variable`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sourceUrl": {
+          "description": "The stylesheet or page URL.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "type": {
+          "description": "`css_variable`, `stylesheet`, `inline_style` or `theme_color_meta`.",
+          "type": "string",
+          "enum": [
+            "css_variable",
+            "stylesheet",
+            "inline_style",
+            "theme_color_meta"
+          ]
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    "ColorOut": {
+      "description": "A colour of the site with its use.",
+      "type": "object",
+      "properties": {
+        "evidence": {
+          "description": "Where it was seen (up to 5).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ColorEvidence"
+          }
+        },
+        "hex": {
+          "description": "`#RRGGBB`.",
+          "type": "string"
+        },
+        "occurrences": {
+          "description": "Times it is written.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "usage_score": {
+          "description": "Its 0-1 share of all colour uses.",
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "hex",
+        "occurrences",
+        "usage_score",
+        "evidence"
+      ]
+    },
+    "ContactsOut": {
+      "description": "Contacts merged across pages, in page order.",
+      "type": "object",
+      "properties": {
+        "emails": {
+          "description": "Email addresses, lowercased.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "facebook": {
+          "description": "Canonical Facebook page links.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "instagram": {
+          "description": "Canonical Instagram profile links.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "phones": {
+          "description": "Phone numbers as written.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "whatsapp": {
+          "description": "WhatsApp chat links.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "phones",
+        "emails",
+        "whatsapp",
+        "facebook",
+        "instagram"
+      ]
+    },
+    "DesignOut": {
+      "description": "The site's design as its homepage and stylesheets show it.",
+      "type": "object",
+      "properties": {
+        "colors": {
+          "description": "Colours, most used first.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ColorOut"
+          }
+        },
+        "description": {
+          "description": "Homepage description.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fonts": {
+          "description": "Font families, those with known roles first.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FontUse"
+          }
+        },
+        "logos": {
+          "description": "Logo candidates, best first.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LogoCandidate"
+          }
+        },
+        "site_name": {
+          "description": "`og:site_name`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stylesheets": {
+          "description": "Stylesheets read.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StylesheetOut"
+          }
+        },
+        "theme_color": {
+          "description": "`theme-color` meta.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "description": "Homepage title.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "colors",
+        "fonts",
+        "logos",
+        "stylesheets",
+        "title",
+        "description",
+        "site_name",
+        "theme_color"
+      ]
+    },
+    "FontUse": {
+      "description": "A font family the site applies.",
+      "type": "object",
+      "properties": {
+        "family": {
+          "description": "The family name as written.",
+          "type": "string"
+        },
+        "selectors": {
+          "description": "Kinds of text it is applied to: `headings`, `body`, `buttons`, `links`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "weights": {
+          "description": "Weights declared for it, ascending.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint16",
+            "maximum": 65535,
+            "minimum": 0
+          }
+        }
+      },
+      "required": [
+        "family",
+        "selectors",
+        "weights"
+      ]
+    },
+    "LogoCandidate": {
+      "description": "A place the brand's logo may be.",
+      "type": "object",
+      "properties": {
+        "reason": {
+          "description": "Why this is a candidate; lower ranks first.",
+          "$ref": "#/$defs/LogoReason"
+        },
+        "svg": {
+          "description": "A standalone SVG document; `None` for an image URL.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "url": {
+          "description": "Absolute http(s) image URL; `None` for an inline SVG.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "reason",
+        "url",
+        "svg"
+      ]
+    },
+    "LogoReason": {
+      "description": "Why an image is a logo candidate.",
+      "oneOf": [
+        {
+          "description": "A logo-named image or SVG inside `<header>` or `<nav>`.",
+          "type": "string",
+          "const": "header_logo"
+        },
+        {
+          "description": "The `logo` of a schema.org Organization.",
+          "type": "string",
+          "const": "schema_logo"
+        },
+        {
+          "description": "A logo-named image or SVG elsewhere.",
+          "type": "string",
+          "const": "logo_hint"
+        },
+        {
+          "description": "`<link rel=\"apple-touch-icon\">`.",
+          "type": "string",
+          "const": "apple_touch_icon"
+        },
+        {
+          "description": "`<meta property=\"og:image\">`.",
+          "type": "string",
+          "const": "og_image"
+        },
+        {
+          "description": "A favicon `<link rel=\"icon\">`.",
+          "type": "string",
+          "const": "icon"
+        }
+      ]
+    },
+    "Outcome": {
+      "description": "How the extraction ended.",
+      "oneOf": [
+        {
+          "description": "The homepage was read.",
+          "type": "string",
+          "const": "ok"
+        },
+        {
+          "description": "The URL is malformed or not http(s).",
+          "type": "string",
+          "const": "unsupported_url"
+        },
+        {
+          "description": "The host name does not resolve.",
+          "type": "string",
+          "const": "unresolved"
+        },
+        {
+          "description": "The host is a private or reserved address.",
+          "type": "string",
+          "const": "blocked_address"
+        },
+        {
+          "description": "The site could not be reached (connection, timeout, redirects).",
+          "type": "string",
+          "const": "unreachable"
+        },
+        {
+          "description": "The homepage is a bot challenge even after rendering.",
+          "type": "string",
+          "const": "bot_protected"
+        },
+        {
+          "description": "The homepage answered with an HTTP error.",
+          "type": "string",
+          "const": "http_error"
+        },
+        {
+          "description": "The homepage is not an HTML page.",
+          "type": "string",
+          "const": "not_html"
+        }
+      ]
+    },
+    "PageError": {
+      "description": "A page that could not be read.",
+      "type": "object",
+      "properties": {
+        "error": {
+          "description": "What went wrong.",
+          "type": "string"
+        },
+        "url": {
+          "description": "The URL asked for.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "error"
+      ]
+    },
+    "PageLink": {
+      "description": "A hyperlink on the page.",
+      "type": "object",
+      "properties": {
+        "text": {
+          "description": "Visible text (or label) of the link, whitespace collapsed.",
+          "type": "string"
+        },
+        "url": {
+          "description": "Absolute http(s) target.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "url"
+      ]
+    },
+    "PageOut": {
+      "description": "One page read.",
+      "type": "object",
+      "properties": {
+        "description": {
+          "description": "Meta description.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "emails": {
+          "description": "Email addresses on the page.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "facebook": {
+          "description": "Facebook page links (canonical).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "final_url": {
+          "description": "The URL after redirects.",
+          "type": "string"
+        },
+        "instagram": {
+          "description": "Instagram profile links (canonical).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "kind": {
+          "description": "`home`, or the selection kind (`contact`, `about`, `catalog`, `locations`, `ordering`,\n`requested`).",
+          "type": "string",
+          "enum": [
+            "home",
+            "contact",
+            "about",
+            "catalog",
+            "locations",
+            "ordering",
+            "requested"
+          ]
+        },
+        "lang": {
+          "description": "`<html lang>`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "links": {
+          "description": "The page's http(s) links.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PageLink"
+          }
+        },
+        "markdown": {
+          "description": "The page as Markdown.",
+          "type": "string"
+        },
+        "phones": {
+          "description": "Phone numbers on the page.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "render_reason": {
+          "description": "Why it was rendered: `js_shell`, `bot_challenge`, `http_error` or `always`.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "js_shell",
+            "bot_challenge",
+            "http_error",
+            "always"
+          ]
+        },
+        "rendered": {
+          "description": "Whether the content comes from a Chromium render.",
+          "type": "boolean"
+        },
+        "status": {
+          "description": "HTTP status of the plain fetch.",
+          "type": "integer",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "title": {
+          "description": "`<title>`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "url": {
+          "description": "The URL asked for.",
+          "type": "string"
+        },
+        "waf": {
+          "description": "Bot-protection provider seen on the final content.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "whatsapp": {
+          "description": "WhatsApp chat links on the page.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "word_count": {
+          "description": "Words of visible text.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "url",
+        "final_url",
+        "kind",
+        "status",
+        "rendered",
+        "word_count",
+        "markdown",
+        "links",
+        "phones",
+        "emails",
+        "whatsapp",
+        "facebook",
+        "instagram",
+        "title",
+        "description",
+        "lang"
+      ]
+    },
+    "StatsOut": {
+      "description": "What the extraction cost.",
+      "type": "object",
+      "properties": {
+        "blocked_browser_requests": {
+          "description": "Browser requests refused (images, fonts, media, refused addresses).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "elapsed_ms": {
+          "description": "Wall-clock milliseconds.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "http_bytes": {
+          "description": "Body bytes read over HTTP.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "http_fetches": {
+          "description": "HTTP requests answered.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "peak_rss_kib": {
+          "description": "Peak resident memory of this process in KiB (Linux only; Chromium not included).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "render_ms": {
+          "description": "Milliseconds spent rendering, browser start included.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "rendered_pages": {
+          "description": "Pages rendered in Chromium.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "elapsed_ms",
+        "http_fetches",
+        "http_bytes",
+        "rendered_pages",
+        "render_ms",
+        "blocked_browser_requests"
+      ]
+    },
+    "StructuredBusiness": {
+      "description": "Facts a page states about its business in schema.org JSON-LD.",
+      "type": "object",
+      "properties": {
+        "addresses": {
+          "description": "Postal addresses, one string each.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "descriptions": {
+          "description": "`description` values.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "emails": {
+          "description": "`email` values.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "logos": {
+          "description": "`logo` URLs.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "names": {
+          "description": "`name` values of Organization/LocalBusiness-like nodes.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "same_as": {
+          "description": "`sameAs` profile URLs.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "telephones": {
+          "description": "`telephone` values.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "names",
+        "telephones",
+        "emails",
+        "addresses",
+        "same_as",
+        "logos",
+        "descriptions"
+      ]
+    },
+    "StylesheetOut": {
+      "description": "A stylesheet fetch.",
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "description": "Bytes read.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "error": {
+          "description": "What went wrong, if anything.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "description": "HTTP status, when an answer came.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "url": {
+          "description": "Where it was fetched from.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url",
+        "bytes",
+        "status"
+      ]
+    }
+  }
+}
