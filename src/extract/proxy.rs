@@ -47,6 +47,7 @@ impl GuardProxy {
         let task = tokio::spawn(async move {
             while let Ok((client, _)) = listener.accept().await {
                 let upstream = upstream.clone();
+                let policy = policy.clone();
                 tokio::spawn(async move {
                     let _ = serve(client, policy, upstream.as_ref()).await;
                 });
@@ -324,9 +325,7 @@ mod tests {
 
     #[tokio::test]
     async fn refuses_private_targets() {
-        let policy = AddressPolicy {
-            allow_private_network: false,
-        };
+        let policy = AddressPolicy::new(false);
         let proxy = GuardProxy::start(policy, None).await.unwrap();
         let tunnel = send(&proxy, "CONNECT 127.0.0.1:6379 HTTP/1.1\r\nHost: x\r\n\r\n").await;
         assert!(tunnel.starts_with("HTTP/1.1 403"), "{tunnel}");
@@ -353,9 +352,7 @@ mod tests {
                 .unwrap();
             head
         });
-        let policy = AddressPolicy {
-            allow_private_network: true,
-        };
+        let policy = AddressPolicy::new(true);
         let proxy = GuardProxy::start(policy, None).await.unwrap();
         let answer = send(
             &proxy,

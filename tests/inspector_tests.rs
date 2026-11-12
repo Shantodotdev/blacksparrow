@@ -123,6 +123,7 @@ fn test_format_page_inspection_with_rich_metadata() {
         ttfb_ms: 32,
         redirect_chain: vec![],
         waf_detected: None,
+        is_truncated: false,
     };
 
     let issues = vec![IssueFinding {
@@ -203,6 +204,7 @@ fn test_format_page_inspection_wraps_long_descriptions() {
         ttfb_ms: 6,
         redirect_chain: vec![],
         waf_detected: None,
+        is_truncated: false,
     };
 
     let output = format_page_inspection(&page, &fetch, &[]);

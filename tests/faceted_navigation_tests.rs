@@ -181,6 +181,7 @@ fn test_rule_alert_faceted_spider_trap_detection() {
         redirect_chain: Vec::new(),
         content_type: "text/html".into(),
         waf_detected: None,
+        is_truncated: false,
     };
 
     let issues = evaluate_page_rules(&parsed, &fetch);

@@ -155,6 +155,8 @@ seolens check-ai https://example.com
 
 ### 2.8 `seolens schema <url>` (Structured Data Validator)
 
+> `blacksparrow schema extract` is a different use of the same command: it prints the JSON Schema of the `extract` output document (see 5.2).
+
 Extracts all JSON-LD scripts from a URL and validates them against Google Rich Results specifications (Product, Article, FAQ, LocalBusiness, Breadcrumbs, etc.).
 
 ```bash
@@ -269,6 +271,14 @@ blacksparrow extract https://example.com --render never -o site.json
 
 ### 5.2 Output schema (`schema_version` 1)
 
+The document is described by a JSON Schema (draft 2020-12) that is built into the binary and committed to the repository as [`schema/extract.schema.json`](../schema/extract.schema.json). Print it with:
+
+```bash
+blacksparrow schema extract > extract.schema.json
+```
+
+A test validates real `extract` output against it, and CI fails when the committed file differs from what the binary prints. The Python and Node.js SDKs are typed from the same document. The fields:
+
 - `schema_version`, `generator`, `start_url`, `final_url` (homepage after redirects), `outcome`, `outcome_detail`.
 - `pages[]`: `url`, `final_url`, `kind` (`home`, `contact`, `about`, `catalog`, `locations`, `ordering`, `requested`), `status`, `rendered`, `render_reason` (`js_shell`, `bot_challenge`, `http_error`, `always`), `waf`, `title`, `description`, `lang`, `word_count`, `markdown`, `links[]` (`text`, `url`), and the page's `phones`, `emails`, `whatsapp`, `facebook`, `instagram`.
 - `page_errors[]`: `url`, `error` for chosen pages that could not be read (network failure, non-HTML, or an HTTP error status such as `HTTP 404`).
@@ -307,3 +317,38 @@ A launched Chromium resolves no names itself: all its traffic (pages, scripts, W
 Proxy environment variables (`HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`) are ignored, since a proxy resolves names itself and would bypass the check. Pass `--proxy` to use an egress proxy on purpose; the check then becomes advisory (the proxy resolves the name again), so that proxy must enforce its own egress rules.
 
 A browser reached with `--chrome-ws` has its own network: its requests are checked by URL only, so its operator must restrict that browser's egress, and it is left running at the end. `--chrome-ws`, `--chrome-arg`, `--chrome-path`, `--proxy`, `--allow-private-network` and `-o` are operator settings: never build them from untrusted input. All output fields carry website content and are untrusted for the consumer; inline SVG logos are reduced to an allow-list of drawing elements and attributes, but should still be served with a restrictive `Content-Security-Policy` or rendered as images.
+
+---
+
+## 6. Releases and installation
+
+Releases are published from one version tag to GitHub Releases: the binaries, the installers and the Python wheels. The binary is self-contained (no OpenSSL or other system library). **Chromium is not bundled**: it is needed only to render JavaScript-only sites in `extract`, and is found through `--chrome-path`, then `CHROME_PATH`, then the `PATH`.
+
+### 6.1 GitHub Releases
+
+Archives are named `blacksparrow-<target>.tar.xz` (`.zip` on Windows) with a `.sha256` file next to each. Targets: `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`, `x86_64-apple-darwin`, `aarch64-apple-darwin`, `x86_64-pc-windows-msvc`.
+
+```bash
+target=x86_64-unknown-linux-gnu
+base=https://github.com/Shantodotdev/blacksparrow/releases/latest/download
+curl -fsSLO "$base/blacksparrow-$target.tar.xz"
+curl -fsSLO "$base/blacksparrow-$target.tar.xz.sha256"
+sha256sum -c "blacksparrow-$target.tar.xz.sha256"
+gh attestation verify "blacksparrow-$target.tar.xz" --repo Shantodotdev/blacksparrow
+```
+
+The attestation proves that the archive was built by this repository's release workflow.
+
+### 6.2 Shell installer
+
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/Shantodotdev/blacksparrow/releases/latest/download/blacksparrow-installer.sh | sh
+```
+
+`install.sh` in the repository root is an alternative that also creates the `sparrow` alias; it accepts `--version <tag>`, `--dir <path>` and `--no-verify`, and checks the SHA-256 of the download. Windows has `blacksparrow-installer.ps1` and an `.msi` on the release page.
+
+### 6.3 Python and Node.js
+
+The Python wheels, with the binary inside, are attached to each GitHub release; install the one for your platform by its URL (`pip install "blacksparrow @ <wheel URL>"`). The Python API is in `sdks/python`. The Node package in `sdks/js` is not on the npm registry; install it by path and point it at the release binary with `BLACKSPARROW_BINARY`.
+
+Both SDKs run the binary found at `BLACKSPARROW_BINARY` when that variable is set, which is the way to use a custom build or a binary outside the package.

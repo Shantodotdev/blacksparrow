@@ -1,0 +1,78 @@
+[build-system]
+requires = ["maturin>=1.9,<2"]
+build-backend = "maturin"
+
+[project]
+name = "blacksparrow"
+dynamic = ["version"]
+description = "Read a business website into one typed document: pages as Markdown, contacts, design and schema.org facts. Ships the Black Sparrow binary."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT OR Apache-2.0"
+license-files = ["licenses/LICENSE-MIT", "licenses/LICENSE-APACHE"]
+authors = [{ name = "KR Shanto" }]
+keywords = ["website", "extract", "scraper", "crawler", "brand", "seo", "markdown"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Rust",
+    "Topic :: Internet :: WWW/HTTP",
+    "Typing :: Typed",
+]
+dependencies = ["pydantic>=2"]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[project.urls]
+Homepage = "https://github.com/Shantodotdev/blacksparrow"
+Repository = "https://github.com/Shantodotdev/blacksparrow"
+Issues = "https://github.com/Shantodotdev/blacksparrow/issues"
+
+[tool.maturin]
+bindings = "bin"
+manifest-path = "../../Cargo.toml"
+module-name = "blacksparrow"
+python-source = "python"
+strip = true
+
+# `uv run --extra test pytest` tests the source tree against a binary named by
+# BLACKSPARROW_BINARY, so uv must not build and install the Rust crate into its environment.
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["python", "tests"]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = ["live: runs the real blacksparrow binary against local fixture sites"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["python", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "N", "S", "A", "C4", "SIM", "RUF", "PT", "PL", "TID", "ASYNC"]
+ignore = ["PLR0913", "PLR2004", "N818"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S603", "S607", "PLR0915", "PLC0415", "S108", "PT018", "ASYNC110", "PLW0108", "RUF015"]
+"python/blacksparrow/_models.py" = ["A003"]
+
+[tool.pyright]
+include = ["python", "tests"]
+pythonVersion = "3.10"
+extraPaths = ["python", "tests"]
+strict = ["python"]
+typeCheckingMode = "standard"

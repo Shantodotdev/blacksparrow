@@ -12,6 +12,7 @@
 use crate::error::{SeoError, SeoResult};
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::sync::Arc;
 use url::{Host, Url};
 
 /// Why a URL was refused before any request was sent.
@@ -37,20 +38,53 @@ impl GuardRefusal {
 }
 
 /// The address policy of one extraction run.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Default)]
 pub struct AddressPolicy {
     /// Allows private and loopback targets (local test sites only).
     pub allow_private_network: bool,
+    /// Hosts that may resolve to private addresses even when `allow_private_network` is off,
+    /// written as `host` (any port) or `host:port`. Link-local addresses stay refused.
+    pub allowed_private_hosts: Arc<Vec<String>>,
 }
 
 impl AddressPolicy {
+    /// A policy that refuses private networks, or allows all of them.
+    pub fn new(allow_private_network: bool) -> Self {
+        Self {
+            allow_private_network,
+            allowed_private_hosts: Arc::default(),
+        }
+    }
+
     /// Whether `ip` may be contacted under this policy. Link-local addresses (cloud metadata
     /// services) are refused even when private networks are allowed.
     pub fn permits(&self, ip: IpAddr) -> bool {
+        self.permits_for(ip, false)
+    }
+
+    /// Whether `host` is on the private-host allowlist. `port` of `None` matches an entry with
+    /// any port (used where only the name is known, as in DNS resolution).
+    pub fn allows_host(&self, host: &str, port: Option<u16>) -> bool {
+        let host = host
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+            .to_ascii_lowercase();
+        self.allowed_private_hosts.iter().any(|entry| {
+            let entry = entry.trim().to_ascii_lowercase();
+            let (entry_host, entry_port) = split_host_port(&entry);
+            entry_host == host
+                && match (entry_port, port) {
+                    (Some(want), Some(got)) => want == got,
+                    _ => true,
+                }
+        })
+    }
+
+    fn permits_for(&self, ip: IpAddr, host_allowed: bool) -> bool {
         if is_link_local(ip) {
             return false;
         }
-        self.allow_private_network || is_public_ip(ip)
+        host_allowed || self.allow_private_network || is_public_ip(ip)
     }
 
     /// Resolves `host` (a name or an IP literal, IPv6 with or without brackets) and returns its
@@ -72,7 +106,7 @@ impl AddressPolicy {
             return Err(GuardRefusal::Unresolved);
         }
         let ips: Vec<IpAddr> = addrs.iter().map(SocketAddr::ip).collect();
-        self.check_ips(&ips)?;
+        self.check_ips(&ips, self.allows_host(bare, Some(port)))?;
         Ok(addrs)
     }
 
@@ -89,10 +123,13 @@ impl AddressPolicy {
             return Err(GuardRefusal::Unsupported);
         }
         let port = url.port_or_known_default().unwrap_or(443);
+        let host_allowed = url
+            .host_str()
+            .is_some_and(|host| self.allows_host(host, Some(port)));
         match url.host() {
             None => Err(GuardRefusal::Unsupported),
-            Some(Host::Ipv4(ip)) => self.check_ips(&[IpAddr::V4(ip)]),
-            Some(Host::Ipv6(ip)) => self.check_ips(&[IpAddr::V6(ip)]),
+            Some(Host::Ipv4(ip)) => self.check_ips(&[IpAddr::V4(ip)], host_allowed),
+            Some(Host::Ipv6(ip)) => self.check_ips(&[IpAddr::V6(ip)], host_allowed),
             Some(Host::Domain(domain)) => {
                 let addrs: Vec<IpAddr> = tokio::net::lookup_host((domain, port))
                     .await
@@ -102,19 +139,36 @@ impl AddressPolicy {
                 if addrs.is_empty() {
                     return Err(GuardRefusal::Unresolved);
                 }
-                self.check_ips(&addrs)
+                self.check_ips(&addrs, host_allowed)
             }
         }
     }
 
-    fn check_ips(&self, ips: &[IpAddr]) -> Result<(), GuardRefusal> {
+    fn check_ips(&self, ips: &[IpAddr], host_allowed: bool) -> Result<(), GuardRefusal> {
         // One refused address refuses the host: a name with a public and a private record is
         // a rebinding setup, not a public site.
-        if ips.iter().all(|ip| self.permits(*ip)) {
+        if ips.iter().all(|ip| self.permits_for(*ip, host_allowed)) {
             Ok(())
         } else {
             Err(GuardRefusal::BlockedAddress)
         }
+    }
+}
+
+/// Splits `host:port` (or `[v6]:port`) into its parts; a bare host or IPv6 literal has no port.
+fn split_host_port(entry: &str) -> (&str, Option<u16>) {
+    if let Some(rest) = entry.strip_prefix('[') {
+        if let Some((host, tail)) = rest.split_once(']') {
+            let port = tail.strip_prefix(':').and_then(|p| p.parse().ok());
+            return (host, port);
+        }
+    }
+    match entry.rsplit_once(':') {
+        Some((host, port)) if !host.contains(':') => match port.parse() {
+            Ok(port) => (host, Some(port)),
+            Err(_) => (entry, None),
+        },
+        _ => (entry, None),
     }
 }
 
@@ -216,12 +270,17 @@ impl GuardedResolver {
 
 impl Resolve for GuardedResolver {
     fn resolve(&self, name: Name) -> Resolving {
-        let policy = self.policy;
+        let policy = self.policy.clone();
         Box::pin(async move {
             let host = name.as_str().to_string();
             let addrs: Vec<SocketAddr> =
                 tokio::net::lookup_host((host.as_str(), 0)).await?.collect();
-            if addrs.is_empty() || !addrs.iter().all(|addr| policy.permits(addr.ip())) {
+            let host_allowed = policy.allows_host(&host, None);
+            if addrs.is_empty()
+                || !addrs
+                    .iter()
+                    .all(|addr| policy.permits_for(addr.ip(), host_allowed))
+            {
                 let err: Box<dyn std::error::Error + Send + Sync> =
                     Box::new(SeoError::Network(format!("refused address for {host}")));
                 return Err(err);
@@ -300,9 +359,7 @@ mod tests {
 
     #[tokio::test]
     async fn check_url_refuses_literal_private_hosts_and_credentials() {
-        let policy = AddressPolicy {
-            allow_private_network: false,
-        };
+        let policy = AddressPolicy::new(false);
         let blocked = Url::parse("http://169.254.169.254/latest/meta-data").unwrap();
         assert_eq!(
             policy.check_url(&blocked).await,
@@ -319,9 +376,7 @@ mod tests {
 
     #[tokio::test]
     async fn private_network_can_be_allowed_for_local_tests() {
-        let policy = AddressPolicy {
-            allow_private_network: true,
-        };
+        let policy = AddressPolicy::new(true);
         let local = Url::parse("http://127.0.0.1:8080/").unwrap();
         assert_eq!(policy.check_url(&local).await, Ok(()));
         let metadata = Url::parse("http://169.254.169.254/").unwrap();
@@ -332,10 +387,25 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn resolve_checks_literals_and_names() {
+    async fn allowlisted_hosts_reach_only_themselves() {
         let policy = AddressPolicy {
             allow_private_network: false,
+            allowed_private_hosts: Arc::new(vec!["127.0.0.1:8080".to_string()]),
         };
+        let ok = Url::parse("http://127.0.0.1:8080/").unwrap();
+        let other_port = Url::parse("http://127.0.0.1:6379/").unwrap();
+        let other_host = Url::parse("http://192.168.1.1/").unwrap();
+        let metadata = Url::parse("http://169.254.169.254/").unwrap();
+        assert!(policy.check_url(&ok).await.is_ok());
+        assert!(policy.check_url(&other_port).await.is_err());
+        assert!(policy.check_url(&other_host).await.is_err());
+        assert!(policy.check_url(&metadata).await.is_err());
+        assert!(policy.allows_host("127.0.0.1", None));
+    }
+
+    #[tokio::test]
+    async fn resolve_checks_literals_and_names() {
+        let policy = AddressPolicy::new(false);
         assert_eq!(
             policy.resolve("[::1]", 80).await,
             Err(GuardRefusal::BlockedAddress)

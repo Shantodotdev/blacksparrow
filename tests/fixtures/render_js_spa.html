@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>SPA route metadata</title>
+    <meta name="description" content="This server-rendered description should remain accurate after hydration.">
+    <link rel="canonical" href="https://example.test/products/widget">
+  </head>
+  <body>
+    <main id="root">
+      <h1>Widget buying guide</h1>
+      <p>This is substantial server-rendered editorial content which should not disappear after client-side hydration because search engines need it to understand the page, compare products, and make an informed purchase decision.</p>
+    </main>
+    <script>
+      window.addEventListener('load', () => {
+        history.pushState({}, '', '/products/widget/client-route');
+        document.querySelector('link[rel="canonical"]').href = 'https://example.test/products/widget/client-route';
+        const robots = document.createElement('meta');
+        robots.name = 'robots';
+        robots.content = 'noindex';
+        document.head.appendChild(robots);
+        document.querySelector('#root').innerHTML = '<a href="/products">Browse products</a>';
+        throw new Error('Hydration failed');
+      });
+    </script>
+  </body>
+</html>

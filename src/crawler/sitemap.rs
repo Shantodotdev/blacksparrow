@@ -85,23 +85,34 @@ pub enum SitemapDocument {
     Index(Vec<SitemapIndexEntry>),
 }
 
-/// Parses raw sitemap bytes, automatically decompressing gzip if needed.
+/// Maximum allowed decompressed sitemap size in bytes (50 MiB = 52,428,800 bytes).
+/// Aligned with the sitemaps.org protocol specification and protecting against zip bombs.
+pub const MAX_SITEMAP_DECOMPRESSED_BYTES: u64 = 50 * 1024 * 1024;
+
+/// Parses XML content into a structured [`SitemapDocument`].
 ///
+/// Automatically detects and transparently decompresses Gzip payloads.
 /// Supports both `<urlset>` and `<sitemapindex>` root nodes.
 ///
 /// # Errors
 ///
 /// Returns [`SeoError::Internal`] if the XML is malformed, unrecognized, or if
-/// gzip decompression encounters corrupted bytes.
+/// gzip decompression encounters corrupted bytes or exceeds the 50 MB limit.
 pub fn parse_sitemap(raw_bytes: &[u8]) -> SeoResult<SitemapDocument> {
     // Check for Gzip magic header bytes (0x1F, 0x8B)
     let xml_bytes: Cow<[u8]> =
         if raw_bytes.len() >= 2 && raw_bytes[0] == 0x1f && raw_bytes[1] == 0x8b {
-            let mut decoder = GzDecoder::new(raw_bytes);
+            let decoder = GzDecoder::new(raw_bytes);
             let mut decompressed = Vec::new();
-            decoder.read_to_end(&mut decompressed).map_err(|e| {
+            let mut limited = std::io::Read::take(decoder, MAX_SITEMAP_DECOMPRESSED_BYTES + 1);
+            limited.read_to_end(&mut decompressed).map_err(|e| {
                 SeoError::Internal(format!("Sitemap gzip decompression failed: {e}"))
             })?;
+            if decompressed.len() as u64 > MAX_SITEMAP_DECOMPRESSED_BYTES {
+                return Err(SeoError::Internal(
+                    "Sitemap decompressed size exceeds 50 MB protocol limit".to_string(),
+                ));
+            }
             Cow::Owned(decompressed)
         } else {
             Cow::Borrowed(raw_bytes)

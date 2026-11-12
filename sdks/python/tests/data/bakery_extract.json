@@ -1,0 +1,326 @@
+{
+  "schema_version": 1,
+  "generator": "blacksparrow 0.1.0",
+  "start_url": "http://127.0.0.1:8765/",
+  "final_url": "http://127.0.0.1:8765/",
+  "outcome": "ok",
+  "pages": [
+    {
+      "url": "http://127.0.0.1:8765/",
+      "final_url": "http://127.0.0.1:8765/",
+      "kind": "home",
+      "status": 200,
+      "rendered": false,
+      "title": "Sweet Crumbs Bakery | মিষ্টি ক্রাম্বস বেকারি",
+      "description": "Fresh cakes and pastries in Dhanmondi, Dhaka.",
+      "lang": "bn",
+      "word_count": 56,
+      "markdown": "[Sweet Crumbs](http://127.0.0.1:8765/) [link](http://127.0.0.1:8765/)\n\n[About](http://127.0.0.1:8765/about.html) [যোগাযোগ](http://127.0.0.1:8765/contact.html) [Shop](http://127.0.0.1:8765/shop.html) [Cart](http://127.0.0.1:8765/cart) [Privacy](http://127.0.0.1:8765/privacy)\n\n# Sweet Crumbs Bakery\n\nআমরা প্রতিদিন তাজা কেক এবং পেস্ট্রি তৈরি করি। Fresh cakes baked every morning with real butter and love for the neighbourhood of Dhanmondi, Dhaka. Order birthday cakes, wedding cakes and custom desserts.\n\n[Order now](http://127.0.0.1:8765/shop.html)\n\nফোন: ০১৭১১-২২৩৩৪৪\n\n[Call us](tel:+8801711223344) [Email us](mailto:hello@sweetcrumbs.com.bd) [WhatsApp](https://wa.me/8801711223344) [Facebook](https://www.facebook.com/SweetCrumbsBD/) [Share](https://www.facebook.com/sharer/sharer.php?u=https://example.com) [Instagram](https://www.instagram.com/sweetcrumbs.bd/) [Latest post](https://www.instagram.com/p/ABC123/)",
+      "links": [
+        {
+          "text": "Sweet Crumbs",
+          "url": "http://127.0.0.1:8765/"
+        },
+        {
+          "text": "About",
+          "url": "http://127.0.0.1:8765/about.html"
+        },
+        {
+          "text": "যোগাযোগ",
+          "url": "http://127.0.0.1:8765/contact.html"
+        },
+        {
+          "text": "Shop",
+          "url": "http://127.0.0.1:8765/shop.html"
+        },
+        {
+          "text": "Cart",
+          "url": "http://127.0.0.1:8765/cart"
+        },
+        {
+          "text": "Privacy",
+          "url": "http://127.0.0.1:8765/privacy"
+        },
+        {
+          "text": "WhatsApp",
+          "url": "https://wa.me/8801711223344"
+        },
+        {
+          "text": "Facebook",
+          "url": "https://www.facebook.com/SweetCrumbsBD/"
+        },
+        {
+          "text": "Share",
+          "url": "https://www.facebook.com/sharer/sharer.php?u=https://example.com"
+        },
+        {
+          "text": "Instagram",
+          "url": "https://www.instagram.com/sweetcrumbs.bd/"
+        },
+        {
+          "text": "Latest post",
+          "url": "https://www.instagram.com/p/ABC123/"
+        }
+      ],
+      "phones": [
+        "01711-223344"
+      ],
+      "emails": [
+        "hello@sweetcrumbs.com.bd"
+      ],
+      "whatsapp": [
+        "https://wa.me/8801711223344"
+      ],
+      "facebook": [
+        "https://www.facebook.com/SweetCrumbsBD"
+      ],
+      "instagram": [
+        "https://www.instagram.com/sweetcrumbs.bd/"
+      ]
+    },
+    {
+      "url": "http://127.0.0.1:8765/contact.html",
+      "final_url": "http://127.0.0.1:8765/contact.html",
+      "kind": "contact",
+      "status": 200,
+      "rendered": false,
+      "title": "যোগাযোগ - Sweet Crumbs",
+      "description": null,
+      "lang": "bn",
+      "word_count": 18,
+      "markdown": "[Home](http://127.0.0.1:8765/)\n\n# যোগাযোগ\n\nআমাদের দোকানে আসুন: House 12, Road 5, Dhanmondi, Dhaka. Open daily 9am to 10pm.\n\nPhone: 01711-223344",
+      "links": [
+        {
+          "text": "Home",
+          "url": "http://127.0.0.1:8765/"
+        }
+      ],
+      "phones": [
+        "01711-223344"
+      ],
+      "emails": [],
+      "whatsapp": [],
+      "facebook": [],
+      "instagram": []
+    },
+    {
+      "url": "http://127.0.0.1:8765/about.html",
+      "final_url": "http://127.0.0.1:8765/about.html",
+      "kind": "about",
+      "status": 200,
+      "rendered": false,
+      "title": "About Sweet Crumbs",
+      "description": null,
+      "lang": "en",
+      "word_count": 35,
+      "markdown": "[Home](http://127.0.0.1:8765/)\n\n# About us\n\nSweet Crumbs started in 2015 as a tiny kitchen in Dhanmondi. Today our bakers prepare hundreds of cakes every week using locally sourced flour, butter and eggs, and we deliver across Dhaka.",
+      "links": [
+        {
+          "text": "Home",
+          "url": "http://127.0.0.1:8765/"
+        }
+      ],
+      "phones": [],
+      "emails": [],
+      "whatsapp": [],
+      "facebook": [],
+      "instagram": []
+    },
+    {
+      "url": "http://127.0.0.1:8765/shop.html",
+      "final_url": "http://127.0.0.1:8765/shop.html",
+      "kind": "catalog",
+      "status": 200,
+      "rendered": false,
+      "title": "Shop - Sweet Crumbs",
+      "description": null,
+      "lang": "en",
+      "word_count": 19,
+      "markdown": "[Home](http://127.0.0.1:8765/)\n\n# Shop\n\n- Chocolate truffle cake - 1200 BDT\n- Red velvet cake - 1500 BDT\n- Butter croissant - 150 BDT",
+      "links": [
+        {
+          "text": "Home",
+          "url": "http://127.0.0.1:8765/"
+        }
+      ],
+      "phones": [],
+      "emails": [],
+      "whatsapp": [],
+      "facebook": [],
+      "instagram": []
+    }
+  ],
+  "page_errors": [],
+  "design": {
+    "title": "Sweet Crumbs Bakery | মিষ্টি ক্রাম্বস বেকারি",
+    "description": "Fresh cakes and pastries in Dhanmondi, Dhaka.",
+    "site_name": "Sweet Crumbs",
+    "theme_color": "#C0392B",
+    "colors": [
+      {
+        "hex": "#C0392B",
+        "occurrences": 4,
+        "usage_score": 0.3636,
+        "evidence": [
+          {
+            "type": "theme_color_meta"
+          },
+          {
+            "type": "css_variable",
+            "name": "--brand",
+            "sourceUrl": "http://127.0.0.1:8765/css/main.css"
+          },
+          {
+            "type": "stylesheet",
+            "sourceUrl": "http://127.0.0.1:8765/css/main.css"
+          }
+        ]
+      },
+      {
+        "hex": "#2E86C1",
+        "occurrences": 3,
+        "usage_score": 0.2727,
+        "evidence": [
+          {
+            "type": "stylesheet",
+            "sourceUrl": "http://127.0.0.1:8765/css/theme.css"
+          }
+        ]
+      },
+      {
+        "hex": "#222222",
+        "occurrences": 2,
+        "usage_score": 0.1818,
+        "evidence": [
+          {
+            "type": "css_variable",
+            "name": "--ink",
+            "sourceUrl": "http://127.0.0.1:8765/css/main.css"
+          },
+          {
+            "type": "stylesheet",
+            "sourceUrl": "http://127.0.0.1:8765/css/main.css"
+          }
+        ]
+      },
+      {
+        "hex": "#FFF8F0",
+        "occurrences": 1,
+        "usage_score": 0.0909,
+        "evidence": [
+          {
+            "type": "stylesheet",
+            "sourceUrl": "http://127.0.0.1:8765/css/main.css"
+          }
+        ]
+      },
+      {
+        "hex": "#FFFFFF",
+        "occurrences": 1,
+        "usage_score": 0.0909,
+        "evidence": [
+          {
+            "type": "stylesheet",
+            "sourceUrl": "http://127.0.0.1:8765/css/main.css"
+          }
+        ]
+      }
+    ],
+    "fonts": [
+      {
+        "family": "Hind Siliguri",
+        "selectors": [
+          "body"
+        ],
+        "weights": [
+          400,
+          500
+        ]
+      },
+      {
+        "family": "Playfair Display",
+        "selectors": [
+          "headings"
+        ],
+        "weights": [
+          400,
+          700
+        ]
+      }
+    ],
+    "logos": [
+      {
+        "reason": "header_logo",
+        "url": "http://127.0.0.1:8765/img/logo.png",
+        "svg": null
+      },
+      {
+        "reason": "header_logo",
+        "url": null,
+        "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" class=\"site-logo\" viewBox=\"0 0 10 10\"><circle cx=\"5\" cy=\"5\" fill=\"#c0392b\" r=\"4\"></circle></svg>"
+      },
+      {
+        "reason": "icon",
+        "url": "http://127.0.0.1:8765/favicon.ico",
+        "svg": null
+      }
+    ],
+    "stylesheets": [
+      {
+        "url": "http://127.0.0.1:8765/css/main.css",
+        "status": 200,
+        "bytes": 390
+      },
+      {
+        "url": "http://127.0.0.1:8765/css/theme.css",
+        "status": 200,
+        "bytes": 83
+      }
+    ]
+  },
+  "contacts": {
+    "phones": [
+      "01711-223344"
+    ],
+    "emails": [
+      "hello@sweetcrumbs.com.bd"
+    ],
+    "whatsapp": [
+      "https://wa.me/8801711223344"
+    ],
+    "facebook": [
+      "https://www.facebook.com/SweetCrumbsBD"
+    ],
+    "instagram": [
+      "https://www.instagram.com/sweetcrumbs.bd/"
+    ]
+  },
+  "structured": {
+    "names": [
+      "Sweet Crumbs Bakery"
+    ],
+    "telephones": [
+      "+8801711223344"
+    ],
+    "emails": [
+      "hello@sweetcrumbs.com.bd"
+    ],
+    "addresses": [
+      "House 12, Road 5, Dhanmondi, Dhaka, 1209, BD"
+    ],
+    "same_as": [
+      "https://www.facebook.com/SweetCrumbsBD"
+    ],
+    "logos": [],
+    "descriptions": []
+  },
+  "stats": {
+    "elapsed_ms": 211,
+    "http_fetches": 6,
+    "http_bytes": 3883,
+    "rendered_pages": 0,
+    "render_ms": 0,
+    "blocked_browser_requests": 0,
+    "peak_rss_kib": 44204
+  }
+}

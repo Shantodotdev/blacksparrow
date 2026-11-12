@@ -36,6 +36,8 @@ use guard::{parse_web_url, AddressPolicy};
 use html::{analyze_page, LogoCandidate, LogoReason, PageAnalysis, PageLink, StructuredBusiness};
 use regex::Regex;
 use render::{RenderOptions, Renderer};
+use schemars::transform::Transform;
+use schemars::{JsonSchema, Schema};
 use serde::Serialize;
 use std::time::{Duration, Instant};
 use url::Url;
@@ -122,7 +124,7 @@ impl Default for ExtractOptions {
 }
 
 /// How the extraction ended.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Outcome {
     /// The homepage was read.
@@ -144,7 +146,8 @@ pub enum Outcome {
 }
 
 /// One page read.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[schemars(transform = AlwaysPresent(&["title", "description", "lang"]))]
 pub struct PageOut {
     /// The URL asked for.
     pub url: String,
@@ -152,6 +155,7 @@ pub struct PageOut {
     pub final_url: String,
     /// `home`, or the selection kind (`contact`, `about`, `catalog`, `locations`, `ordering`,
     /// `requested`).
+    #[schemars(extend("enum" = ["home", "contact", "about", "catalog", "locations", "ordering", "requested"]))]
     pub kind: &'static str,
     /// HTTP status of the plain fetch.
     pub status: u16,
@@ -159,15 +163,19 @@ pub struct PageOut {
     pub rendered: bool,
     /// Why it was rendered: `js_shell`, `bot_challenge`, `http_error` or `always`.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("enum" = ["js_shell", "bot_challenge", "http_error", "always"]))]
     pub render_reason: Option<&'static str>,
     /// Bot-protection provider seen on the final content.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub waf: Option<&'static str>,
     /// `<title>`.
+    #[schemars(with = "Option<String>")]
     pub title: Option<String>,
     /// Meta description.
+    #[schemars(with = "Option<String>")]
     pub description: Option<String>,
     /// `<html lang>`.
+    #[schemars(with = "Option<String>")]
     pub lang: Option<String>,
     /// Words of visible text.
     pub word_count: u32,
@@ -188,7 +196,7 @@ pub struct PageOut {
 }
 
 /// A page that could not be read.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, JsonSchema)]
 pub struct PageError {
     /// The URL asked for.
     pub url: String,
@@ -197,7 +205,7 @@ pub struct PageError {
 }
 
 /// A colour of the site with its use.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, JsonSchema)]
 pub struct ColorOut {
     /// `#RRGGBB`.
     pub hex: String,
@@ -210,11 +218,13 @@ pub struct ColorOut {
 }
 
 /// A stylesheet fetch.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[schemars(transform = AlwaysPresent(&["status"]))]
 pub struct StylesheetOut {
     /// Where it was fetched from.
     pub url: String,
     /// HTTP status, when an answer came.
+    #[schemars(with = "Option<u16>")]
     pub status: Option<u16>,
     /// Bytes read.
     pub bytes: usize,
@@ -224,15 +234,20 @@ pub struct StylesheetOut {
 }
 
 /// The site's design as its homepage and stylesheets show it.
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, Serialize, JsonSchema)]
+#[schemars(transform = AlwaysPresent(&["title", "description", "site_name", "theme_color"]))]
 pub struct DesignOut {
     /// Homepage title.
+    #[schemars(with = "Option<String>")]
     pub title: Option<String>,
     /// Homepage description.
+    #[schemars(with = "Option<String>")]
     pub description: Option<String>,
     /// `og:site_name`.
+    #[schemars(with = "Option<String>")]
     pub site_name: Option<String>,
     /// `theme-color` meta.
+    #[schemars(with = "Option<String>")]
     pub theme_color: Option<String>,
     /// Colours, most used first.
     pub colors: Vec<ColorOut>,
@@ -245,7 +260,7 @@ pub struct DesignOut {
 }
 
 /// Contacts merged across pages, in page order.
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, Serialize, JsonSchema)]
 pub struct ContactsOut {
     /// Phone numbers as written.
     pub phones: Vec<String>,
@@ -260,7 +275,7 @@ pub struct ContactsOut {
 }
 
 /// What the extraction cost.
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, Serialize, JsonSchema)]
 pub struct StatsOut {
     /// Wall-clock milliseconds.
     pub elapsed_ms: u64,
@@ -280,7 +295,8 @@ pub struct StatsOut {
 }
 
 /// The extraction result.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[schemars(transform = AlwaysPresent(&["final_url", "design"]))]
 pub struct SiteExtract {
     /// [`SCHEMA_VERSION`].
     pub schema_version: u32,
@@ -289,6 +305,7 @@ pub struct SiteExtract {
     /// The URL asked for.
     pub start_url: String,
     /// The homepage after redirects.
+    #[schemars(with = "Option<String>")]
     pub final_url: Option<String>,
     /// How it ended.
     pub outcome: Outcome,
@@ -299,7 +316,8 @@ pub struct SiteExtract {
     pub pages: Vec<PageOut>,
     /// Pages that could not be read.
     pub page_errors: Vec<PageError>,
-    /// The site's design; absent when the homepage could not be read.
+    /// The site's design; `null` when the homepage could not be read.
+    #[schemars(with = "Option<DesignOut>")]
     pub design: Option<DesignOut>,
     /// Contacts across pages.
     pub contacts: ContactsOut,
@@ -307,6 +325,28 @@ pub struct SiteExtract {
     pub structured: StructuredBusiness,
     /// Cost of the run.
     pub stats: StatsOut,
+}
+
+/// Schema transform for nullable fields that are always serialized, as `null` when empty:
+/// adds them to the object's `required` list without taking `null` out of their type.
+pub(crate) struct AlwaysPresent(pub &'static [&'static str]);
+
+impl Transform for AlwaysPresent {
+    fn transform(&mut self, schema: &mut Schema) {
+        let object = schema.ensure_object();
+        let required = object
+            .entry("required")
+            .or_insert_with(|| serde_json::Value::Array(Vec::new()));
+        if let Some(list) = required.as_array_mut() {
+            list.extend(self.0.iter().map(|name| serde_json::Value::from(*name)));
+        }
+    }
+}
+
+/// JSON Schema (draft 2020-12) of the document `extract` prints, as `schema_version`
+/// [`SCHEMA_VERSION`] defines it. The committed copy is `schema/extract.schema.json`.
+pub fn output_schema() -> Schema {
+    schemars::schema_for!(SiteExtract)
 }
 
 impl SiteExtract {
@@ -526,9 +566,7 @@ pub async fn extract_site(start_url: &str, options: ExtractOptions) -> SeoResult
         user_agent: options.user_agent.clone(),
         timeout: options.request_timeout,
         max_body_bytes: options.max_body_bytes,
-        policy: AddressPolicy {
-            allow_private_network: options.allow_private_network,
-        },
+        policy: AddressPolicy::new(options.allow_private_network),
         proxy: options.proxy.clone(),
     })?;
     let icon_fonts = Regex::new(DEFAULT_ICON_FONT_PATTERN)

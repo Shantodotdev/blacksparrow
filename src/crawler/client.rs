@@ -4,13 +4,15 @@
 //! custom redirect policy handling, redirect loop detection, TTFB latency measurement,
 //! and transport error classification.
 
-use crate::core::url::resolve_relative;
+use crate::core::url::{resolve_relative, validate_url_safety};
 use crate::crawler::waf::detect_waf;
 use crate::error::{SeoError, SeoResult};
+use crate::extract::guard::{AddressPolicy, GuardedResolver};
 use compact_str::CompactString;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE, LOCATION, USER_AGENT};
 use reqwest::redirect::Policy;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use url::Url;
 
@@ -29,6 +31,10 @@ pub struct FetchOptions {
     pub custom_headers: Vec<(String, String)>,
     /// Optional proxy URL (HTTP, HTTPS, SOCKS5).
     pub proxy: Option<String>,
+    /// Allow fetching all private/local network addresses (except cloud metadata).
+    pub allow_all_private_ips: bool,
+    /// Specific private hosts or host:port combinations allowed when private IP fetching is restricted.
+    pub allowed_private_hosts: Vec<String>,
 }
 
 impl Default for FetchOptions {
@@ -40,6 +46,8 @@ impl Default for FetchOptions {
             max_redirects: 10,
             custom_headers: Vec::new(),
             proxy: None,
+            allow_all_private_ips: false,
+            allowed_private_hosts: Vec::new(),
         }
     }
 }
@@ -69,7 +77,13 @@ pub struct FetchResult {
     pub redirect_chain: Vec<String>,
     /// WAF / Bot challenge detected on the response, if any.
     pub waf_detected: Option<&'static str>,
+    /// Whether the response payload exceeded the maximum streaming limit (15 MB) and was truncated.
+    pub is_truncated: bool,
 }
+
+/// Default maximum response size in bytes before streaming is truncated (15 MiB = 15,728,640 bytes).
+/// Directly aligned with Googlebot's official indexing boundary.
+pub const DEFAULT_MAX_RESPONSE_BYTES: usize = 15 * 1024 * 1024;
 
 /// Asynchronous HTTP client configured for technical SEO crawling.
 #[derive(Debug, Clone)]
@@ -105,11 +119,28 @@ impl HttpClient {
             .brotli(true)
             .deflate(true);
 
+        // Every name is resolved through the address guard, so a host that passed
+        // `validate_url_safety` cannot rebind to a private address before the connection.
+        let mut allowed_hosts = options.allowed_private_hosts.clone();
         if let Some(ref proxy_url) = options.proxy {
             let proxy = reqwest::Proxy::all(proxy_url)
                 .map_err(|e| SeoError::Config(format!("Invalid proxy configuration: {e}")))?;
             builder = builder.proxy(proxy);
+            // The resolver also resolves the proxy's own name, which may be a local forwarder.
+            if let Some(host) = Url::parse(proxy_url)
+                .ok()
+                .and_then(|u| u.host_str().map(str::to_string))
+            {
+                allowed_hosts.push(host);
+            }
+        } else {
+            // A proxy from the environment would resolve names itself, past the guard.
+            builder = builder.no_proxy();
         }
+        builder = builder.dns_resolver(Arc::new(GuardedResolver::new(AddressPolicy {
+            allow_private_network: options.allow_all_private_ips,
+            allowed_private_hosts: Arc::new(allowed_hosts),
+        })));
 
         let client = builder
             .build()
@@ -124,6 +155,13 @@ impl HttpClient {
     ///
     /// Returns [`SeoError::Network`] on DNS failure, connection refused, timeout, or redirect loops.
     pub async fn fetch(&self, url: &str) -> SeoResult<FetchResult> {
+        validate_url_safety(
+            url,
+            self.options.allow_all_private_ips,
+            &self.options.allowed_private_hosts,
+        )
+        .await?;
+
         let mut current_url = url.to_string();
         let mut redirect_chain = Vec::new();
         let initial_start = Instant::now();
@@ -178,6 +216,13 @@ impl HttpClient {
                     if let Ok(loc_str) = loc_header.to_str() {
                         let target_url = resolve_relative(&current_url, loc_str)?;
 
+                        validate_url_safety(
+                            &target_url,
+                            self.options.allow_all_private_ips,
+                            &self.options.allowed_private_hosts,
+                        )
+                        .await?;
+
                         // Check for circular redirect
                         if redirect_chain.contains(&current_url) || current_url == target_url {
                             return Err(SeoError::Network(format!(
@@ -200,18 +245,43 @@ impl HttpClient {
                 }
             }
 
-            // Read response payload
+            // Read response payload with streaming 15 MB limit
             let content_type = headers
                 .get(CONTENT_TYPE)
                 .and_then(|v| v.to_str().ok())
                 .map(CompactString::new)
                 .unwrap_or_else(|| CompactString::new(""));
 
-            let body_bytes = response
-                .bytes()
+            let content_length = response.content_length();
+            let has_excessive_content_length =
+                content_length.is_some_and(|len| len > DEFAULT_MAX_RESPONSE_BYTES as u64);
+
+            let initial_capacity = content_length
+                .map(|len| (len as usize).min(DEFAULT_MAX_RESPONSE_BYTES))
+                .unwrap_or(8192);
+
+            let mut body_bytes = Vec::with_capacity(initial_capacity);
+            let mut is_truncated = has_excessive_content_length;
+
+            let mut response = response;
+            while let Some(chunk) = response
+                .chunk()
                 .await
-                .map_err(|e| SeoError::Network(format!("Failed to read response body: {e}")))?
-                .to_vec();
+                .map_err(|e| SeoError::Network(format!("Failed to stream response body: {e}")))?
+            {
+                let remaining = DEFAULT_MAX_RESPONSE_BYTES.saturating_sub(body_bytes.len());
+                if remaining == 0 {
+                    is_truncated = true;
+                    break;
+                }
+                if chunk.len() > remaining {
+                    body_bytes.extend_from_slice(&chunk[..remaining]);
+                    is_truncated = true;
+                    break;
+                } else {
+                    body_bytes.extend_from_slice(&chunk);
+                }
+            }
 
             let size_bytes = body_bytes.len() as u32;
             let body = String::from_utf8_lossy(&body_bytes).to_string();
@@ -230,6 +300,7 @@ impl HttpClient {
                 ttfb_ms,
                 redirect_chain,
                 waf_detected,
+                is_truncated,
             });
         }
     }

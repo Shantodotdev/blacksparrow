@@ -1,0 +1,133 @@
+# Builds the Python package and attaches its wheels and sdist to the GitHub release. Called by
+# release.yml (a cargo-dist `publish-jobs` entry) after the GitHub release exists, with the dist
+# plan as input.
+#
+# Each wheel contains the `blacksparrow` binary built from this tag by maturin
+# (`bindings = "bin"` in sdks/python/pyproject.toml), so installing a wheel needs no compiler and
+# no download at run time. Apps install a wheel from the release URL (README, "Releases and
+# installation").
+name: Attach the Python wheels
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        description: The cargo-dist plan (JSON) of this release
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  wheels:
+    name: Wheel ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { runner: ubuntu-22.04, target: x86_64-unknown-linux-gnu, manylinux: auto, smoke: true }
+          - { runner: ubuntu-22.04, target: aarch64-unknown-linux-gnu, manylinux: auto, smoke: false }
+          - { runner: ubuntu-22.04, target: x86_64-unknown-linux-musl, manylinux: musllinux_1_2, smoke: false }
+          - { runner: ubuntu-22.04, target: aarch64-unknown-linux-musl, manylinux: musllinux_1_2, smoke: false }
+          - { runner: macos-15-intel, target: x86_64-apple-darwin, manylinux: "off", smoke: true }
+          - { runner: macos-14, target: aarch64-apple-darwin, manylinux: "off", smoke: true }
+          - { runner: windows-2022, target: x86_64-pc-windows-msvc, manylinux: "off", smoke: true }
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Build the wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: sdks/python
+          target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux }}
+          args: --release --out dist
+          # Stripping and LTO come from the crate's own [profile.release].
+          sccache: false
+
+      - name: Check the wheel runs
+        if: ${{ matrix.smoke }}
+        shell: bash
+        working-directory: sdks/python
+        run: |
+          python -m pip install blacksparrow --no-index --find-links dist --force-reinstall
+          blacksparrow --version
+          blacksparrow schema extract > /dev/null
+          python -c "import blacksparrow; print(blacksparrow.__file__)"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheels-${{ matrix.target }}
+          path: sdks/python/dist/*.whl
+          if-no-files-found: error
+
+  sdist:
+    name: Source distribution
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Build the sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: sdks/python
+          command: sdist
+          args: --out dist
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sdist
+          path: sdks/python/dist/*.tar.gz
+          if-no-files-found: error
+
+  github-release:
+    name: Attach to the GitHub release
+    needs: [wheels, sdist]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      PLAN: ${{ inputs.plan }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: "{wheels-*,sdist}"
+          path: dist
+          merge-multiple: true
+
+      - name: Check the files match the release
+        run: |
+          version="$(echo "$PLAN" | jq -r '.releases[0].app_version')"
+          echo "Release version: $version"
+          ls -l dist
+          test "$(find dist -name '*.whl' | wc -l)" -eq 7
+          test "$(find dist -name '*.tar.gz' | wc -l)" -eq 1
+          for file in dist/*; do
+            case "$(basename "$file")" in
+              blacksparrow-"$version"[-.]*) ;;
+              *) echo "$file is not version $version"; exit 1 ;;
+            esac
+          done
+
+      - name: Attest the build provenance
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: dist/*
+
+      - name: Upload to the release
+        run: |
+          tag="$(echo "$PLAN" | jq -r '.announcement_tag')"
+          gh release upload "$tag" dist/* --clobber --repo "$GITHUB_REPOSITORY"
