@@ -277,7 +277,7 @@ The document is described by a JSON Schema (draft 2020-12) that is built into th
 blacksparrow schema extract > extract.schema.json
 ```
 
-A test validates real `extract` output against it, and CI fails when the committed file differs from what the binary prints. The Python and Node.js SDKs are typed from the same document. The fields:
+A test validates real `extract` output against it, and CI fails when the committed file differs from what the binary prints. The Python package is typed from the same document. The fields:
 
 - `schema_version`, `generator`, `start_url`, `final_url` (homepage after redirects), `outcome`, `outcome_detail`.
 - `pages[]`: `url`, `final_url`, `kind` (`home`, `contact`, `about`, `catalog`, `locations`, `ordering`, `requested`), `status`, `rendered`, `render_reason` (`js_shell`, `bot_challenge`, `http_error`, `always`), `waf`, `title`, `description`, `lang`, `word_count`, `markdown`, `links[]` (`text`, `url`), and the page's `phones`, `emails`, `whatsapp`, `facebook`, `instagram`.
@@ -322,7 +322,7 @@ A browser reached with `--chrome-ws` has its own network: its requests are check
 
 ## 6. Releases and installation
 
-Releases are published from one version tag to GitHub Releases: the binaries, the installers and the Python wheels. Publishing to PyPI and npm is prepared but off (`RELEASING.md`). The binary is self-contained (no OpenSSL or other system library). **Chromium is not bundled**: it is needed only to render JavaScript-only sites in `extract`, and is found through `--chrome-path`, then `CHROME_PATH`, then the `PATH`.
+Releases are published from one version tag to GitHub Releases: the binaries, the installers and the Python wheels. The binary is self-contained (no OpenSSL or other system library). **Chromium is not bundled**: it is needed only to render JavaScript-only sites in `extract`, and is found through `--chrome-path`, then `CHROME_PATH`, then the `PATH`.
 
 ### 6.1 GitHub Releases
 
@@ -347,8 +347,8 @@ curl --proto '=https' --tlsv1.2 -LsSf https://github.com/Shantodotdev/blacksparr
 
 `install.sh` in the repository root is an alternative that also creates the `sparrow` alias; it accepts `--version <tag>`, `--dir <path>` and `--no-verify`, and checks the SHA-256 of the download. Windows has `blacksparrow-installer.ps1` and an `.msi` on the release page.
 
-### 6.3 Python and Node.js
+### 6.3 Python
 
-The Python wheels, with the binary inside, are attached to each GitHub release; install the one for your platform by its URL (`pip install "blacksparrow @ <wheel URL>"`). The Python API is in `sdks/python`. The Node package in `sdks/js` is not published yet; it runs a downloaded binary through `BLACKSPARROW_BINARY`.
+The Python wheels, with the binary inside, are attached to each GitHub release; install the one for your platform by its URL (`pip install "blacksparrow @ <wheel URL>"`). The Python API is in `sdks/python`.
 
-Both SDKs run the binary found at `BLACKSPARROW_BINARY` when that variable is set, which is the way to use a custom build or a binary outside the package.
+The package runs the binary found at `BLACKSPARROW_BINARY` when that variable is set, which is the way to use a custom build or a binary outside the package.

@@ -15,7 +15,7 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/Shantodotdev/blacksparrow"
 homepage = "https://github.com/Shantodotdev/blacksparrow"
 # Kept out of `cargo package` and the Python sdist, which only need the crate.
-exclude = ["/docs-site", "/sdks/js", "/.agents", "/.codex", "/.github", "/wix", "/target"]
+exclude = ["/docs-site", "/.agents", "/.codex", "/.github", "/wix", "/target"]
 
 [package.metadata.wix]
 upgrade-guid = "F61D4D0E-5430-4175-BB7B-BE311E3956C9"

@@ -6,13 +6,7 @@
 # (`bindings = "bin"` in sdks/python/pyproject.toml), so installing a wheel needs no compiler and
 # no download at run time. Apps install a wheel from the release URL (README, "Releases and
 # installation").
-#
-# Uploading to PyPI as well is off until the repository variable PUBLISH_PYPI is "true". It uses
-# PyPI trusted publishing (no token).
-# PyPI matches the trusted publisher against the workflow that runs the upload, and does not
-# yet support publishers named after a calling workflow (pypi/warehouse#11096); RELEASING.md
-# says what to register. A PYPI_API_TOKEN secret, if set, is used instead as a fallback.
-name: Publish the Python package
+name: Attach the Python wheels
 
 on:
   workflow_call:
@@ -137,46 +131,3 @@ jobs:
         run: |
           tag="$(echo "$PLAN" | jq -r '.announcement_tag')"
           gh release upload "$tag" dist/* --clobber --repo "$GITHUB_REPOSITORY"
-
-  publish:
-    name: Upload to PyPI
-    needs: [wheels, sdist]
-    if: ${{ vars.PUBLISH_PYPI == 'true' }}
-    runs-on: ubuntu-22.04
-    environment:
-      name: pypi
-      url: https://pypi.org/project/blacksparrow/
-    permissions:
-      contents: read
-      id-token: write
-    env:
-      PLAN: ${{ inputs.plan }}
-    steps:
-      - uses: actions/download-artifact@v8
-        with:
-          pattern: "{wheels-*,sdist}"
-          path: dist
-          merge-multiple: true
-
-      - name: Check the files match the release
-        run: |
-          version="$(echo "$PLAN" | jq -r '.releases[0].app_version')"
-          echo "Release version: $version"
-          ls -l dist
-          test "$(ls dist/*.whl | wc -l)" -eq 7
-          test "$(ls dist/*.tar.gz | wc -l)" -eq 1
-          for file in dist/*; do
-            case "$(basename "$file")" in
-              blacksparrow-"$version"[-.]*) ;;
-              *) echo "$file is not version $version"; exit 1 ;;
-            esac
-          done
-
-      - name: Publish the Python package
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: dist
-          # Empty when the secret is not set, which selects trusted publishing.
-          password: ${{ secrets.PYPI_API_TOKEN }}
-          # A re-run after a partial upload must not fail on the files already there.
-          skip-existing: true

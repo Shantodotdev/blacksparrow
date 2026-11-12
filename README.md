@@ -47,7 +47,7 @@ Built from the ground up in Rust, Black Sparrow streams HTML responses through C
 
 ## Releases and installation
 
-Every version is released from one tag on [GitHub Releases](https://github.com/Shantodotdev/blacksparrow/releases): the binary for each platform, the shell and PowerShell installers, and the Python wheels. Publishing to PyPI and npm is prepared but off for now ([`RELEASING.md`](RELEASING.md)). Black Sparrow ships as a single binary with no OpenSSL or other system library to install. **Chromium is not bundled**: `blacksparrow extract` only needs it for JavaScript-only sites; point to it with `--chrome-path` (or `CHROME_PATH`) when it is not on the `PATH` (see [`docs/cli.md`](docs/cli.md#54-rendering)).
+Every version is released from one tag on [GitHub Releases](https://github.com/Shantodotdev/blacksparrow/releases): the binary for each platform, the shell and PowerShell installers, and the Python wheels. Maintainers: see [`RELEASING.md`](RELEASING.md). Black Sparrow ships as a single binary with no OpenSSL or other system library to install. **Chromium is not bundled**: `blacksparrow extract` only needs it for JavaScript-only sites; point to it with `--chrome-path` (or `CHROME_PATH`) when it is not on the `PATH` (see [`docs/cli.md`](docs/cli.md#54-rendering)).
 
 ### Download from GitHub Releases
 
@@ -97,11 +97,7 @@ pip install "blacksparrow @ https://github.com/Shantodotdev/blacksparrow/release
 
 In a uv project, give one URL per platform in `[tool.uv.sources]` with a marker each, so `uv.lock` pins every wheel with its hash. See [`sdks/python`](sdks/python/README.md).
 
-### Node.js
-
-The npm package ([`sdks/js`](sdks/js/README.md)) is not published yet. Until it is, download the binary from the release page and point the package at it with `BLACKSPARROW_BINARY`.
-
-Both SDKs use the `BLACKSPARROW_BINARY` environment variable, when set, instead of the bundled binary. The JSON Schema of the `extract` output is built into the binary (`blacksparrow schema extract`) and committed as [`schema/extract.schema.json`](schema/extract.schema.json). Maintainers: see [`RELEASING.md`](RELEASING.md).
+The package uses the `BLACKSPARROW_BINARY` environment variable, when set, instead of the bundled binary. The JSON Schema of the `extract` output is built into the binary (`blacksparrow schema extract`) and committed as [`schema/extract.schema.json`](schema/extract.schema.json). Maintainers: see [`RELEASING.md`](RELEASING.md).
 
 ---
 

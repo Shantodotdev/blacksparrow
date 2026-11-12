@@ -14,7 +14,7 @@ bot challenge, and returns:
 
 The Black Sparrow binary ships **inside the wheel**, like `ruff`: nothing is built, and nothing is
 downloaded at run time. The wheels are attached to each
-[GitHub release](https://github.com/Shantodotdev/blacksparrow/releases) (they are not on PyPI yet).
+[GitHub release](https://github.com/Shantodotdev/blacksparrow/releases).
 Install the one for your platform by its URL:
 
 ```bash

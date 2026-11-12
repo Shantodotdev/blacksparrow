@@ -93,24 +93,3 @@ jobs:
 
       - name: Build the binary and run the SDK tests
         run: cargo build && cd sdks/python && BLACKSPARROW_BINARY=$GITHUB_WORKSPACE/target/debug/blacksparrow uv run --extra test pytest
-
-  sdk-js:
-    name: JavaScript SDK Tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Setup Rust caching
-        uses: Swatinem/rust-cache@v2
-
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Build the binary and run the SDK tests
-        run: cargo build && cd sdks/js && npm ci && BLACKSPARROW_BINARY=$GITHUB_WORKSPACE/target/debug/blacksparrow npm test
