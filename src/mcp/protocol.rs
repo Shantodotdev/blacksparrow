@@ -35,7 +35,7 @@ impl McpContext {
         let db = Database::open(&path)?;
         let allow_local = std::env::var("BLACKSPARROW_MCP_ALLOW_LOCAL")
             .map(|v| v == "1" || v == "true")
-            .unwrap_or_else(|_| std::env::var("CARGO_MANIFEST_DIR").is_ok() || cfg!(test));
+            .unwrap_or(cfg!(test));
         Ok(Self {
             db,
             allow_local_network: allow_local,
@@ -47,7 +47,7 @@ impl McpContext {
     pub fn with_database(db: Database) -> Self {
         let allow_local = std::env::var("BLACKSPARROW_MCP_ALLOW_LOCAL")
             .map(|v| v == "1" || v == "true")
-            .unwrap_or_else(|_| std::env::var("CARGO_MANIFEST_DIR").is_ok() || cfg!(test));
+            .unwrap_or(cfg!(test));
         Self {
             db,
             allow_local_network: allow_local,

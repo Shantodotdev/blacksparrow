@@ -35,7 +35,7 @@ Turning on PyPI or npm later is optional and needs an account on each.
 
 ## Releasing
 
-1. Set the version in `Cargo.toml` and `src-tauri/Cargo.toml` (the Python package reads it from `Cargo.toml`). In `sdks/js/package.json`, set `version` and the 7 `optionalDependencies` to the same number (the staging script also rewrites them at publish time). Update `DEFAULT_TAG` in `install.sh`, and add the version to `CHANGELOG.md`.
+1. Set the version in `Cargo.toml` and `src-tauri/Cargo.toml` (the Python package reads it from `Cargo.toml`). In `sdks/js/package.json`, set only `version` to the same number; leave out `optionalDependencies`, which the staging script adds at publish time (listing them breaks `npm ci`, since the lockfile does not have them). Update `DEFAULT_TAG` in `install.sh`, and add the version to `CHANGELOG.md`.
 2. Check locally:
 
    ```bash

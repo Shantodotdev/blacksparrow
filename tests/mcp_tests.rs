@@ -34,7 +34,11 @@ fn unique_test_db_path() -> PathBuf {
 #[tokio::test]
 async fn test_mcp_initialize_and_ping() {
     let db_path = unique_test_db_path();
-    let ctx = Arc::new(McpContext::new(Some(db_path)).expect("McpContext init"));
+    let ctx = Arc::new(
+        McpContext::new(Some(db_path))
+            .expect("McpContext init")
+            .with_allow_local_network(true),
+    );
 
     // 1. Initialize request
     let init_req = serde_json::json!({
@@ -79,7 +83,11 @@ async fn test_mcp_initialize_and_ping() {
 #[tokio::test]
 async fn test_mcp_tools_list_schema() {
     let db_path = unique_test_db_path();
-    let ctx = Arc::new(McpContext::new(Some(db_path)).expect("McpContext init"));
+    let ctx = Arc::new(
+        McpContext::new(Some(db_path))
+            .expect("McpContext init")
+            .with_allow_local_network(true),
+    );
 
     let req = serde_json::json!({
         "jsonrpc": "2.0",
@@ -142,7 +150,11 @@ async fn test_mcp_quick_page_check_sync() {
         .await;
 
     let db_path = unique_test_db_path();
-    let ctx = Arc::new(McpContext::new(Some(db_path)).expect("McpContext init"));
+    let ctx = Arc::new(
+        McpContext::new(Some(db_path))
+            .expect("McpContext init")
+            .with_allow_local_network(true),
+    );
 
     let test_url = format!("{}/pricing", server.uri());
     let req = serde_json::json!({
@@ -190,6 +202,47 @@ async fn test_mcp_quick_page_check_sync() {
     );
 }
 
+/// The model chooses the URL and the arguments, so neither can open the private network: only
+/// the server's own configuration can.
+#[tokio::test]
+async fn test_mcp_refuses_private_targets_without_server_opt_in() {
+    let server = MockServer::start().await;
+    let db_path = unique_test_db_path();
+    let ctx = Arc::new(
+        McpContext::new(Some(db_path))
+            .expect("McpContext init")
+            .with_allow_local_network(false),
+    );
+
+    for (id, tool) in [
+        (30, "seo_quick_page_check"),
+        (31, "seo_start_audit"),
+        (32, "seo_check_ai_readiness"),
+    ] {
+        let req = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": "tools/call",
+            "params": {
+                "name": tool,
+                "arguments": {
+                    "url": server.uri(),
+                    "allow_local_network": true,
+                    "allowed_private_hosts": [server.uri()]
+                }
+            }
+        });
+        let resp_str = handle_jsonrpc_request(&req.to_string(), &ctx).await;
+        let resp: serde_json::Value = serde_json::from_str(&resp_str).expect("Valid JSON response");
+        assert_eq!(
+            resp["result"]["isError"],
+            true,
+            "{tool} must refuse {}",
+            server.uri()
+        );
+    }
+}
+
 #[tokio::test]
 async fn test_mcp_start_audit_non_blocking_and_status() {
     let server = MockServer::start().await;
@@ -202,7 +255,11 @@ async fn test_mcp_start_audit_non_blocking_and_status() {
         .await;
 
     let db_path = unique_test_db_path();
-    let ctx = Arc::new(McpContext::new(Some(db_path.clone())).expect("McpContext init"));
+    let ctx = Arc::new(
+        McpContext::new(Some(db_path.clone()))
+            .expect("McpContext init")
+            .with_allow_local_network(true),
+    );
 
     // 1. Start audit
     let start_req = serde_json::json!({
@@ -311,7 +368,11 @@ async fn test_mcp_get_markdown_report_token_efficiency_zero_ansi() {
     ];
     db.save_issue_batch(session, &issues).expect("Save issues");
 
-    let ctx = Arc::new(McpContext::new(Some(db_path)).expect("McpContext init"));
+    let ctx = Arc::new(
+        McpContext::new(Some(db_path))
+            .expect("McpContext init")
+            .with_allow_local_network(true),
+    );
 
     let req = serde_json::json!({
         "jsonrpc": "2.0",
@@ -378,7 +439,11 @@ async fn test_mcp_query_issues_and_cleanup() {
     }];
     db.save_issue_batch(session, &issues).expect("Save issues");
 
-    let ctx = Arc::new(McpContext::new(Some(db_path.clone())).expect("McpContext init"));
+    let ctx = Arc::new(
+        McpContext::new(Some(db_path.clone()))
+            .expect("McpContext init")
+            .with_allow_local_network(true),
+    );
 
     // 1. Query issues
     let query_req = serde_json::json!({
@@ -458,7 +523,11 @@ async fn test_mcp_check_ai_and_validate_schema_tools() {
         .await;
 
     let db_path = unique_test_db_path();
-    let ctx = Arc::new(McpContext::new(Some(db_path)).expect("McpContext init"));
+    let ctx = Arc::new(
+        McpContext::new(Some(db_path))
+            .expect("McpContext init")
+            .with_allow_local_network(true),
+    );
 
     // 1. Test seo_check_ai_readiness
     let ai_req = serde_json::json!({
@@ -542,7 +611,11 @@ async fn test_mcp_resources_list_and_read() {
     })
     .expect("Init session");
 
-    let ctx = Arc::new(McpContext::new(Some(db_path)).expect("McpContext init"));
+    let ctx = Arc::new(
+        McpContext::new(Some(db_path))
+            .expect("McpContext init")
+            .with_allow_local_network(true),
+    );
 
     // 1. resources/list
     let list_req = serde_json::json!({
@@ -646,7 +719,11 @@ fn test_mcp_fails_fast_on_invalid_db_path() {
 #[tokio::test]
 async fn test_mcp_background_crawl_failure_persists_failed_status() {
     let db_path = unique_test_db_path();
-    let ctx = Arc::new(McpContext::new(Some(db_path.clone())).expect("McpContext init"));
+    let ctx = Arc::new(
+        McpContext::new(Some(db_path.clone()))
+            .expect("McpContext init")
+            .with_allow_local_network(true),
+    );
 
     let start_req = serde_json::json!({
         "jsonrpc": "2.0",

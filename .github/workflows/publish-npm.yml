@@ -84,18 +84,20 @@ jobs:
             gh attestation verify "$archive" --repo "$GITHUB_REPOSITORY"
           done
 
+      # Before staging: staging adds the optionalDependencies to package.json, which the
+      # committed lockfile does not list, and `npm ci` refuses a manifest out of sync with it.
+      - name: Build the main package
+        working-directory: sdks/js
+        run: |
+          npm ci
+          npm run build
+
       - name: Stage the platform packages
         run: |
           node sdks/js/scripts/stage-platform-packages.mjs \
             --artifacts artifacts --version "$VERSION" --out staged
           ls staged
           test "$(ls -d staged/*/ | wc -l)" -eq 7
-
-      - name: Build the main package
-        working-directory: sdks/js
-        run: |
-          npm ci
-          npm run build
 
       - name: Publish the platform packages, then the main package
         run: |

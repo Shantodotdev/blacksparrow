@@ -161,7 +161,7 @@ impl Renderer {
                 } else {
                     switches.push("--enable-sandbox".to_string());
                 }
-                match options.policy {
+                match options.policy.clone() {
                     Some(policy) => {
                         let guard = GuardProxy::start(policy, options.upstream_proxy.clone())
                             .await
@@ -376,7 +376,7 @@ impl Renderer {
         let policy = if self.proxy.is_some() {
             None
         } else {
-            self.options.policy
+            self.options.policy.clone()
         };
         Ok(tokio::spawn(async move {
             while let Some(event) = events.next().await {
@@ -400,7 +400,7 @@ impl Renderer {
                     }
                     continue;
                 }
-                let allowed = request_allowed(&event, policy).await;
+                let allowed = request_allowed(&event, policy.as_ref()).await;
                 if allowed {
                     let _ = page.execute(ContinueRequestParams::new(id)).await;
                 } else {
@@ -505,7 +505,7 @@ fn is_tracker(url: &Url) -> bool {
     })
 }
 
-async fn request_allowed(event: &EventRequestPaused, policy: Option<AddressPolicy>) -> bool {
+async fn request_allowed(event: &EventRequestPaused, policy: Option<&AddressPolicy>) -> bool {
     if matches!(
         event.resource_type,
         ResourceType::Image

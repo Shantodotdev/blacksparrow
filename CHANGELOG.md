@@ -20,9 +20,13 @@ First stable release.
 
 - TLS uses rustls instead of OpenSSL, so the binary has no system library dependencies and the musl builds need none.
 - `blacksparrow schema` keeps validating structured data (`blacksparrow schema <url-or-file>`); `schema extract` is the new subcommand beside it.
+- The MCP tools no longer accept `allow_local_network` or `allowed_private_hosts`, and no longer allow the requested URL's own host automatically: the model chooses both, so private networks are opened only by the server's configuration (`BLACKSPARROW_MCP_ALLOW_LOCAL`). That setting is off unless set; it no longer turns on when `CARGO_MANIFEST_DIR` is present.
+- `install.sh` installs the musl build on musl systems such as Alpine.
 
 ### Fixed
 
+- The address check let IPv6 literals through (`http://[::1]/`, `http://[::ffff:a9fe:a9fe]/`), and the crawler's HTTP client did not check DNS answers at connect time. Both are now refused or checked.
+- With `--render-js`, allowing one private host opened the whole private network to the browser; the browser now reaches only the allowed hosts.
 - The integration test for blocked browser requests asserted on image requests, which Chromium never makes with images disabled; it now checks the resource types the request interceptor actually refuses (fonts, media, beacons).
 
 ## [0.1.0-rc.2] and [0.1.0-rc.1]

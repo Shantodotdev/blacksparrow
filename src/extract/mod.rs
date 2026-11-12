@@ -566,9 +566,7 @@ pub async fn extract_site(start_url: &str, options: ExtractOptions) -> SeoResult
         user_agent: options.user_agent.clone(),
         timeout: options.request_timeout,
         max_body_bytes: options.max_body_bytes,
-        policy: AddressPolicy {
-            allow_private_network: options.allow_private_network,
-        },
+        policy: AddressPolicy::new(options.allow_private_network),
         proxy: options.proxy.clone(),
     })?;
     let icon_fonts = Regex::new(DEFAULT_ICON_FONT_PATTERN)

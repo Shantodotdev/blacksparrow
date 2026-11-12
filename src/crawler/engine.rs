@@ -704,11 +704,11 @@ pub async fn run_crawl_with_options(
             no_sandbox: config.chrome_no_sandbox,
             page_timeout: Duration::from_secs(25),
             user_agent: Some(config.user_agent.clone()),
-            // The browser follows the crawl's private-network rule: loopback and private hosts
-            // are reachable only when the crawl itself may fetch them.
+            // The browser follows the crawl's private-network rule: a private host is reachable
+            // only when the crawl itself may fetch it, never the rest of the private network.
             policy: Some(crate::extract::guard::AddressPolicy {
-                allow_private_network: config.allow_all_private_ips
-                    || !config.allowed_private_hosts.is_empty(),
+                allow_private_network: config.allow_all_private_ips,
+                allowed_private_hosts: Arc::new(config.allowed_private_hosts.clone()),
             }),
             upstream_proxy: config
                 .proxy

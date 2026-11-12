@@ -7,10 +7,12 @@
 use crate::core::url::{resolve_relative, validate_url_safety};
 use crate::crawler::waf::detect_waf;
 use crate::error::{SeoError, SeoResult};
+use crate::extract::guard::{AddressPolicy, GuardedResolver};
 use compact_str::CompactString;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE, LOCATION, USER_AGENT};
 use reqwest::redirect::Policy;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use url::Url;
 
@@ -117,11 +119,28 @@ impl HttpClient {
             .brotli(true)
             .deflate(true);
 
+        // Every name is resolved through the address guard, so a host that passed
+        // `validate_url_safety` cannot rebind to a private address before the connection.
+        let mut allowed_hosts = options.allowed_private_hosts.clone();
         if let Some(ref proxy_url) = options.proxy {
             let proxy = reqwest::Proxy::all(proxy_url)
                 .map_err(|e| SeoError::Config(format!("Invalid proxy configuration: {e}")))?;
             builder = builder.proxy(proxy);
+            // The resolver also resolves the proxy's own name, which may be a local forwarder.
+            if let Some(host) = Url::parse(proxy_url)
+                .ok()
+                .and_then(|u| u.host_str().map(str::to_string))
+            {
+                allowed_hosts.push(host);
+            }
+        } else {
+            // A proxy from the environment would resolve names itself, past the guard.
+            builder = builder.no_proxy();
         }
+        builder = builder.dns_resolver(Arc::new(GuardedResolver::new(AddressPolicy {
+            allow_private_network: options.allow_all_private_ips,
+            allowed_private_hosts: Arc::new(allowed_hosts),
+        })));
 
         let client = builder
             .build()

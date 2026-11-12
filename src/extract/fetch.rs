@@ -106,7 +106,7 @@ impl GuardedFetcher {
             .redirect(Policy::none())
             .timeout(options.timeout)
             .connect_timeout(Duration::from_secs(8))
-            .dns_resolver(Arc::new(GuardedResolver::new(options.policy)))
+            .dns_resolver(Arc::new(GuardedResolver::new(options.policy.clone())))
             .pool_max_idle_per_host(4)
             .gzip(true)
             .brotli(true)
@@ -121,7 +121,7 @@ impl GuardedFetcher {
 
     /// The address policy in force.
     pub fn policy(&self) -> AddressPolicy {
-        self.options.policy
+        self.options.policy.clone()
     }
 
     /// Fetches `url` as text, following redirects through the guard.

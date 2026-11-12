@@ -110,9 +110,14 @@ detect_target() {
 
   case "$os" in
     Linux)
+      local libc="gnu"
+      # Alpine and other musl systems cannot run the glibc build.
+      if ls /lib/ld-musl-* >/dev/null 2>&1 || (ldd --version 2>&1 | grep -qi musl); then
+        libc="musl"
+      fi
       case "$arch" in
-        x86_64|amd64) TARGET="x86_64-unknown-linux-gnu" ;;
-        aarch64|arm64) TARGET="aarch64-unknown-linux-gnu" ;;
+        x86_64|amd64) TARGET="x86_64-unknown-linux-$libc" ;;
+        aarch64|arm64) TARGET="aarch64-unknown-linux-$libc" ;;
         *) print_error "Unsupported Linux architecture: $arch" ;;
       esac
       ;;

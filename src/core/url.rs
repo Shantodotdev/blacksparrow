@@ -530,6 +530,12 @@ pub async fn validate_url_safety(
         .host_str()
         .ok_or_else(|| SeoError::Url("URL has no host".to_string()))?;
     let host_lower = host.to_ascii_lowercase();
+    // `host_str` keeps the brackets of an IPv6 literal, so the address comes from `host()`.
+    let literal_ip = match parsed.host() {
+        Some(url::Host::Ipv4(ip)) => Some(IpAddr::V4(ip)),
+        Some(url::Host::Ipv6(ip)) => Some(IpAddr::V6(ip)),
+        _ => None,
+    };
 
     // 1. Permanent non-bypassable block on cloud metadata
     if host_lower == "169.254.169.254"
@@ -557,13 +563,10 @@ pub async fn validate_url_safety(
     });
 
     if is_explicitly_allowed || allow_all_private_ips {
-        if let Ok(ip) = host.parse::<IpAddr>() {
-            if is_cloud_metadata_ip(ip) {
-                return Err(SeoError::Network(
-                    "Access to cloud instance metadata endpoint is permanently prohibited."
-                        .to_string(),
-                ));
-            }
+        if literal_ip.is_some_and(is_cloud_metadata_ip) {
+            return Err(SeoError::Network(
+                "Access to cloud instance metadata endpoint is permanently prohibited.".to_string(),
+            ));
         }
         return Ok(parsed);
     }
@@ -579,7 +582,7 @@ pub async fn validate_url_safety(
     }
 
     // 4. Inspect IP literal
-    if let Ok(ip) = host.parse::<IpAddr>() {
+    if let Some(ip) = literal_ip {
         if is_cloud_metadata_ip(ip) {
             return Err(SeoError::Network(
                 "Access to cloud instance metadata endpoint is permanently prohibited.".to_string(),
@@ -593,7 +596,8 @@ pub async fn validate_url_safety(
         return Ok(parsed);
     }
 
-    // 5. Asynchronous DNS lookup to inspect resolved IPs
+    // 5. Asynchronous DNS lookup to inspect resolved IPs. A name that does not resolve here
+    // fails at connect time, where the client's guarded resolver checks the addresses again.
     let port = parsed.port_or_known_default().unwrap_or(80);
     if let Ok(socket_addrs) = tokio::net::lookup_host((host, port)).await {
         for addr in socket_addrs {

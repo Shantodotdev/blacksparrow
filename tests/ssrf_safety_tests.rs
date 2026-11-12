@@ -162,6 +162,33 @@ async fn test_validate_url_safety_unit() {
     );
 }
 
+/// IPv6 literals are checked as addresses: `host_str` keeps their brackets, so they once slipped
+/// past the address check.
+#[tokio::test]
+async fn test_validate_url_safety_refuses_ipv6_literals() {
+    for url in [
+        "http://[::1]:6379/",
+        "http://[fd00::1]/",
+        "http://[fe80::1]/",
+        "http://[::ffff:a9fe:a9fe]/",
+        "http://[::ffff:127.0.0.1]/",
+    ] {
+        assert!(
+            validate_url_safety(url, false, &[]).await.is_err(),
+            "{url} must be refused"
+        );
+    }
+    assert!(
+        validate_url_safety("http://[::ffff:a9fe:a9fe]/", true, &[])
+            .await
+            .is_err(),
+        "IPv4-mapped metadata stays refused when private networks are allowed"
+    );
+    assert!(validate_url_safety("http://[2606:4700::1111]/", false, &[])
+        .await
+        .is_ok());
+}
+
 // =========================================================================
 // 2. END-TO-END TESTS (WIREMOCK)
 // =========================================================================
