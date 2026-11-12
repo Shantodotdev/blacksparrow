@@ -32,7 +32,7 @@ jobs:
           - { runner: ubuntu-22.04, target: x86_64-unknown-linux-musl, manylinux: musllinux_1_2, smoke: false }
           - { runner: ubuntu-22.04, target: aarch64-unknown-linux-musl, manylinux: musllinux_1_2, smoke: false }
           - { runner: macos-15-intel, target: x86_64-apple-darwin, manylinux: "off", smoke: true }
-          - { runner: macos-14, target: aarch64-apple-darwin, manylinux: "off", smoke: true }
+          - { runner: macos-15, target: aarch64-apple-darwin, manylinux: "off", smoke: true }
           - { runner: windows-2022, target: x86_64-pc-windows-msvc, manylinux: "off", smoke: true }
     steps:
       - uses: actions/checkout@v6
