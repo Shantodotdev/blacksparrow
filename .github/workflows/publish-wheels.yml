@@ -63,7 +63,8 @@ jobs:
         shell: bash
         working-directory: sdks/python
         run: |
-          python -m pip install blacksparrow --no-index --find-links dist --force-reinstall
+          # The wheel by its path, so its dependencies (pydantic) still come from the index.
+          python -m pip install --force-reinstall dist/*.whl
           blacksparrow --version
           blacksparrow schema extract > /dev/null
           python -c "import blacksparrow; print(blacksparrow.__file__)"
