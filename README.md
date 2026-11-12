@@ -97,7 +97,11 @@ pip install "blacksparrow @ https://github.com/Shantodotdev/blacksparrow/release
 
 In a uv project, give one URL per platform in `[tool.uv.sources]` with a marker each, so `uv.lock` pins every wheel with its hash. See [`sdks/python`](sdks/python/README.md).
 
-The package uses the `BLACKSPARROW_BINARY` environment variable, when set, instead of the bundled binary. The JSON Schema of the `extract` output is built into the binary (`blacksparrow schema extract`) and committed as [`schema/extract.schema.json`](schema/extract.schema.json). Maintainers: see [`RELEASING.md`](RELEASING.md).
+### Node.js
+
+The Node package ([`sdks/js`](sdks/js/README.md)) is not on the npm registry: build it from that folder, install it by path, and set `BLACKSPARROW_BINARY` to the binary from the release archive.
+
+Both SDKs use the `BLACKSPARROW_BINARY` environment variable, when set, instead of the bundled binary. The JSON Schema of the `extract` output is built into the binary (`blacksparrow schema extract`) and committed as [`schema/extract.schema.json`](schema/extract.schema.json). Maintainers: see [`RELEASING.md`](RELEASING.md).
 
 ---
 
