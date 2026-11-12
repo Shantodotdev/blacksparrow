@@ -27,3 +27,7 @@ install-updater = false
 contents = "write"
 id-token = "write"
 attestations = "write"
+
+[dist.github-custom-runners]
+# GitHub retired the macos-14 image that cargo-dist picks for this target by default.
+aarch64-apple-darwin = "macos-15"
