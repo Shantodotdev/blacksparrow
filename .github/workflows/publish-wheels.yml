@@ -15,6 +15,8 @@ on:
         description: The cargo-dist plan (JSON) of this release
         required: true
         type: string
+  # Builds the wheels without a release (nothing is uploaded), to check a change to this file.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -24,13 +26,16 @@ jobs:
     name: Wheel ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
     strategy:
-      fail-fast: true
+      # One failed platform must not cancel the others, so a failure shows every broken wheel.
+      fail-fast: false
       matrix:
         include:
           - { runner: ubuntu-22.04, target: x86_64-unknown-linux-gnu, manylinux: auto, smoke: true }
-          - { runner: ubuntu-22.04, target: aarch64-unknown-linux-gnu, manylinux: auto, smoke: false }
+          # Built on Arm runners: ring's assembly does not build with the cross compiler in the
+          # manylinux2014 cross image ("ARM assembler must define __ARM_ARCH").
+          - { runner: ubuntu-22.04-arm, target: aarch64-unknown-linux-gnu, manylinux: auto, smoke: true }
           - { runner: ubuntu-22.04, target: x86_64-unknown-linux-musl, manylinux: musllinux_1_2, smoke: false }
-          - { runner: ubuntu-22.04, target: aarch64-unknown-linux-musl, manylinux: musllinux_1_2, smoke: false }
+          - { runner: ubuntu-22.04-arm, target: aarch64-unknown-linux-musl, manylinux: musllinux_1_2, smoke: false }
           - { runner: macos-15-intel, target: x86_64-apple-darwin, manylinux: "off", smoke: true }
           - { runner: macos-15, target: aarch64-apple-darwin, manylinux: "off", smoke: true }
           - { runner: windows-2022, target: x86_64-pc-windows-msvc, manylinux: "off", smoke: true }
@@ -93,6 +98,7 @@ jobs:
   github-release:
     name: Attach to the GitHub release
     needs: [wheels, sdist]
+    if: ${{ inputs.plan != '' }}
     runs-on: ubuntu-22.04
     permissions:
       contents: write
