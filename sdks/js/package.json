@@ -1,6 +1,6 @@
 {
   "name": "blacksparrow",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Read a business website (pages, contacts, colours, fonts, logos) with the Black Sparrow engine. Typed Node.js API around a prebuilt native binary.",
   "keywords": [
     "website",

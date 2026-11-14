@@ -16,7 +16,7 @@ The GitHub release needs no setup: the workflows request the permissions they us
 
 ## Releasing
 
-1. Set the version in `Cargo.toml` and `src-tauri/Cargo.toml` (the Python package reads it from `Cargo.toml`). Update `DEFAULT_TAG` in `install.sh`, and add the version to `CHANGELOG.md`.
+1. Set the version in `Cargo.toml`, `src-tauri/Cargo.toml` and `sdks/js/package.json` (with `npm install --package-lock-only` in `sdks/js`; the Python package reads it from `Cargo.toml`). Update `DEFAULT_TAG` in `install.sh`, and add the version to `CHANGELOG.md`.
 2. Check locally:
 
    ```bash
