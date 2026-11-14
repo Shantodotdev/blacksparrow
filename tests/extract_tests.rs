@@ -460,6 +460,115 @@ async fn real_content_embedding_challenge_script_is_ok() {
     assert!(result.pages[0].word_count > 150);
 }
 
+const AWS_WAF_CAPTCHA: &str = r#"<html><head><title>Let's confirm you are human</title></head>
+<body><script type="text/javascript">window.gokuProps = {"key":"abc","iv":"def","context":"ghi"};</script>
+<script src="https://1234.edge.sdk.awswaf.com/1234/challenge.js"></script>
+<script src="https://1234.edge.sdk.awswaf.com/1234/captcha.js"></script>
+<div id="captcha-container"></div>
+<script>AwsWafIntegration.checkForceRefresh();</script>
+<noscript>JavaScript is disabled. Enable it and solve the CAPTCHA puzzle to continue.</noscript>
+<script>window.addEventListener("load", function () { AwsWafCaptcha.renderCaptcha(document.getElementById("captcha-container")); });</script>
+<p>captcha.awswaf.com</p></body></html>"#;
+
+async fn mount_aws_waf(server: &MockServer, status: u16, action: &str) {
+    Mock::given(method("GET"))
+        .respond_with(
+            ResponseTemplate::new(status)
+                .set_body_bytes(AWS_WAF_CAPTCHA)
+                .insert_header("content-type", "text/html; charset=utf-8")
+                .insert_header("x-amzn-waf-action", action)
+                .insert_header("server", "CloudFront"),
+        )
+        .mount(server)
+        .await;
+}
+
+#[tokio::test]
+async fn aws_waf_captcha_page_is_bot_protected() {
+    let server = MockServer::start().await;
+    mount_aws_waf(&server, 405, "captcha").await;
+    let result = run(&server, "/", options(RenderMode::Never)).await;
+    assert_eq!(result.outcome, Outcome::BotProtected);
+    assert_eq!(result.outcome_detail.as_deref(), Some("AWS WAF"));
+    assert_eq!(result.pages[0].waf, Some("AWS WAF"));
+    assert_eq!(result.pages[0].status, 405);
+}
+
+#[tokio::test]
+async fn aws_waf_js_challenge_without_markers_is_bot_protected() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(
+            ResponseTemplate::new(202)
+                .set_body_bytes("<html><body></body></html>")
+                .insert_header("content-type", "text/html; charset=utf-8")
+                .insert_header("x-amzn-waf-action", "challenge"),
+        )
+        .mount(&server)
+        .await;
+    let result = run(&server, "/", options(RenderMode::Never)).await;
+    assert_eq!(result.outcome, Outcome::BotProtected);
+    assert_eq!(result.outcome_detail.as_deref(), Some("AWS WAF"));
+}
+
+#[tokio::test]
+async fn aws_waf_captcha_stays_bot_protected_after_rendering() {
+    let Some(opts) = chrome_options(RenderMode::Auto) else {
+        return;
+    };
+    let server = MockServer::start().await;
+    mount_aws_waf(&server, 405, "captcha").await;
+    let result = run(&server, "/", opts).await;
+    assert_eq!(result.outcome, Outcome::BotProtected);
+    assert_eq!(result.outcome_detail.as_deref(), Some("AWS WAF"));
+    // The browser asked for the page itself instead of reusing the downloaded body.
+    assert!(server.received_requests().await.unwrap().len() >= 2);
+}
+
+#[tokio::test]
+async fn error_homepage_is_requested_again_by_the_browser_and_stays_an_error() {
+    let Some(opts) = chrome_options(RenderMode::Auto) else {
+        return;
+    };
+    let server = MockServer::start().await;
+    mount_html(
+        &server,
+        "/",
+        404,
+        r#"<html><body><div id="root"></div><script>var a = 1;</script></body></html>"#,
+    )
+    .await;
+    let result = run(&server, "/", opts).await;
+    assert_eq!(result.outcome, Outcome::HttpError);
+    assert_eq!(result.outcome_detail.as_deref(), Some("HTTP 404"));
+    assert!(server.received_requests().await.unwrap().len() >= 2);
+}
+
+#[tokio::test]
+async fn empty_homepage_is_rendered_when_auto_and_stays_ok_with_no_words() {
+    let Some(opts) = chrome_options(RenderMode::Auto) else {
+        return;
+    };
+    let server = MockServer::start().await;
+    mount_html(&server, "/", 200, "").await;
+    let result = run(&server, "/", opts).await;
+    assert_eq!(result.outcome, Outcome::Ok);
+    let home = &result.pages[0];
+    assert!(home.rendered);
+    assert_eq!(home.render_reason, Some("js_shell"));
+    assert_eq!(home.word_count, 0);
+}
+
+#[tokio::test]
+async fn empty_homepage_without_rendering_is_ok_with_no_words() {
+    let server = MockServer::start().await;
+    mount_html(&server, "/", 200, "").await;
+    let result = run(&server, "/", options(RenderMode::Never)).await;
+    assert_eq!(result.outcome, Outcome::Ok);
+    assert_eq!(result.pages[0].word_count, 0);
+    assert!(!result.pages[0].rendered);
+}
+
 // ---------------------------------------------------------------------------
 // Address guard and failures
 // ---------------------------------------------------------------------------
