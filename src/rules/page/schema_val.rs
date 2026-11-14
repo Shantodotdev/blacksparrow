@@ -59,11 +59,7 @@ pub fn is_valid_iso_date(s: &str) -> bool {
     let min: u32 = trimmed[14..16].parse().unwrap_or(99);
     let sec: u32 = trimmed[17..19].parse().unwrap_or(99);
 
-    if hour > 23 || min > 59 || sec > 59 {
-        return false;
-    }
-
-    true
+    hour <= 23 && min <= 59 && sec <= 59
 }
 
 const DATE_FIELDS: &[&str] = &[
