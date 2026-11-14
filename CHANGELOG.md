@@ -2,6 +2,17 @@
 
 All notable changes to Black Sparrow are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/). The crate and the Python package share one version number.
 
+## [0.1.1] - 2026-11-14
+
+### Fixed
+
+- `extract` reported an AWS WAF challenge or CAPTCHA page as `ok`. AWS WAF is now detected (the `x-amzn-waf-action` header and the page's script markers), so such a site ends as `bot_protected` with the detail "AWS WAF".
+- A homepage that answered 400 or above and was a JavaScript shell was rendered from the downloaded error page; the browser now requests it again, and one that rendering does not fix is `http_error`, not `ok`.
+- Link labels included the CSS inside inline SVG logos, which filled the Markdown with style rules and kept JavaScript-built pages such as aarong.com from being rendered. Labels skip script, style, svg, noscript and template text.
+- A page of navigation links only, with almost no other text, now counts as a JavaScript shell and is rendered.
+- An empty homepage (no words, no links) is tried in the browser.
+- WhatsApp links written with separators (`wa.me/88016270-98372`) were cut short to a wrong number; the number is read whole and written as digits only (`https://wa.me/8801627098372`).
+
 ## [0.1.0] - 2026-11-12
 
 First stable release.
