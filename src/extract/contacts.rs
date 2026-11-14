@@ -214,7 +214,7 @@ fn whatsapp() -> &'static Regex {
     static CELL: OnceLock<Regex> = OnceLock::new();
     regex(
         &CELL,
-        r"(?i)https?://(?:wa\.me/\+?\d{6,15}|(?:api|web)\.whatsapp\.com/send/?\?phone=\+?\d{6,15}|chat\.whatsapp\.com/[A-Za-z0-9]{6,40})",
+        r"(?i)https?://(?:(?P<prefix>wa\.me/|(?:api|web)\.whatsapp\.com/send/?\?phone=)(?:\+|%2B)?(?P<number>\d(?:(?:[-. +]|%20)?\d)*)|chat\.whatsapp\.com/[A-Za-z0-9]{6,40})",
     )
 }
 
@@ -525,13 +525,40 @@ fn is_plausible_email(value: &str) -> bool {
         && !hex_local
 }
 
-/// WhatsApp chat links in text, as written.
+/// WhatsApp chat links in text. A number link keeps its host and path as written, with the number
+/// reduced to its digits (`wa.me/88016270-98372` becomes `wa.me/8801627098372`); group links
+/// are kept as written.
 pub fn find_whatsapp(text: &str) -> Vec<String> {
     let mut found = Vec::new();
-    for m in whatsapp().find_iter(text) {
-        push_unique(&mut found, m.as_str().to_string());
+    for caps in whatsapp().captures_iter(text) {
+        let Some(whole) = caps.get(0) else {
+            continue;
+        };
+        let (Some(prefix), Some(number)) = (caps.name("prefix"), caps.name("number")) else {
+            push_unique(&mut found, whole.as_str().to_string());
+            continue;
+        };
+        if let Some(digits) = whatsapp_digits(number.as_str()) {
+            let head = &text[whole.start()..prefix.end()];
+            push_unique(&mut found, format!("{head}{digits}"));
+        }
     }
     found
+}
+
+/// The digits of a WhatsApp number written with separators, when they make a plausible number
+/// (6 to 15 digits). A number followed by a space and more digits that make it too long (a year
+/// after a link, say) is read up to that space.
+fn whatsapp_digits(number: &str) -> Option<String> {
+    let plausible = |value: &str| {
+        let digits: String = value.chars().filter(char::is_ascii_digit).collect();
+        (6..=15).contains(&digits.len()).then_some(digits)
+    };
+    let spaced = number.replace("%20", " ");
+    let parts: Vec<&str> = spaced.split(' ').collect();
+    (1..=parts.len())
+        .rev()
+        .find_map(|count| plausible(&parts[..count].join(" ")))
 }
 
 /// Whether a URL opens a WhatsApp chat.
@@ -729,11 +756,66 @@ mod tests {
     }
 
     #[test]
+    fn mobile_facebook_links_become_canonical_pages() {
+        for raw in [
+            "https://m.facebook.com/browniehut",
+            "https://m.facebook.com/browniehut/?ref=bookmarks",
+            "//m.facebook.com/browniehut",
+        ] {
+            assert_eq!(
+                facebook_page_url(raw).as_deref(),
+                Some("https://www.facebook.com/browniehut"),
+                "{raw}"
+            );
+        }
+        let (fb, _) = find_social_links("[fb](https://m.facebook.com/browniehut)");
+        assert_eq!(fb, vec!["https://www.facebook.com/browniehut"]);
+        assert_eq!(
+            facebook_page_url("https://www.facebook.com/m.browniehut").as_deref(),
+            Some("https://www.facebook.com/m.browniehut")
+        );
+    }
+
+    #[test]
     fn finds_whatsapp_links() {
         let found = find_whatsapp(
             "chat https://wa.me/8801711223344 or https://api.whatsapp.com/send?phone=8801711223344",
         );
         assert_eq!(found.len(), 2);
+    }
+
+    #[test]
+    fn whatsapp_numbers_with_separators_are_normalised_to_digits() {
+        let found = find_whatsapp(
+            "https://wa.me/88016270-98372 https://wa.me/+880 1627 098372 \
+             https://api.whatsapp.com/send?phone=%2B880%201627-098.372&text=hi \
+             https://web.whatsapp.com/send/?phone=+8801627098372",
+        );
+        assert_eq!(
+            found,
+            vec![
+                "https://wa.me/8801627098372",
+                "https://api.whatsapp.com/send?phone=8801627098372",
+                "https://web.whatsapp.com/send/?phone=8801627098372",
+            ]
+        );
+    }
+
+    #[test]
+    fn whatsapp_numbers_of_the_wrong_length_and_neighbouring_text_are_handled() {
+        assert_eq!(find_whatsapp("https://wa.me/12345"), Vec::<String>::new());
+        assert_eq!(
+            find_whatsapp("https://wa.me/1234567890123456"),
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            find_whatsapp("Chat https://wa.me/8801711223344 2024 or https://wa.me/8801711223344."),
+            vec!["https://wa.me/8801711223344"]
+        );
+        assert_eq!(
+            find_whatsapp("https://chat.whatsapp.com/AbCdEf123456"),
+            vec!["https://chat.whatsapp.com/AbCdEf123456"]
+        );
     }
 
     #[test]
