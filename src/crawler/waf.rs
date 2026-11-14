@@ -1,7 +1,7 @@
 //! # WAF & Anti-Bot Fingerprint Detection
 //!
 //! Heuristic fingerprinting for Web Application Firewalls (Cloudflare, Akamai,
-//! DataDome, Imperva) challenge and captcha screens.
+//! DataDome, Imperva, AWS WAF) challenge and captcha screens.
 //!
 //! ## Problem in Technical SEO Crawling
 //!
@@ -58,6 +58,15 @@ pub const WAF_SIGNATURES: &[WafProbe] = &[
         provider: "Imperva",
         signatures: &["incapsula incident id", "_incap_ses", "visid_incap"],
     },
+    WafProbe {
+        provider: "AWS WAF",
+        signatures: &[
+            "captcha.awswaf.com",
+            "token.awswaf.com",
+            "awswafintegration",
+            "gokuprops",
+        ],
+    },
 ];
 
 /// Detects whether an HTTP response is a WAF challenge or captcha screen.
@@ -109,6 +118,11 @@ pub fn detect_waf(status_code: u16, headers: &HeaderMap, body: &str) -> Option<&
         return Some("DataDome");
     }
 
+    // AWS WAF names its CAPTCHA and challenge actions in a header, on any status
+    if headers.contains_key("x-amzn-waf-action") {
+        return Some("AWS WAF");
+    }
+
     // Check body signatures
     for probe in WAF_SIGNATURES {
         for &sig in probe.signatures {
@@ -138,6 +152,35 @@ mod tests {
         let headers = HeaderMap::new();
         let body = "<html><body>Access Denied. Reference&#32;Number: 18.123.456</body></html>";
         assert_eq!(detect_waf(403, &headers, body), Some("Akamai"));
+    }
+
+    #[test]
+    fn test_detect_aws_waf_header_on_any_status() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-amzn-waf-action", "captcha".parse().unwrap());
+        assert_eq!(detect_waf(405, &headers, ""), Some("AWS WAF"));
+        headers.insert("x-amzn-waf-action", "challenge".parse().unwrap());
+        assert_eq!(detect_waf(202, &headers, "<html></html>"), Some("AWS WAF"));
+    }
+
+    #[test]
+    fn test_detect_aws_waf_captcha_body() {
+        let headers = HeaderMap::new();
+        let body = "<html><head><title>Let's confirm you are human</title></head><body>\
+            <script src=\"https://1234.edge.captcha-sdk.awswaf.com/1234/jsapi.js\"></script>\
+            <script>window.gokuProps = {\"key\":\"abc\"};</script>\
+            <script>AwsWafIntegration.checkForceRefresh();</script>\
+            <p>Solve the CAPTCHA puzzle to continue</p>\
+            <script src=\"https://x.token.awswaf.com/x/challenge.js\"></script></body></html>";
+        assert_eq!(detect_waf(405, &headers, body), Some("AWS WAF"));
+        assert_eq!(
+            detect_waf(
+                200,
+                &headers,
+                "<script src=\"https://captcha.awswaf.com/a.js\">"
+            ),
+            Some("AWS WAF")
+        );
     }
 
     #[test]

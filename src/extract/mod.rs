@@ -491,9 +491,10 @@ impl Run {
             return plain;
         };
         // A shell page only needs its scripts run, so the browser reuses the downloaded HTML;
-        // a challenge or an error page must be requested again for the server to decide anew.
-        let prefetched =
-            (reason == "js_shell" && !document.truncated).then_some(document.body.as_str());
+        // a challenge or an error page, whatever its look, must be requested again for the
+        // server to decide anew.
+        let prefetched = (reason == "js_shell" && !document.truncated && document.status < 400)
+            .then_some(document.body.as_str());
         let Some(rendered) = self.render(&document.final_url, prefetched).await else {
             return plain;
         };
@@ -633,9 +634,12 @@ async fn extract_with(
         return failed;
     }
     let home = run.content(document).await;
+    // The browser's own status is not known, so a rendered error page counts as read only when
+    // rendering produced real content. A page that stays empty after rendering is `Ok` with a
+    // `word_count` of 0.
     let outcome = if home.waf.is_some() {
         Outcome::BotProtected
-    } else if home.status >= 400 && !home.rendered {
+    } else if home.status >= 400 && (!home.rendered || home.analysis.looks_like_js_shell()) {
         Outcome::HttpError
     } else {
         Outcome::Ok
