@@ -125,6 +125,8 @@ pub struct PageAnalysis {
     pub markdown: String,
     /// Words of visible text.
     pub word_count: u32,
+    /// Words of `word_count` that are link labels.
+    pub link_words: u32,
     /// `<script>` elements.
     pub script_count: u32,
     /// Whether an application mount point (`#root`, `#app`, `#__next`, ...) is nearly empty.
@@ -140,9 +142,13 @@ pub struct PageAnalysis {
 impl PageAnalysis {
     /// Whether the page looks like a client-rendered shell whose content needs JavaScript.
     pub fn looks_like_js_shell(&self) -> bool {
-        (self.empty_app_root && self.word_count < 200)
+        (self.word_count == 0 && self.links.is_empty())
+            || (self.empty_app_root && self.word_count < 200)
             || (self.noscript_requires_js && self.word_count < 120)
             || (self.script_count > 0 && self.word_count < 40)
+            || (self.script_count > 0
+                && self.word_count < 80
+                && self.word_count - self.link_words < 10)
     }
 }
 
@@ -250,6 +256,7 @@ pub fn analyze_page(html: &str, base: &Url) -> PageAnalysis {
     let mut writer = MarkdownWriter::new(base);
     writer.walk(body, 0);
     analysis.word_count = writer.words;
+    analysis.link_words = writer.link_words;
     analysis.markdown = writer.finish();
     analysis
 }
@@ -893,9 +900,11 @@ fn read_anchor(element: ElementRef<'_>, base: &Url, links: &mut Vec<PageLink>) {
     });
 }
 
-/// The text of a link, or its label, image alt or title when it has no text.
+/// The text of a link, or its label, image alt or SVG title when it has no text.
 fn link_label(element: ElementRef<'_>) -> String {
-    let text = collapse(&element.text().collect::<String>());
+    let mut raw = String::new();
+    label_text(element, &mut raw);
+    let text = collapse(&raw);
     if !text.is_empty() {
         return text;
     }
@@ -907,10 +916,37 @@ fn link_label(element: ElementRef<'_>) -> String {
             }
         }
     }
-    element
+    let alt = element
         .descendent_elements()
         .find_map(|child| child.value().attr("alt").map(collapse))
+        .filter(|alt| !alt.is_empty());
+    if let Some(alt) = alt {
+        return alt;
+    }
+    element
+        .descendent_elements()
+        .filter(|child| child.value().name() == "title")
+        .map(|title| collapse(&title.text().collect::<String>()))
+        .find(|title| !title.is_empty())
         .unwrap_or_default()
+}
+
+/// Appends the text a visitor reads inside `element`: the text of its descendants except the
+/// content of elements that hold code or graphics (`<style>` and `<script>` text, inline SVG).
+fn label_text(element: ElementRef<'_>, out: &mut String) {
+    for child in element.children() {
+        match child.value() {
+            Node::Text(text) => out.push_str(text),
+            Node::Element(_) => {
+                if let Some(child) = ElementRef::wrap(child) {
+                    if !SKIPPED.contains(&child.value().name()) {
+                        label_text(child, out);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 /// Whether an element is hidden from visitors for good. React's streaming server rendering
@@ -1172,6 +1208,7 @@ struct MarkdownWriter<'a> {
     out: String,
     list_depth: usize,
     words: u32,
+    link_words: u32,
 }
 
 const SKIPPED: &[&str] = &[
@@ -1211,6 +1248,7 @@ impl<'a> MarkdownWriter<'a> {
             out: String::new(),
             list_depth: 0,
             words: 0,
+            link_words: 0,
         }
     }
 
@@ -1346,7 +1384,9 @@ impl<'a> MarkdownWriter<'a> {
             web_url(self.base, href)
         };
         let label = link_label(element);
-        self.words += label.split_whitespace().count() as u32;
+        let label_words = label.split_whitespace().count() as u32;
+        self.words += label_words;
+        self.link_words += label_words;
         if !self.out.ends_with([' ', '\n']) && !self.out.is_empty() {
             self.out.push(' ');
         }
@@ -1408,6 +1448,64 @@ mod tests {
 
     fn base() -> Url {
         Url::parse("https://shop.test/").unwrap()
+    }
+
+    #[test]
+    fn link_labels_skip_svg_style_and_script_text() {
+        let html = r##"<html><body><p>Welcome to our shop</p>
+            <a href="/" aria-label="Aarong home"><svg viewBox="0 0 10 10"><style>.x_st0{fill:#f2f2f2}</style><path d="M0 0"/></svg></a>
+            <a href="/cart"><svg><style>.y{fill:red}</style></svg><span>Cart</span><script>var a = 1;</script></a>
+            <a href="/bare"><svg><style>.z{fill:blue}</style></svg></a>
+            <a href="/titled"><svg><title>Facebook</title><style>.w{fill:blue}</style></svg></a>
+            </body></html>"##;
+        let analysis = analyze_page(html, &base());
+        let labels: Vec<&str> = analysis.links.iter().map(|l| l.text.as_str()).collect();
+        assert_eq!(labels, vec!["Aarong home", "Cart", "", "Facebook"]);
+        assert!(!analysis.markdown.contains("fill"), "{}", analysis.markdown);
+        assert!(analysis
+            .markdown
+            .contains("[Aarong home](https://shop.test/)"));
+        assert!(analysis.markdown.contains("[link](https://shop.test/bare)"));
+        // "Welcome to our shop" (4) + "Aarong home" (2) + "Cart" (1) + "Facebook" (1)
+        assert_eq!(analysis.word_count, 8);
+    }
+
+    #[test]
+    fn svg_style_text_in_links_does_not_hide_a_javascript_shell() {
+        let html = r##"<html><body><div id="root"></div>
+            <a href="/"><svg><style>.taaga_b_svg__st0{fill:#f2f2f2} .a{fill:#fff} .b{stroke:#000;stroke-width:2}</style></svg></a>
+            <a href="/x"><svg><style>.c{fill:#111} .d{fill:#222} .e{fill:#333} .f{fill:#444}</style></svg></a>
+            <script src="/app.js"></script></body></html>"##;
+        let analysis = analyze_page(html, &base());
+        assert_eq!(analysis.word_count, 0);
+        assert!(analysis.looks_like_js_shell());
+    }
+
+    #[test]
+    fn a_navigation_only_page_with_scripts_is_a_javascript_shell() {
+        let links: String = (0..12)
+            .map(|n| format!(r#"<a href="/p{n}">SHOP NOW {n} COLLECTION</a>"#))
+            .collect();
+        let html = format!(
+            r#"<html><body><nav>{links}</nav><script src="/app.js"></script></body></html>"#
+        );
+        let analysis = analyze_page(&html, &base());
+        assert!(
+            (40..80).contains(&analysis.word_count),
+            "{}",
+            analysis.word_count
+        );
+        assert!(analysis.looks_like_js_shell());
+    }
+
+    #[test]
+    fn a_blank_page_looks_like_a_shell_but_a_page_with_a_link_does_not() {
+        let blank = analyze_page("", &base());
+        assert_eq!(blank.word_count, 0);
+        assert!(blank.links.is_empty());
+        assert!(blank.looks_like_js_shell());
+        let linked = analyze_page(r#"<html><body><a href="/x">Go</a></body></html>"#, &base());
+        assert!(!linked.looks_like_js_shell());
     }
 
     #[test]
